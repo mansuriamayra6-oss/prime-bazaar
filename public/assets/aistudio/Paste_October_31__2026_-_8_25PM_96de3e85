@@ -1,0 +1,1522 @@
+Your finalized architecture will use one shared backend and database for all four platforms. Customers can shop through Android, iOS, and the website, while sellers manage their stores through the seller portal and administrators control the entire marketplace through the admin panel.
+
+# Final technical architecture
+
+# Multi-vendor Shopping Marketplace
+
+Finalized configuration
+
+Android + iOS
+
+Flutter customer application
+
+Website
+
+Next.js shopping website
+
+Seller portal
+
+Next.js seller dashboard
+
+Admin panel
+
+Next.js super-admin dashboard
+
+NestJS backend API
+
+One centralized business logic and authentication system
+
+PostgreSQL
+
+Primary database
+
+Redis
+
+Cache and background jobs
+
+OpenSearch
+
+Product search
+
+Object storage
+
+Product images and videos
+
+## 1. Recommended technology stack
+
+| Component             | Technology                                            |
+| --------------------- | ----------------------------------------------------- |
+| Android + iOS apps    | Flutter + Dart                                        |
+| Shopping website      | Next.js + React + TypeScript                          |
+| Seller dashboard      | Next.js + TypeScript                                  |
+| Admin dashboard       | Next.js + TypeScript                                  |
+| Backend               | NestJS + Node.js + TypeScript                         |
+| Database              | PostgreSQL                                            |
+| Database ORM          | Prisma                                                |
+| Cache                 | Redis                                                 |
+| Background processing | BullMQ                                                |
+| Product search        | OpenSearch                                            |
+| Image/video storage   | S3-compatible storage                                 |
+| API documentation     | Swagger / OpenAPI                                     |
+| Authentication        | JWT access + refresh tokens                           |
+| Payments              | Razorpay / Cashfree / other configurable gateways     |
+| Shipping              | Shiprocket / Delhivery / other configurable providers |
+| Notifications         | Firebase Cloud Messaging, email and SMS               |
+| Deployment            | Docker + cloud hosting                                |
+| Monitoring            | Sentry + structured application logs                  |
+
+Why this architecture? Flutter lets you maintain Android and iOS from one mobile codebase. Next.js supports the customer website, seller portal, and admin panel. NestJS centralizes the business rules, while PostgreSQL stores the marketplace's main records.
+
+Keep all services modular so the marketplace can grow without needing to rebuild everything.
+
+## 2. Project folder structure
+
+Use a monorepo so all applications share common types, validation rules, and API contracts.
+
+```
+shopping-marketplace/
+│
+├── apps/
+│   ├── mobile/
+│   │   ├── lib/
+│   │   │   ├── core/
+│   │   │   ├── config/
+│   │   │   ├── common/
+│   │   │   ├── services/
+│   │   │   ├── features/
+│   │   │   │   ├── authentication/
+│   │   │   │   ├── home/
+│   │   │   │   ├── categories/
+│   │   │   │   ├── search/
+│   │   │   │   ├── products/
+│   │   │   │   ├── wishlist/
+│   │   │   │   ├── cart/
+│   │   │   │   ├── checkout/
+│   │   │   │   ├── payments/
+│   │   │   │   ├── orders/
+│   │   │   │   ├── returns/
+│   │   │   │   ├── reviews/
+│   │   │   │   ├── profile/
+│   │   │   │   └── notifications/
+│   │   │   └── main.dart
+│   │   └── test/
+│   │
+│   ├── web/
+│   │   ├── src/
+│   │   │   ├── app/
+│   │   │   ├── components/
+│   │   │   ├── features/
+│   │   │   ├── hooks/
+│   │   │   ├── services/
+│   │   │   ├── store/
+│   │   │   └── styles/
+│   │   └── public/
+│   │
+│   ├── seller/
+│   │   ├── src/
+│   │   │   ├── app/
+│   │   │   ├── components/
+│   │   │   ├── features/
+│   │   │   │   ├── onboarding/
+│   │   │   │   ├── dashboard/
+│   │   │   │   ├── products/
+│   │   │   │   ├── inventory/
+│   │   │   │   ├── orders/
+│   │   │   │   ├── shipping/
+│   │   │   │   ├── returns/
+│   │   │   │   ├── finance/
+│   │   │   │   └── analytics/
+│   │   │   └── services/
+│   │   └── public/
+│   │
+│   └── admin/
+│       ├── src/
+│       │   ├── app/
+│       │   ├── components/
+│       │   ├── features/
+│       │   │   ├── dashboard/
+│       │   │   ├── customers/
+│       │   │   ├── sellers/
+│       │   │   ├── products/
+│       │   │   ├── categories/
+│       │   │   ├── brands/
+│       │   │   ├── orders/
+│       │   │   ├── payments/
+│       │   │   ├── commissions/
+│       │   │   ├── refunds/
+│       │   │   ├── marketing/
+│       │   │   ├── reports/
+│       │   │   └── settings/
+│       │   └── services/
+│       └── public/
+│
+├── services/
+│   └── api/
+│       ├── src/
+│       │   ├── common/
+│       │   ├── config/
+│       │   ├── database/
+│       │   ├── integrations/
+│       │   ├── modules/
+│       │   │   ├── auth/
+│       │   │   ├── users/
+│       │   │   ├── addresses/
+│       │   │   ├── sellers/
+│       │   │   ├── products/
+│       │   │   ├── categories/
+│       │   │   ├── brands/
+│       │   │   ├── inventory/
+│       │   │   ├── search/
+│       │   │   ├── wishlist/
+│       │   │   ├── cart/
+│       │   │   ├── checkout/
+│       │   │   ├── orders/
+│       │   │   ├── payments/
+│       │   │   ├── commissions/
+│       │   │   ├── settlements/
+│       │   │   ├── shipping/
+│       │   │   ├── returns/
+│       │   │   ├── refunds/
+│       │   │   ├── reviews/
+│       │   │   ├── coupons/
+│       │   │   ├── banners/
+│       │   │   ├── notifications/
+│       │   │   ├── support/
+│       │   │   ├── analytics/
+│       │   │   └── admin/
+│       │   └── main.ts
+│       ├── prisma/
+│       │   ├── schema.prisma
+│       │   ├── migrations/
+│       │   └── seed.ts
+│       └── test/
+│
+├── packages/
+│   ├── shared-types/
+│   ├── api-client/
+│   ├── validation/
+│   ├── ui/
+│   ├── config/
+│   └── utilities/
+│
+├── infrastructure/
+│   ├── docker/
+│   ├── deployment/
+│   ├── monitoring/
+│   └── scripts/
+│
+├── docs/
+│   ├── architecture/
+│   ├── database/
+│   ├── api/
+│   ├── workflows/
+│   └── testing/
+│
+├── .env.example
+├── docker-compose.yml
+├── package.json
+├── pnpm-workspace.yaml
+└── README.md
+```
+
+This is the target structure. Gemini should create it progressively, not generate every file at once.
+
+## 3. Database architecture
+
+Use PostgreSQL as the main source of truth. All four platforms must use the same backend data and permissions.
+
+### Main database tables
+
+| Database area       | Tables                                                                     |
+| ------------------- | -------------------------------------------------------------------------- |
+| Accounts            | users, roles, permissions, user_roles, sessions                            |
+| Customer            | customer_profiles, addresses, wishlists                                    |
+| Sellers             | sellers, seller_users, seller_documents, seller_bank_accounts              |
+| Catalogue           | categories, brands, products, product_variants, product_images, attributes |
+| Inventory           | warehouses, inventory, stock_movements                                     |
+| Shopping            | carts, cart_items, wishlist_items                                          |
+| Orders              | orders, order_items, order_status_history                                  |
+| Payments            | payments, payment_transactions, payment_webhooks                           |
+| Marketplace finance | commissions, seller_ledger, settlements, settlement_items                  |
+| Delivery            | shipments, shipment_items, tracking_events                                 |
+| Returns             | return_requests, return_items, refunds                                     |
+| Marketing           | coupons, coupon_usage, promotions, banners                                 |
+| Customer engagement | reviews, questions, answers, notifications                                 |
+| Support             | support_tickets, ticket_messages                                           |
+| Administration      | admin_settings, audit_logs, feature_flags                                  |
+| Content             | pages, menus, app_settings                                                 |
+
+### Important database relationships
+
+\#chatgpt-mermaid-\_r_sb\_{font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";font-size:16px;fill:rgb(13, 13, 13);}@keyframes edge-animation-frame{from{stroke-dashoffset:0;}}@keyframes dash{to{stroke-dashoffset:0;}}#chatgpt-mermaid-\_r_sb\_ .edge-animation-slow{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}#chatgpt-mermaid-\_r_sb\_ .edge-animation-fast{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}#chatgpt-mermaid-\_r_sb\_ .error-icon{fill:rgb(243, 243, 243);}#chatgpt-mermaid-\_r_sb\_ .error-text{fill:rgb(13, 13, 13);stroke:rgb(13, 13, 13);}#chatgpt-mermaid-\_r_sb\_ .edge-thickness-normal{stroke-width:1px;}#chatgpt-mermaid-\_r_sb\_ .edge-thickness-thick{stroke-width:3.5px;}#chatgpt-mermaid-\_r_sb\_ .edge-pattern-solid{stroke-dasharray:0;}#chatgpt-mermaid-\_r_sb\_ .edge-thickness-invisible{stroke-width:0;fill:none;}#chatgpt-mermaid-\_r_sb\_ .edge-pattern-dashed{stroke-dasharray:3;}#chatgpt-mermaid-\_r_sb\_ .edge-pattern-dotted{stroke-dasharray:2;}#chatgpt-mermaid-\_r_sb\_ .marker{fill:rgb(143, 143, 143);stroke:rgb(143, 143, 143);}#chatgpt-mermaid-\_r_sb\_ .marker.cross{stroke:rgb(143, 143, 143);}#chatgpt-mermaid-\_r_sb\_ svg{font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";font-size:16px;}#chatgpt-mermaid-\_r_sb\_ p{margin:0;}#chatgpt-mermaid-\_r_sb\_ .entityBox{fill:rgb(222, 234, 251);stroke:rgb(83, 154, 248);}#chatgpt-mermaid-\_r_sb\_ .relationshipLabelBox{fill:rgb(243, 243, 243);opacity:0.7;background-color:rgb(243, 243, 243);}#chatgpt-mermaid-\_r_sb\_ .relationshipLabelBox rect{opacity:0.5;}#chatgpt-mermaid-\_r_sb\_ .labelBkg{background-color:rgba(243, 243, 243, 0.5);}#chatgpt-mermaid-\_r_sb\_ .edgeLabel{background-color:rgb(252, 252, 252);}#chatgpt-mermaid-\_r_sb\_ .edgeLabel .label rect{fill:rgb(252, 252, 252);}#chatgpt-mermaid-\_r_sb\_ .edgeLabel .label text{fill:rgb(13, 13, 13);}#chatgpt-mermaid-\_r_sb\_ .edgeLabel .label{fill:rgb(83, 154, 248);font-size:14px;}#chatgpt-mermaid-\_r_sb\_ .label{font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";color:rgb(13, 13, 13);}#chatgpt-mermaid-\_r_sb\_ .edge-pattern-dashed{stroke-dasharray:8,8;}#chatgpt-mermaid-\_r_sb\_ .node rect,#chatgpt-mermaid-\_r_sb\_ .node circle,#chatgpt-mermaid-\_r_sb\_ .node ellipse,#chatgpt-mermaid-\_r_sb\_ .node polygon{fill:rgb(222, 234, 251);stroke:rgb(83, 154, 248);stroke-width:1px;}#chatgpt-mermaid-\_r_sb\_ .relationshipLine{stroke:rgb(143, 143, 143);stroke-width:1px;fill:none;}#chatgpt-mermaid-\_r_sb\_ .marker{fill:none!important;stroke:rgb(143, 143, 143)!important;stroke-width:1;}#chatgpt-mermaid-\_r_sb\_ [data-look=neo].labelBkg{background-color:rgba(243, 243, 243, 0.5);}#chatgpt-mermaid-\_r_sb\_ .node .neo-node{stroke:rgb(83, 154, 248);}#chatgpt-mermaid-\_r_sb\_ [data-look="neo"].node rect,#chatgpt-mermaid-\_r_sb\_ [data-look="neo"].cluster rect,#chatgpt-mermaid-\_r_sb\_ [data-look="neo"].node polygon{stroke:url(#chatgpt-mermaid-\_r_sb\_-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-\_r_sb\_ [data-look="neo"].swimlane.cluster rect{filter:none;}#chatgpt-mermaid-\_r_sb\_ [data-look="neo"].node path{stroke:url(#chatgpt-mermaid-\_r_sb\_-gradient);stroke-width:1px;}#chatgpt-mermaid-\_r_sb\_ [data-look="neo"].node .outer-path{filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-\_r_sb\_ [data-look="neo"].node .neo-line path{stroke:rgb(83, 154, 248);filter:none;}#chatgpt-mermaid-\_r_sb\_ [data-look="neo"].node circle{stroke:url(#chatgpt-mermaid-\_r_sb\_-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-\_r_sb\_ [data-look="neo"].node circle .state-start{fill:#000000;}#chatgpt-mermaid-\_r_sb\_ [data-look="neo"].icon-shape .icon{fill:url(#chatgpt-mermaid-\_r_sb\_-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-\_r_sb\_ [data-look="neo"].icon-shape .icon-neo path{stroke:url(#chatgpt-mermaid-\_r_sb\_-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-\_r_sb\_ :root{--mermaid-font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";}USERSCUSTOMER_PROFILESADDRESSESORDERSREVIEWSSELLERSPRODUCTSSELLER_USERSCATEGORIESBRANDSPRODUCT_VARIANTSINVENTORYCARTSCART_ITEMSORDER_ITEMSPAYMENTSSHIPMENTSRETURN_REQUESTSREFUNDSCOMMISSIONSSETTLEMENTShasownsplaceswriteslistsemployscontainsidentifieshasstocked_asownscontainscontainsordered_aspaid_bydelivered_bymay_havegenerateschargedreceives
+
+### Database rules Gemini must follow
+
+1. Every major table must have a primary key, timestamps, and appropriate indexes.
+2. Use UUID identifiers for major business entities.
+3. Use foreign keys and proper relational constraints.
+4. Store money in integer minor units (for example, paise) with an explicit currency code.
+5. Store product variants separately from products.
+6. Keep inventory changes in a stock movement ledger.
+7. Keep payment transactions separate from orders.
+8. Never calculate seller earnings from the frontend.
+9. Keep a complete order status history.
+10. Use database transactions for checkout, stock reservation, payment reconciliation, and settlement operations.
+11. Use soft deletion where records need to be retained for audits.
+12. Keep seller-specific order items separate when a customer purchases from multiple sellers.
+
+Important marketplace rule: One customer order can contain products from several sellers. The backend must split it into seller-specific fulfillment groups while maintaining one customer-facing order.
+
+# 4. Complete development instructions for Gemini AI Studio
+
+Copy the following master prompt into Google AI Studio Build mode. This is the main project specification for the selected configuration.
+
+# MASTER DEVELOPMENT INSTRUCTIONS
+
+## Multi-Vendor Shopping Marketplace – Android, iOS, Website, Seller Portal and Admin Panel
+
+### 1. Project objective
+
+Build a complete, production-oriented multi-vendor e-commerce marketplace inspired by the customer shopping experience and marketplace capabilities of Meesho, Myntra and Amazon.
+
+The platform must support multiple independent sellers who can register, upload products, manage stock, receive orders, process shipments and receive settlements.
+
+The platform must provide four connected interfaces:
+
+1. Customer mobile application for Android and iOS.
+2. Customer shopping website.
+3. Seller dashboard and portal.
+4. Super Admin dashboard.
+
+All applications must connect to one newly developed backend and one central PostgreSQL database.
+
+Do not copy any company's branding, proprietary design, code or protected assets. Create an original marketplace brand and interface.
+
+### 2. Final technology decisions
+
+Use this technology stack unless there is a documented technical reason to recommend a change:
+
+- Mobile applications: Flutter and Dart.
+- Customer website: Next.js, React and TypeScript.
+- Seller portal: Next.js, React and TypeScript.
+- Admin panel: Next.js, React and TypeScript.
+- Backend: NestJS and Node.js with TypeScript.
+- Database: PostgreSQL.
+- ORM: Prisma.
+- Cache: Redis.
+- Background jobs: BullMQ.
+- Search engine: OpenSearch.
+- Storage: S3-compatible object storage.
+- API: REST API with versioning.
+- API documentation: Swagger/OpenAPI.
+- Authentication: secure access and refresh tokens.
+- Validation: shared TypeScript validation schemas.
+- Deployment: Docker and cloud infrastructure.
+
+Use a pnpm and Turborepo monorepo for JavaScript/TypeScript applications and packages. Flutter should remain a separate Dart workspace inside the same repository.
+
+### 3. Architecture requirements
+
+Use a modular monolith backend initially. Do not create unnecessary microservices.
+
+Backend modules must be independent, testable and organized by business domain.
+
+All platforms must use the same APIs and central database.
+
+Create separate customer, seller and admin authorization guards.
+
+Use role-based access control and permission-based authorization.
+
+Never trust frontend calculations, prices, payment status, inventory availability, commission amounts or seller permissions.
+
+The backend is the source of truth for all business operations.
+
+### 4. Customer application
+
+Develop the following modules:
+
+#### Authentication
+
+- Splash screen.
+- Onboarding.
+- Mobile number registration.
+- Email registration.
+- OTP verification.
+- Login and logout.
+- Password recovery.
+- Social login where configured.
+- Device/session management.
+- Account deletion request.
+
+#### Homepage
+
+- Promotional banners.
+- Search bar.
+- Category navigation.
+- Trending products.
+- Recommended products.
+- Featured brands.
+- Best sellers.
+- New arrivals.
+- Flash deals.
+- Discount offers.
+- Recently viewed products.
+- Personalized recommendations.
+
+#### Categories
+
+- Main categories.
+- Subcategories.
+- Category images.
+- Category filters.
+- Category-specific attributes.
+
+#### Product discovery
+
+- Product listing.
+- Grid and list layouts.
+- Product search.
+- Autocomplete.
+- Search suggestions.
+- Filters.
+- Sorting.
+- Price range.
+- Brand filter.
+- Rating filter.
+- Size, color and other attributes.
+- Availability filter.
+- Seller information.
+
+#### Product details
+
+- Product name and description.
+- Multiple product images.
+- Product videos.
+- Variant selection.
+- Size and color selection.
+- Price and discount.
+- MRP.
+- Stock availability.
+- Delivery estimate.
+- Seller information.
+- Return policy.
+- Product ratings and reviews.
+- Frequently bought together.
+- Similar products.
+- Wishlist.
+- Add to cart.
+
+#### Shopping
+
+- Shopping cart.
+- Save for later.
+- Quantity management.
+- Coupon application.
+- Delivery address selection.
+- Multiple seller cart support.
+- Checkout.
+- Order summary.
+- Taxes and shipping calculation.
+- Payment selection.
+- Order confirmation.
+
+#### Payments
+
+- UPI.
+- Credit and debit cards.
+- Net banking.
+- Wallets where supported.
+- Cash on delivery where enabled.
+- Payment gateway integration.
+- Payment status verification.
+- Refund status.
+
+Never mark an order as paid based only on a frontend response. Verify gateway webhooks and payment signatures on the backend.
+
+#### Orders
+
+- Order history.
+- Order details.
+- Seller-specific shipment information.
+- Order cancellation.
+- Shipment tracking.
+- Invoice download.
+- Return request.
+- Replacement request.
+- Refund tracking.
+
+#### Customer account
+
+- Profile.
+- Saved addresses.
+- Wishlist.
+- Saved payment methods through the payment provider.
+- Notifications.
+- Reviews.
+- Support tickets.
+- Privacy settings.
+- Account deletion.
+
+### 5. Seller portal
+
+Build a complete seller management system.
+
+#### Seller onboarding
+
+- Seller registration.
+- Business information.
+- Contact information.
+- GST details where applicable.
+- PAN and business verification where applicable.
+- Bank account details.
+- Document upload.
+- Verification status.
+- Admin approval.
+- Seller agreement acceptance.
+
+Collect only necessary documents and protect sensitive seller information.
+
+#### Seller dashboard
+
+- Total sales.
+- Orders received.
+- Pending orders.
+- Completed orders.
+- Cancelled orders.
+- Return requests.
+- Revenue.
+- Commission.
+- Available settlement.
+- Low-stock products.
+- Sales reports.
+
+#### Product management
+
+- Add products.
+- Edit products.
+- Product images.
+- Product videos.
+- Categories.
+- Brands.
+- Attributes.
+- Variants.
+- Sizes.
+- Colors.
+- SKU.
+- MRP.
+- Selling price.
+- Discount.
+- GST classification.
+- Product approval status.
+- Bulk upload.
+- Product import/export.
+
+#### Inventory
+
+- Stock updates.
+- Variant-level inventory.
+- Low-stock alerts.
+- Stock movement history.
+- Warehouse management.
+- Stock reservation.
+- Inventory adjustment permissions.
+
+#### Order management
+
+- New orders.
+- Accept orders.
+- Process orders.
+- Packing.
+- Shipping label.
+- Invoice.
+- Dispatch.
+- Tracking.
+- Delivery status.
+- Cancellation.
+- Return handling.
+
+#### Seller finance
+
+- Sales summary.
+- Commission breakdown.
+- Refund deductions.
+- Shipping deductions.
+- Tax deductions where applicable.
+- Settlement history.
+- Payout status.
+- Downloadable statements.
+
+#### Seller marketing
+
+- Coupons where permitted.
+- Promotions.
+- Product campaigns.
+- Featured product requests.
+- Seller storefront.
+- Store profile.
+- Product performance reports.
+
+### 6. Super Admin panel
+
+The super admin must have control over the complete marketplace.
+
+#### Dashboard
+
+- Total customers.
+- Total sellers.
+- Active sellers.
+- Pending seller approvals.
+- Total products.
+- Active products.
+- Total orders.
+- Gross merchandise value.
+- Net marketplace revenue.
+- Commission earnings.
+- Refunds.
+- Settlements.
+- Payment failures.
+- Sales charts.
+
+#### Customer management
+
+- View customers.
+- Search customers.
+- Customer status.
+- Suspend accounts.
+- Restore accounts.
+- Customer order history.
+- Support history.
+
+#### Seller management
+
+- Seller registration.
+- Seller verification.
+- Approve or reject sellers.
+- Suspend sellers.
+- Seller documents.
+- Commission configuration.
+- Seller performance.
+- Settlement approval where applicable.
+
+#### Product and catalogue management
+
+- Product approvals.
+- Product rejection.
+- Categories.
+- Subcategories.
+- Brands.
+- Product attributes.
+- Product moderation.
+- Restricted product rules.
+- Featured products.
+
+#### Orders and finance
+
+- All orders.
+- Order details.
+- Payment records.
+- Refund management.
+- Commission management.
+- Seller settlements.
+- Financial reports.
+- Reconciliation.
+- Invoice and tax reports.
+
+#### Marketing and content
+
+- Homepage banners.
+- Promotional campaigns.
+- Coupons.
+- Discount rules.
+- Featured brands.
+- Featured sellers.
+- CMS pages.
+- FAQs.
+- Terms and conditions.
+- Privacy policy.
+- Return policy.
+- Notification campaigns.
+
+#### Platform configuration
+
+- Marketplace commission settings.
+- Payment gateway settings.
+- Shipping provider settings.
+- Tax configuration.
+- Currency configuration.
+- Delivery settings.
+- Return windows.
+- Minimum order values.
+- Cash-on-delivery settings.
+- Feature flags.
+- User permissions.
+
+### 7. Marketplace business logic
+
+Implement these business rules on the backend.
+
+#### Multi-seller orders
+
+A customer must be able to purchase products from multiple sellers in one checkout.
+
+Create one customer-facing order and separate seller fulfillment groups.
+
+Each seller must see only their own order items and permitted customer delivery information.
+
+#### Product pricing
+
+Calculate:
+
+- MRP.
+- Selling price.
+- Discount.
+- Coupon discount.
+- Tax.
+- Shipping.
+- Final payable amount.
+
+Use integer minor currency units. Never use floating-point calculations for money.
+
+#### Commission
+
+Support configurable commission by:
+
+- Global marketplace rate.
+- Product category.
+- Seller.
+- Specific product.
+
+Record the commission at order-item level so historical orders are not changed when rates are updated.
+
+#### Inventory
+
+Reserve stock during checkout using an atomic transaction and a configurable reservation expiry.
+
+Prevent overselling and release reservations after failed or expired payments.
+
+#### Payments
+
+Support payment initiation, gateway verification, webhook processing, refunds and reconciliation.
+
+Make payment webhook handling idempotent.
+
+#### Seller settlements
+
+Calculate seller payable amounts using captured payments, commission, refunds and approved deductions.
+
+Maintain an immutable ledger and settlement history.
+
+Do not release settlement until the configured delivery, return and dispute rules are satisfied.
+
+#### Returns and refunds
+
+Support partial returns and partial refunds at order-item level.
+
+Use configurable return windows and product-category return policies.
+
+Record every status change.
+
+### 8. Database requirements
+
+Use PostgreSQL with Prisma.
+
+Create properly normalized tables for:
+
+- users
+- roles
+- permissions
+- user_roles
+- customer_profiles
+- addresses
+- sellers
+- seller_users
+- seller_documents
+- seller_bank_accounts
+- categories
+- brands
+- products
+- product_variants
+- product_images
+- product_attributes
+- warehouses
+- inventory
+- stock_movements
+- carts
+- cart_items
+- wishlists
+- wishlist_items
+- orders
+- order_items
+- order_status_history
+- payments
+- payment_transactions
+- payment_webhooks
+- commissions
+- seller_ledger
+- settlements
+- settlement_items
+- shipments
+- tracking_events
+- return_requests
+- return_items
+- refunds
+- coupons
+- coupon_usage
+- promotions
+- reviews
+- questions
+- answers
+- notifications
+- support_tickets
+- ticket_messages
+- banners
+- cms_pages
+- admin_settings
+- audit_logs
+- feature_flags
+
+Add appropriate UUID identifiers, foreign keys, unique constraints, indexes, timestamps and audit fields.
+
+Use database migrations. Never change production schema without a reviewed migration.
+
+### 9. Security
+
+Implement:
+
+- Password hashing using Argon2id or an appropriately configured secure hashing library.
+- OTP expiry and rate limits.
+- Secure refresh token rotation.
+- Role-based and permission-based access control.
+- Request validation.
+- SQL injection protection.
+- XSS and CSRF protections where applicable.
+- Secure file uploads.
+- File type and size validation.
+- Payment signature verification.
+- Webhook idempotency.
+- API rate limiting.
+- Audit logs.
+- Sensitive data encryption where appropriate.
+- Secure secrets management.
+
+Never expose payment secrets, database credentials or private API keys in frontend applications.
+
+Never store raw card details.
+
+### 10. User interface requirements
+
+Build an original, premium, modern shopping interface.
+
+Customer application:
+
+- Clean home page.
+- Large search.
+- Category icons.
+- Product cards.
+- Promotional banners.
+- Bottom navigation.
+- Product image gallery.
+- Clear pricing and discounts.
+- Easy checkout.
+
+Seller dashboard:
+
+- Professional business dashboard.
+- Sales and order charts.
+- Product tables.
+- Inventory management.
+- Settlement reports.
+
+Admin dashboard:
+
+- Responsive sidebar.
+- KPI cards.
+- Data tables.
+- Search and filters.
+- Charts.
+- Approval workflows.
+- Settings pages.
+
+Support mobile, tablet and desktop screen sizes.
+
+Use reusable components and consistent design tokens.
+
+Do not copy another company's exact user interface.
+
+### 11. API standards
+
+Use versioned REST endpoints beginning with /api/v1.
+
+Organize APIs by module.
+
+Examples:
+
+- POST /api/v1/auth/register
+- POST /api/v1/auth/login
+- POST /api/v1/auth/verify-otp
+- GET /api/v1/products
+- GET /api/v1/products/
+- GET /api/v1/categories
+- POST /api/v1/cart/items
+- GET /api/v1/cart
+- POST /api/v1/checkout
+- POST /api/v1/orders
+- GET /api/v1/orders/
+- POST /api/v1/payments/initiate
+- POST /api/v1/payments/webhooks/
+- POST /api/v1/sellers/register
+- GET /api/v1/seller/dashboard
+- POST /api/v1/seller/products
+- GET /api/v1/seller/orders
+- GET /api/v1/admin/dashboard
+- GET /api/v1/admin/sellers
+- PATCH /api/v1/admin/sellers//status
+
+Provide pagination, filtering, sorting, validation and consistent error responses.
+
+Generate Swagger documentation.
+
+### 12. Development process
+
+Build in phases.
+
+Phase 1: Project foundation, repository, architecture, configuration and design system.
+
+Phase 2: Backend, PostgreSQL, Prisma, authentication and authorization.
+
+Phase 3: Customer website and mobile application foundation.
+
+Phase 4: Catalogue, categories, brands, search and product details.
+
+Phase 5: Seller registration, seller portal and product management.
+
+Phase 6: Cart, checkout, pricing and inventory.
+
+Phase 7: Orders, payments, shipping, returns and refunds.
+
+Phase 8: Admin panel, commissions, seller settlements and finance.
+
+Phase 9: Notifications, marketing, reports and analytics.
+
+Phase 10: Testing, security, performance and deployment.
+
+Complete each phase with working functionality, tests and documentation before moving forward.
+
+### 13. Non-negotiable development rules
+
+- Do not create a frontend-only demo.
+- Do not use fake data as a substitute for backend functionality.
+- Do not create buttons that do nothing.
+- Do not simulate successful payments.
+- Do not expose secrets in frontend code.
+- Do not bypass authentication.
+- Do not mix customer, seller and admin permissions.
+- Do not allow sellers to access other sellers' data.
+- Do not allow overselling.
+- Do not hardcode commission or tax values.
+- Do not delete existing working functionality.
+- Do not rewrite the whole application for small changes.
+- Do not generate the entire marketplace in one step.
+- Do not proceed with an incomplete phase without identifying the remaining work.
+
+Use demo seed data only in development and clearly distinguish it from production data.
+
+### 14. Required deliverables
+
+Maintain:
+
+- Architecture document.
+- Database ER diagram.
+- Prisma schema.
+- Migration history.
+- API documentation.
+- Screen and navigation map.
+- Environment variable template.
+- Setup instructions.
+- Test results.
+- Deployment instructions.
+- Known issues and remaining work list.
+
+### 15. First action
+
+Before coding, inspect the current Google AI Studio project and its existing files.
+
+Do not delete or overwrite working code.
+
+Prepare:
+
+1. Recommended repository architecture.
+2. Complete folder structure.
+3. Database ER diagram.
+4. Initial Prisma schema design.
+5. API module plan.
+6. Mobile, website, seller and admin screen map.
+7. Development roadmap.
+8. Required external services and credentials.
+
+Identify all assumptions and blockers.
+
+After presenting the plan, begin Phase 1 only after the architecture is clear.
+
+Build a reliable, scalable, secure and fully connected marketplace—not just a visual prototype.
+
+# 5. Database implementation prompts
+
+Use these prompts one at a time after Gemini has accepted the master architecture.
+
+### DATABASE PROMPT 1 – Create the database architecture
+
+Implement the PostgreSQL database using Prisma.
+
+Create a complete relational database design for the multi-vendor shopping marketplace.
+
+Include users, roles, permissions, sellers, seller verification, categories, brands, products, variants, product images, attributes, inventory, carts, wishlists, orders, order items, payments, commissions, seller ledger, settlements, shipments, tracking, returns, refunds, coupons, reviews, notifications, support and audit logs.
+
+Requirements:
+
+- Use UUID primary keys.
+- Use foreign keys.
+- Add indexes and unique constraints.
+- Use appropriate decimal-free money storage in integer minor units.
+- Support multiple currencies.
+- Support multiple sellers in one customer order.
+- Support multiple product variants.
+- Maintain order and inventory history.
+- Maintain immutable financial transaction records.
+- Add createdAt and updatedAt fields.
+- Use soft deletion where appropriate.
+- Define Prisma enums for statuses.
+- Add migration and seed scripts.
+
+First show the complete ER diagram and table relationships. Then implement the Prisma schema and validate it. Do not create frontend code in this task.
+
+### DATABASE PROMPT 2 – Marketplace financial system
+
+Implement the complete marketplace financial database and business logic.
+
+Create:
+
+- Order item price snapshots.
+- Tax calculation records.
+- Coupon allocation records.
+- Marketplace commission records.
+- Seller payable ledger.
+- Payment transaction records.
+- Refund records.
+- Seller settlement records.
+- Settlement line items.
+- Reconciliation records.
+
+Requirements:
+
+1. Store all monetary amounts in integer minor units.
+2. Record the commission rate and amount at order-item level.
+3. Never recalculate historical commission using a newly changed rate.
+4. Maintain an immutable financial ledger.
+5. Support partial refunds.
+6. Support multiple sellers per order.
+7. Support payment failure and retry.
+8. Prevent duplicate payment webhooks.
+9. Prevent duplicate settlements.
+10. Add automated financial consistency tests.
+
+Explain every calculation and create unit tests before integrating the financial system into the user interface.
+
+# 6. Implementation prompts – run in this order
+
+These are your development instructions for Gemini after the architecture is established. Copy one prompt, allow Gemini to complete it, test the result, and then continue.
+
+## Development roadmap
+
+1. Phase 1 – Project foundation
+
+   Create the monorepo, Flutter project, Next.js projects, NestJS backend, shared packages, Docker configuration and environment templates.
+
+   Deliverable: all projects start successfully.
+2. Phase 2 – Backend and authentication
+
+   Create PostgreSQL connection, Prisma migrations, registration, OTP, login, refresh tokens, role permissions and API documentation.
+
+   Deliverable: tested authentication across platforms.
+3. Phase 3 – Customer shopping experience
+
+   Create onboarding, homepage, category navigation, search, product listing, product detail, wishlist and cart.
+
+   Deliverable: customer can browse and manage a cart.
+4. Phase 4 – Seller system
+
+   Create seller registration, verification, dashboard, product upload, variants, inventory and seller storefront.
+
+   Deliverable: sellers can manage their own products and stock.
+5. Phase 5 – Checkout and orders
+
+   Create cart validation, address management, shipping calculation, tax calculation, coupons, checkout and multi-seller order splitting.
+
+   Deliverable: a valid customer order is created.
+6. Phase 6 – Payment and delivery
+
+   Integrate payment gateways, verified webhooks, shipping providers, tracking, cancellation and refunds.
+
+   Deliverable: tested end-to-end order lifecycle.
+7. Phase 7 – Admin panel
+
+   Create customer, seller, product, order, payment, commission, refund, settlement, CMS and configuration management.
+
+   Deliverable: administrators can control the marketplace.
+8. Phase 8 – Finance and settlements
+
+   Complete seller ledger, marketplace commission, payout approvals, reconciliation and financial reports.
+
+   Deliverable: financial records reconcile correctly.
+9. Phase 9 – Advanced features
+
+   Add AI recommendations, image search, loyalty, promotions, analytics, notifications and personalization.
+
+   Deliverable: advanced shopping experience.
+10. Phase 10 – Testing and deployment
+
+    Complete automated tests, security review, load tests, backups, monitoring, app builds and production deployment.
+
+    Deliverable: release-ready platform.
+
+## 7. Ready-to-use Gemini prompts for each phase
+
+### PHASE 1 – Build the complete project foundation
+
+Start Phase 1 of the multi-vendor marketplace.
+
+Create the monorepo with:
+
+- Flutter Android/iOS application.
+- Next.js customer website.
+- Next.js seller portal.
+- Next.js admin panel.
+- NestJS backend.
+- Shared TypeScript packages.
+- PostgreSQL and Prisma configuration.
+- Redis and Docker configuration.
+- Environment variable templates.
+- Swagger setup.
+- ESLint, formatting and testing configuration.
+
+Create a professional, consistent design system with reusable components.
+
+Set up development scripts and documentation.
+
+Run each application and report the result. Do not proceed to Phase 2 until all applications start successfully.
+
+### PHASE 2 – Backend and authentication
+
+Implement the backend authentication and authorization system.
+
+Create:
+
+- Customer registration and login.
+- OTP verification.
+- Password login.
+- Access token and refresh token.
+- Secure logout.
+- Session management.
+- Seller registration.
+- Admin login.
+- Role-based permissions.
+- Permission guards.
+- Rate limiting.
+- Audit logs.
+
+Connect PostgreSQL and Prisma.
+
+Create API tests for each authentication flow.
+
+Connect the Flutter, customer website, seller portal and admin panel to the real backend authentication APIs.
+
+Do not use fake authentication or hardcoded login success.
+
+### PHASE 3 – Customer shopping application
+
+Build the customer experience for Flutter and Next.js.
+
+Implement:
+
+- Homepage.
+- Promotional banners.
+- Categories and subcategories.
+- Search and autocomplete.
+- Product listing.
+- Filters and sorting.
+- Product details.
+- Product image gallery.
+- Variant selection.
+- Size and color selection.
+- Wishlist.
+- Shopping cart.
+- Recently viewed products.
+- Related products.
+- Customer profile.
+- Saved addresses.
+
+All data must come from the backend.
+
+Create responsive, premium-quality screens and connect all buttons and interactions to real functionality.
+
+Test the same customer account on mobile and website to verify that data remains synchronized.
+
+### PHASE 4 – Seller portal and marketplace catalogue
+
+Build the complete seller portal.
+
+Implement:
+
+- Seller onboarding.
+- Business verification.
+- Document upload.
+- Admin approval.
+- Seller dashboard.
+- Product creation.
+- Product editing.
+- Product images and videos.
+- Category selection.
+- Brand selection.
+- Attributes and variants.
+- SKU management.
+- MRP and selling price.
+- Inventory management.
+- Stock movement.
+- Low-stock notifications.
+- Seller storefront.
+- Bulk product upload.
+
+Enforce seller ownership and permissions in the backend.
+
+A seller must never be able to read or modify another seller's private information or products.
+
+### PHASE 5 – Cart, checkout and order management
+
+Build the complete shopping and checkout workflow.
+
+Implement:
+
+- Multi-seller cart.
+- Cart validation.
+- Address selection.
+- Delivery serviceability.
+- Product price validation.
+- Coupon validation.
+- Tax calculation.
+- Shipping calculation.
+- Stock reservation.
+- Checkout.
+- Customer order creation.
+- Seller-specific fulfillment groups.
+- Order status history.
+- Order cancellation.
+
+One customer order may contain products from multiple sellers.
+
+Create a single customer-facing order with separate seller fulfillment groups.
+
+Use database transactions to prevent duplicate orders and inventory overselling.
+
+Create automated tests for checkout and pricing.
+
+### PHASE 6 – Payment, shipping, returns and refunds
+
+Implement production-oriented payment and shipping integrations.
+
+Payment:
+
+- Razorpay integration.
+- Cashfree integration.
+- Configurable payment providers.
+- UPI, cards and net banking where supported.
+- Cash on delivery where enabled.
+- Payment verification.
+- Secure webhooks.
+- Payment retry.
+- Refund initiation.
+- Refund status.
+
+Shipping:
+
+- Shiprocket integration.
+- Configurable shipping providers.
+- Shipping rate calculation.
+- Serviceability.
+- Shipping labels.
+- Tracking numbers.
+- Dispatch.
+- Delivery confirmation.
+- Failed delivery.
+
+Returns:
+
+- Return request.
+- Return approval.
+- Pickup.
+- Item inspection.
+- Replacement.
+- Partial refund.
+- Full refund.
+
+Never simulate successful payments or shipments. Use sandbox credentials for testing and production credentials only through secure environment configuration.
+
+### PHASE 7 – Super Admin dashboard
+
+Build the complete marketplace admin panel.
+
+Implement:
+
+- Admin dashboard.
+- Customer management.
+- Seller approval.
+- Seller suspension.
+- Product approval.
+- Product moderation.
+- Categories.
+- Brands.
+- Orders.
+- Payments.
+- Refunds.
+- Commissions.
+- Seller settlements.
+- Coupons.
+- Promotions.
+- Banners.
+- CMS pages.
+- Reports.
+- Analytics.
+- Support tickets.
+- Admin users.
+- Roles and permissions.
+- Platform settings.
+
+Create searchable tables, filters, pagination, charts and export functionality.
+
+Use strict admin authorization and audit logs.
+
+Every action that changes important marketplace data must be recorded.
+
+### PHASE 8 – Finance and seller settlements
+
+Implement the complete marketplace financial system.
+
+Support:
+
+- Configurable seller commission.
+- Category commission.
+- Product commission.
+- Seller-specific commission.
+- Order-item commission snapshots.
+- Seller payable balance.
+- Refund deductions.
+- Shipping deductions.
+- Tax-related adjustments.
+- Settlement approval.
+- Settlement processing.
+- Settlement history.
+- Financial reports.
+- Reconciliation.
+
+Create an immutable financial ledger.
+
+Prevent duplicate payouts.
+
+Verify that the total customer payment, seller payable amounts, marketplace commission, taxes, shipping and refunds reconcile correctly.
+
+Create unit, integration and financial reconciliation tests.
+
+### PHASE 9 – Advanced marketplace features
+
+Implement advanced features in independent modules:
+
+- AI shopping assistant.
+- Personalized product recommendations.
+- Image-based product search.
+- Recently viewed products.
+- Similar product suggestions.
+- Loyalty points.
+- Referral program.
+- Group shopping.
+- Flash sales.
+- Limited-time deals.
+- Video product listings.
+- Live shopping architecture.
+- Wishlist sharing.
+- Price drop alerts.
+- Back-in-stock alerts.
+- Push notifications.
+- Email and SMS notifications.
+- WhatsApp notifications where configured.
+- Seller analytics.
+- Customer analytics.
+- Marketing campaign management.
+
+Use configurable feature flags.
+
+Do not make advanced features interfere with the core shopping, checkout or payment system.
+
+### PHASE 10 – Complete testing and production readiness
+
+Perform a full marketplace audit.
+
+Test:
+
+- Android application.
+- iOS application.
+- Customer website.
+- Seller portal.
+- Admin panel.
+- Backend APIs.
+- Database migrations.
+- Authentication.
+- Authorization.
+- Product management.
+- Inventory.
+- Cart.
+- Checkout.
+- Multi-seller orders.
+- Payments.
+- Webhooks.
+- Shipping.
+- Returns.
+- Refunds.
+- Seller commission.
+- Settlements.
+- Notifications.
+
+Perform:
+
+- Unit tests.
+- Integration tests.
+- End-to-end tests.
+- Security testing.
+- Load testing.
+- API validation.
+- Database backup testing.
+- Recovery testing.
+
+Fix all critical and high-severity issues.
+
+Prepare:
+
+- Android release build.
+- iOS release build.
+- Website production deployment.
+- Seller portal deployment.
+- Admin panel deployment.
+- Backend deployment.
+- Production database configuration.
+- Monitoring and alerting.
+- Backup and recovery documentation.
+
+Do not claim production readiness until all critical tests pass.
+
+# 8. Important integration configuration
+
+You will need accounts and credentials for external services. Do not ask Gemini to invent API keys.
+
+| Service       | Suggested provider           | Purpose                       |
+| ------------- | ---------------------------- | ----------------------------- |
+| Payments      | Razorpay or Cashfree         | Customer payments and refunds |
+| Shipping      | Shiprocket                   | Shipping and tracking         |
+| Notifications | Firebase                     | Push notifications            |
+| Email         | Brevo                        | OTP and transactional email   |
+| SMS           | MSG91                        | OTP and SMS                   |
+| Maps          | Google Maps Platform         | Delivery address and location |
+| Storage       | AWS S3 or compatible storage | Product images and videos     |
+| Search        | OpenSearch                   | Fast product search           |
+| Monitoring    | Sentry                       | Error monitoring              |
+
+Start with sandbox/test credentials for payment and shipping integrations.
+
+## 9. Environment configuration
+
+Ask Gemini to create a `.env.example` file with variables such as:
+
+```
+NODE_ENV=development
+PORT=3000
+
+DATABASE_URL=
+REDIS_URL=
+
+JWT_ACCESS_SECRET=
+JWT_REFRESH_SECRET=
+
+S3_ENDPOINT=
+S3_BUCKET=
+S3_ACCESS_KEY=
+S3_SECRET_KEY=
+
+PAYMENT_PROVIDER=
+RAZORPAY_KEY_ID=
+RAZORPAY_KEY_SECRET=
+
+CASHFREE_APP_ID=
+CASHFREE_SECRET_KEY=
+
+SHIPROCKET_EMAIL=
+SHIPROCKET_PASSWORD=
+
+FIREBASE_PROJECT_ID=
+FIREBASE_SERVICE_ACCOUNT=
+
+BREVO_API_KEY=
+SMS_PROVIDER_API_KEY=
+
+OPENSEARCH_URL=
+SENTRY_DSN=
+```
+
+All real credentials must remain in a secure secrets manager or protected server-side environment variables. Never commit `.env` files to Git.
+
+# 10. How to start in Google AI Studio
+
+[Google AI Studio Tutorial: Complete Guide to Chat, Build, and Stream Modes | DataCamp](https://images.openai.com/static-rsc-4/o5xOEogm8zGvyVuoYFnDILx5sBxY2-aXWsJJSIaqshrXDOIf9i8VShg70Trxksx9reWh2Ag-RoYoOcb3XIxa8XB63p6s9a6DgEcae3eu4eYs1Y58Rx5nBwUenQDVWMvuQ68aPtoQj4cc1D2pqAnqJiqj31FhBcRfwTefOm8QFPA?purpose=inline)
+
+Step 1 – Open Google AI Studio
+
+Visit [Google AI Studio](https://aistudio.google.com/?utm_source=chatgpt.com) and open Build mode.
+
+[How to build your own resume reviewer with Google AI Studio in minutes](https://images.openai.com/static-rsc-4/VgFAOBcmHdd-LyqfU0FMAYCN3Z3TfbVQx6GEz_hBDVY7RADo2UjAsPml3ndkf1VUgL-PX3cL8IRo_icMRnwwADqUj8O-ovv4CKEhBmiZsPDRazDIl_Wul-pyH5B3lN64NqA4f4OR9HER2BtdOmw_qENjRPSR3_A_sezlQDA42k8?purpose=inline)
+
+Step 2 – Start your project
+
+Create a new project and paste the Master Development Instructions above.
+
+[Vibe Code Your Next AI-powered App in Google AI Studio](https://images.openai.com/static-rsc-4/cNnwx7_Na7fWmDR5Z9YCEk21x3mBHE1IgVK0i148N9Vg-5a3NQ--Uf4InKBoSPK0AIfAhIdA-Wnj-xKDvH_0JQonp0FO1kBPm4TqKY39vCLgHcZ7dUN7hNQWkWs8R2KvwHceL0JYnsHEBurN--wlKXV7MQnalSc2xt0hKp6ps6k?purpose=inline)
+
+Step 3 – Review the architecture
+
+Ask Gemini to generate the project plan, database diagram and folder structure first. Review these before implementation.
+
+[An Introduction to Google AI Studio and the Gemini API for Developers](https://images.openai.com/static-rsc-4/mtQsvmphbHIhRGke4IaxmsElNBUzE1mss-KSeIV9OeGVLxeYuLOVXn1oA8CUH9USwpEb-CagkDxHdgfqZtx7AUFwsrcjF1JEJFZ41S-55X61ne2SUihNi9wSCqF-CVYYj05Jxi72BdsmH1F3wpSMBcTBNlSl3Ya-7Yj8Uo6CBII?purpose=inline)
+
+Step 4 – Develop phase by phase
+
+Paste Phase 1, test it, then proceed through the next phases. Do not ask Gemini to build the entire system in one response.
+
+Important: Google AI Studio Build mode may not provide a complete production environment for every part of this architecture, particularly Flutter builds, managed databases, background workers and external payment/shipping services. If a feature cannot be implemented or tested there, have Gemini generate the code and setup instructions for the appropriate local development or cloud environment. Do not mistake a working preview for a deployed marketplace.
+
+## 11. Final control prompt – use after every development phase
+
+Before starting the next phase, audit the current implementation.
+
+Check:
+
+1. Which features are fully implemented?
+2. Which features are only frontend designs?
+3. Which features are connected to the real backend?
+4. Which database tables and migrations are complete?
+5. Which APIs are working?
+6. Which buttons or workflows are not functional?
+7. Which security issues remain?
+8. Which tests have passed or failed?
+9. Are all four platforms using the same backend?
+10. Are there any existing features that were accidentally broken?
+
+Fix issues in the current phase before starting new development.
+
+Do not replace working code unnecessarily. Show me the changed files, implementation summary, test results and remaining tasks.
+
+My recommendation: First establish the database, backend and authentication, then build the customer experience, seller system and admin panel. Payments, shipping and settlements should be tested end-to-end before launching to real customers. This prevents a beautiful-looking shopping app from becoming a marketplace with disconnected or unreliable operations.

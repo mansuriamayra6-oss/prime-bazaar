@@ -1,0 +1,8 @@
+{
+  "name": "Prime Bazaar - Social Commerce & Fashion Marketplace",
+  "description": "High-discovery multi-vendor fashion and social commerce marketplace inspired by Myntra and Meesho, featuring video reels shopping, AI visual search, seller studio, and super admin console.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

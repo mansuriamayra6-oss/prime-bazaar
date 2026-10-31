@@ -1,0 +1,61 @@
+{
+  "id": "/",
+  "name": "Prime Bazaar - Online Shopping App",
+  "short_name": "Prime Bazaar",
+  "description": "Discover trending fashion, ethnic wear, footwear, and beauty at best wholesale prices with fast delivery and live video shopping.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#047857",
+  "background_color": "#ffffff",
+  "lang": "en-IN",
+  "categories": [
+    "shopping",
+    "lifestyle",
+    "fashion"
+  ],
+  "icons": [
+    {
+      "src": "/assets/aistudio/Prime_Bazaar_Shopping_Logo_0c82d149.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/aistudio/Prime_Bazaar_Shopping_Logo_0c82d149.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/aistudio/Prime_Bazaar_Shopping_Logo_0c82d149.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Live Reels",
+      "short_name": "Reels",
+      "description": "Watch video reviews and shop trending looks",
+      "url": "/?view=reels",
+      "icons": [{ "src": "/assets/aistudio/Prime_Bazaar_Shopping_Logo_0c82d149.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "Order Tracking",
+      "short_name": "Orders",
+      "description": "Track deliveries and invoices",
+      "url": "/?view=orders",
+      "icons": [{ "src": "/assets/aistudio/Prime_Bazaar_Shopping_Logo_0c82d149.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "Seller Studio",
+      "short_name": "Sell",
+      "description": "Open merchant hub and analytics",
+      "url": "/?portal=seller",
+      "icons": [{ "src": "/assets/aistudio/Prime_Bazaar_Shopping_Logo_0c82d149.png", "sizes": "96x96" }]
+    }
+  ]
+}
