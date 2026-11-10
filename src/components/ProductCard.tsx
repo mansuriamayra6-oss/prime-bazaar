@@ -25,6 +25,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     toggleCompare,
     isCompared,
     openTryOn,
+    openSellerStore,
     notify 
   } = useMarketplace();
 
@@ -78,20 +79,28 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
         )}
 
         {/* Action icons top right: Wishlist & Compare */}
-        <div className="absolute top-3 right-3 flex flex-col gap-1.5 z-10">
+        <div className="absolute top-2.5 right-2.5 flex flex-col gap-1.5 z-10">
           <button
+            type="button"
             onClick={e => {
               e.stopPropagation();
-              toggleWishlist(product.id);
+              toggleWishlist(product.id, product.title);
             }}
-            className={`w-8 h-8 rounded-full flex items-center justify-center backdrop-blur-md transition-all shadow-sm ${
+            aria-label={wishlisted ? `Remove ${product.title} from Wishlist` : `Save ${product.title} to Wishlist`}
+            className={`group/wish w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center backdrop-blur-md transition-all duration-200 shadow-md ${
               wishlisted
-                ? 'bg-rose-50 text-rose-600 dark:bg-rose-950/80 dark:text-rose-400'
-                : 'bg-white/80 dark:bg-zinc-900/80 text-zinc-600 dark:text-zinc-300 hover:text-rose-600 hover:scale-110'
+                ? 'bg-rose-50 dark:bg-rose-950/90 text-rose-600 dark:text-rose-400 border border-rose-300 dark:border-rose-800 ring-2 ring-rose-500/20 scale-105 active:scale-95'
+                : 'bg-white/95 dark:bg-zinc-900/95 text-zinc-600 dark:text-zinc-300 border border-zinc-200/90 dark:border-zinc-700/90 hover:text-rose-600 hover:border-rose-300 dark:hover:border-rose-700 hover:scale-110 active:scale-90'
             }`}
-            title={wishlisted ? 'Remove from wishlist' : 'Save to wishlist'}
+            title={wishlisted ? 'Saved to Wishlist (Click to remove)' : 'Save to Wishlist'}
           >
-            <Heart className={`w-4 h-4 ${wishlisted ? 'fill-rose-600 dark:fill-rose-400' : ''}`} />
+            <Heart 
+              className={`w-4 h-4 sm:w-[18px] sm:h-[18px] transition-all duration-200 ${
+                wishlisted 
+                  ? 'fill-rose-600 dark:fill-rose-400 text-rose-600 dark:text-rose-400 scale-110' 
+                  : 'group-hover/wish:text-rose-600 group-hover/wish:scale-110'
+              }`} 
+            />
           </button>
 
           <button
@@ -161,17 +170,29 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
             {product.title}
           </h3>
 
-          <div className="mt-1 flex items-center gap-1.5 text-[11px] text-zinc-500 dark:text-zinc-400">
-            <span>Sizes:</span>
-            {product.sizes.slice(0, 4).map(s => (
-              <span
-                key={s.size}
-                className={s.available ? 'font-medium text-zinc-700 dark:text-zinc-300' : 'line-through text-zinc-300 dark:text-zinc-600'}
-              >
-                {s.size}
-              </span>
-            ))}
-            {product.sizes.length > 4 && <span>+{product.sizes.length - 4}</span>}
+          <div className="mt-1 flex items-center justify-between text-[11px] text-zinc-500 dark:text-zinc-400">
+            <button
+              type="button"
+              onClick={e => {
+                e.stopPropagation();
+                openSellerStore(product.sellerId);
+              }}
+              className="text-[11px] text-zinc-500 hover:text-emerald-600 dark:hover:text-emerald-400 truncate max-w-[130px] transition-colors text-left"
+              title={`Visit ${product.sellerName}'s storefront`}
+            >
+              by <span className="font-medium underline decoration-dotted">{product.sellerName}</span>
+            </button>
+            <div className="flex items-center gap-1 shrink-0">
+              <span className="text-zinc-400">Sizes:</span>
+              {product.sizes.slice(0, 3).map(s => (
+                <span
+                  key={s.size}
+                  className={s.available ? 'font-medium text-zinc-700 dark:text-zinc-300' : 'line-through text-zinc-300 dark:text-zinc-600'}
+                >
+                  {s.size}
+                </span>
+              ))}
+            </div>
           </div>
         </div>
 

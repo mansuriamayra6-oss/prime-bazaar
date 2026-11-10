@@ -115,7 +115,8 @@ export const api = {
       amount: number; 
       currency?: string; 
       customerName?: string; 
-      customerPhone?: string 
+      customerPhone?: string;
+      customerEmail?: string;
     }) => {
       return apiRequest('/api/payments/create-intent', {
         method: 'POST',
@@ -135,6 +136,10 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(params),
       });
+    },
+
+    getCashfreeOrderStatus: async (orderId: string) => {
+      return apiRequest(`/api/payments/cashfree-order/${orderId}`);
     },
   },
 
@@ -176,4 +181,124 @@ export const api = {
       return apiRequest('/api/admin/metrics');
     },
   },
+
+  // Seller Central Hub
+  sellers: {
+    getAll: async () => {
+      return apiRequest('/api/sellers');
+    },
+    register: async (sellerData: any) => {
+      return apiRequest('/api/sellers/register', {
+        method: 'POST',
+        body: JSON.stringify(sellerData),
+      });
+    },
+    updateStatus: async (id: string, status: string) => {
+      return apiRequest(`/api/sellers/${id}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status }),
+      });
+    },
+    requestPayout: async (sellerId: string, amount: number) => {
+      return apiRequest(`/api/sellers/${sellerId}/payout`, {
+        method: 'POST',
+        body: JSON.stringify({ amount }),
+      });
+    },
+    bulkUpload: async (sellerId: string, products: any[]) => {
+      return apiRequest(`/api/sellers/${sellerId}/bulk-upload`, {
+        method: 'POST',
+        body: JSON.stringify({ products }),
+      });
+    },
+  },
+
+  // v1 REST Contract (Centralized Multi-Vendor Marketplace)
+  v1: {
+    // Auth & Identity
+    auth: {
+      sellerRegister: async (payload: any) => apiRequest('/api/v1/auth/seller/register', { method: 'POST', body: JSON.stringify(payload) }),
+      sellerLogin: async (payload: any) => apiRequest('/api/v1/auth/seller/login', { method: 'POST', body: JSON.stringify(payload) }),
+      verifyOtp: async (otp: string) => apiRequest('/api/v1/auth/verify-otp', { method: 'POST', body: JSON.stringify({ otp }) }),
+      refreshToken: async () => apiRequest('/api/v1/auth/refresh', { method: 'POST' }),
+      logout: async () => apiRequest('/api/v1/auth/logout', { method: 'POST' }),
+    },
+
+    // Seller Products & Catalog
+    products: {
+      getAll: async (sellerId?: string) => apiRequest(`/api/v1/seller/products${sellerId ? `?sellerId=${sellerId}` : ''}`),
+      getById: async (id: string) => apiRequest(`/api/v1/seller/products/${id}`),
+      create: async (productData: any) => apiRequest('/api/v1/seller/products', { method: 'POST', body: JSON.stringify(productData) }),
+      update: async (id: string, updates: any) => apiRequest(`/api/v1/seller/products/${id}`, { method: 'PUT', body: JSON.stringify(updates) }),
+      delete: async (id: string) => apiRequest(`/api/v1/seller/products/${id}`, { method: 'DELETE' }),
+      bulkUpload: async (sellerId: string, products: any[]) => apiRequest('/api/v1/seller/products/bulk-upload', { method: 'POST', body: JSON.stringify({ sellerId, products }) }),
+      getCategories: async () => apiRequest('/api/v1/seller/categories'),
+      getBrands: async () => apiRequest('/api/v1/seller/brands'),
+    },
+
+    // Inventory
+    inventory: {
+      getAll: async (sellerId?: string) => apiRequest(`/api/v1/seller/inventory${sellerId ? `?sellerId=${sellerId}` : ''}`),
+      updateStock: async (variantId: string, stock: number, notes?: string) => apiRequest(`/api/v1/seller/inventory/${variantId}`, { method: 'PUT', body: JSON.stringify({ stock, notes }) }),
+      getLowStock: async (sellerId?: string) => apiRequest(`/api/v1/seller/inventory/low-stock${sellerId ? `?sellerId=${sellerId}` : ''}`),
+      getMovements: async (sellerId?: string) => apiRequest(`/api/v1/seller/inventory/movements${sellerId ? `?sellerId=${sellerId}` : ''}`),
+    },
+
+    // Orders & Multi-Seller Suborders
+    orders: {
+      getSellerOrders: async (sellerId?: string, status?: string) => {
+        const params = new URLSearchParams();
+        if (sellerId) params.append('sellerId', sellerId);
+        if (status) params.append('status', status);
+        return apiRequest(`/api/v1/seller/orders?${params.toString()}`);
+      },
+      getById: async (id: string) => apiRequest(`/api/v1/seller/orders/${id}`),
+      accept: async (id: string) => apiRequest(`/api/v1/seller/orders/${id}/accept`, { method: 'POST' }),
+      reject: async (id: string, reason?: string) => apiRequest(`/api/v1/seller/orders/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }),
+      pack: async (id: string) => apiRequest(`/api/v1/seller/orders/${id}/pack`, { method: 'POST' }),
+      dispatch: async (id: string) => apiRequest(`/api/v1/seller/orders/${id}/dispatch`, { method: 'POST' }),
+      cancel: async (id: string, reason?: string) => apiRequest(`/api/v1/seller/orders/${id}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) }),
+      getInvoice: async (id: string) => apiRequest(`/api/v1/seller/orders/${id}/invoice`),
+    },
+
+    // Logistics & Returns
+    logistics: {
+      createShipment: async (suborderId: string, courierPartner?: string) => apiRequest('/api/v1/seller/shipments', { method: 'POST', body: JSON.stringify({ suborderId, courierPartner }) }),
+      getShipments: async (sellerId?: string) => apiRequest(`/api/v1/seller/shipments${sellerId ? `?sellerId=${sellerId}` : ''}`),
+      trackShipment: async (awb: string) => apiRequest(`/api/v1/seller/shipments/${awb}/track`),
+      getReturns: async (sellerId?: string) => apiRequest(`/api/v1/seller/returns${sellerId ? `?sellerId=${sellerId}` : ''}`),
+      approveReturn: async (id: string) => apiRequest(`/api/v1/seller/returns/${id}/approve`, { method: 'POST' }),
+      rejectReturn: async (id: string, reason: string) => apiRequest(`/api/v1/seller/returns/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }),
+    },
+
+    // Wallet & Settlements
+    finance: {
+      getWallet: async (sellerId?: string) => apiRequest(`/api/v1/seller/wallet${sellerId ? `?sellerId=${sellerId}` : ''}`),
+      getTransactions: async (sellerId?: string) => apiRequest(`/api/v1/seller/transactions${sellerId ? `?sellerId=${sellerId}` : ''}`),
+      getSettlements: async (sellerId?: string) => apiRequest(`/api/v1/seller/settlements${sellerId ? `?sellerId=${sellerId}` : ''}`),
+      getSalesReport: async (sellerId?: string) => apiRequest(`/api/v1/seller/reports/sales${sellerId ? `?sellerId=${sellerId}` : ''}`),
+      getEarningsReport: async (sellerId?: string) => apiRequest(`/api/v1/seller/reports/earnings${sellerId ? `?sellerId=${sellerId}` : ''}`),
+    },
+
+    // Super Admin
+    admin: {
+      getSellers: async () => apiRequest('/api/v1/admin/sellers'),
+      getSellerById: async (id: string) => apiRequest(`/api/v1/admin/sellers/${id}`),
+      approveSeller: async (id: string) => apiRequest(`/api/v1/admin/sellers/${id}/approve`, { method: 'POST' }),
+      rejectSeller: async (id: string, reason?: string) => apiRequest(`/api/v1/admin/sellers/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }),
+      suspendSeller: async (id: string) => apiRequest(`/api/v1/admin/sellers/${id}/suspend`, { method: 'POST' }),
+      activateSeller: async (id: string) => apiRequest(`/api/v1/admin/sellers/${id}/activate`, { method: 'POST' }),
+      getPendingProducts: async () => apiRequest('/api/v1/admin/products/pending'),
+      approveProduct: async (id: string) => apiRequest(`/api/v1/admin/products/${id}/approve`, { method: 'POST' }),
+      rejectProduct: async (id: string, reason?: string) => apiRequest(`/api/v1/admin/products/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }),
+      getAllOrders: async () => apiRequest('/api/v1/admin/orders'),
+      getCommissions: async () => apiRequest('/api/v1/admin/commissions'),
+      updateCommission: async (id: string, commissionPercent: number) => apiRequest(`/api/v1/admin/commissions/${id}`, { method: 'PUT', body: JSON.stringify({ commissionPercent }) }),
+      getSettlements: async () => apiRequest('/api/v1/admin/settlements'),
+      approveSettlement: async (id: string) => apiRequest(`/api/v1/admin/settlements/${id}/approve`, { method: 'POST' }),
+      getOverview: async () => apiRequest('/api/v1/admin/reports/overview'),
+      getAuditLogs: async () => apiRequest('/api/v1/admin/audit-logs'),
+    },
+  },
 };
+

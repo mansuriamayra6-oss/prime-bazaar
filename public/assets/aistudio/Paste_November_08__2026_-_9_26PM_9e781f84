@@ -1,0 +1,664 @@
+# Prime Bazaar – Final Marketplace Requirements & Implementation Blueprint
+
+
+
+Configuration finalized
+
+India marketplace
+
+
+
+Your selected configuration is for a complete Indian multi-vendor e-commerce marketplace, similar in functionality to Amazon, Meesho and Myntra.
+
+Prime Bazaar will support individual sellers, registered businesses, integrated shipping, product video shopping, individual seller stores, live shopping, buyer–seller chat, coupons and loyalty rewards.
+
+The system will have three connected portals:
+
+1. Buyer website and account.
+2. Seller registration and dashboard.
+3. Admin dashboard and marketplace control.
+
+## 1. Final configuration
+
+| Requirement           | Final selection                  |
+| --------------------- | -------------------------------- |
+| Market                | India                            |
+| Seller eligibility    | All – individuals and businesses |
+| Seller verification   | Admin approval                   |
+| Shipping              | Integrated courier partners      |
+| Product video         | Included                         |
+| Seller storefront     | Included                         |
+| Coupons and offers    | Included                         |
+| Loyalty and referrals | Included                         |
+| Live shopping         | Included                         |
+| Buyer–seller chat     | Included                         |
+| Currency              | INR (₹)                          |
+| Language              | English initially; Hindi-ready   |
+| Tax support           | GST-aware                        |
+| Marketplace model     | Multi-vendor                     |
+
+## 2. Complete system architecture
+
+Your existing Prime Bazaar frontend should be preserved and connected to the new backend.
+
+# PRIME BAZAAR
+
+INDIAN MULTI-VENDOR MARKETPLACE
+
+BUYER
+
+Shop and purchase
+
+SELLER
+
+Manage business
+
+ADMIN
+
+Control marketplace
+
+Central Backend – NestJS / Node.js
+
+REST APIs · Authentication · Permissions · Business logic
+
+PostgreSQL
+
+Prisma database
+
+Redis
+
+Background jobs
+
+Object storage
+
+Images and videos
+
+External services
+
+Payments, courier, OTP
+
+### Technology stack
+
+Your previously selected frontend technologies can remain:
+
+| Layer            | Technology                   |
+| ---------------- | ---------------------------- |
+| Frontend         | React 19                     |
+| Language         | TypeScript                   |
+| Build            | Vite 8                       |
+| Styling          | Tailwind CSS                 |
+| Backend          | NestJS + Node.js             |
+| Database         | PostgreSQL                   |
+| ORM              | Prisma                       |
+| Authentication   | JWT + OTP                    |
+| Real-time chat   | WebSockets                   |
+| Live streaming   | WebRTC or streaming provider |
+| Queue processing | Redis + BullMQ               |
+| Deployment       | Docker + Linux server        |
+
+# 3. Final buyer module requirements
+
+[Myntra Home Redesign. Here is the design thinking behind my… | by Vrushank Bardolia | Medium](https://images.openai.com/static-rsc-4/R0SLLYSd8HViasXRMwUNBRTNFXburoVN4xuI1voRcaUpPR4FzWz1ZjFHQvrL2Mlb-rO2SaD2VWrfpz48ciD1iScWZI7UatUuAH1EthwcVJn5qTTmhtFidgJ7yYGlRiNtmP1i28SL-wPRcipwPB3LPylZJ5AndhScYpyal4Ils7A?purpose=inline)
+
+[Luxury Fashion Ecommerce Mobile App — Maysa UI Concept by Donclinton Chidera on Dribbble](https://images.openai.com/static-rsc-4/Yh6nd_4SiNRkxjQlnwN_XpsT0PoHF9KknWVQNRhNMWfFnj1HpCXv_LEGg84sDDPf-5wH0QGCP0SeILnA7YqCyWBLRR-c_nrRnJIHvE8EgJQbKbeHOnZUhyzJYS8oyImjTacUyt3011eclIIDAuoHkUege3Gy5_Omm9fzS6fFNJw?purpose=inline)
+
+[E-Commerce App by Tino on Dribbble](https://images.openai.com/static-rsc-4/2FJ3Cm53pCkYWr3Irlx790h_YpAi9Qk2qOd7vH9pc3c6_xrYigY4sv5uL9XRkeXSmLgxVOcVT4IJOZf82jd7PA4CwRMOF4BrADfkkKweF7y8mR_sAHwXBxDrCjCvFcae0bkn5SrR3NsWDE60D_ycZic-QQcU8r9j05qC7_T0csA?purpose=inline)
+
+10
+
+| Module        | Complete functionality                      |
+| ------------- | ------------------------------------------- |
+| Registration  | Email, mobile OTP, Google login             |
+| Profile       | Name, photo, mobile, email                  |
+| Address book  | Home, office, multiple addresses            |
+| Homepage      | Banners, categories, deals, recommendations |
+| Categories    | Category and subcategory browsing           |
+| Search        | Product, brand, seller and keyword          |
+| Filters       | Price, size, colour, brand, rating          |
+| Product page  | Photos, video, specifications, reviews      |
+| Seller store  | Store profile, seller products and ratings  |
+| Cart          | Multiple sellers, quantities and coupons    |
+| Checkout      | Address, shipping, tax and payment          |
+| Payments      | UPI, cards, net banking, wallets, COD       |
+| Orders        | Order history and order tracking            |
+| Returns       | Return, replacement and refund requests     |
+| Wishlist      | Save favourite products                     |
+| Coupons       | Apply promotional discounts                 |
+| Loyalty       | Earn and redeem reward points               |
+| Referrals     | Referral codes and reward tracking          |
+| Chat          | Buyer–seller messaging                      |
+| Live shopping | Watch live product demonstrations           |
+| Notifications | Order, offer and delivery updates           |
+| Reviews       | Product and seller ratings                  |
+| Support       | Complaints, tickets and help centre         |
+
+## Buyer account navigation
+
+```
+My Account
+├── My Profile
+├── My Addresses
+├── My Orders
+│   ├── Pending
+│   ├── Confirmed
+│   ├── Processing
+│   ├── Shipped
+│   ├── Delivered
+│   └── Cancelled
+├── Returns & Refunds
+├── My Wishlist
+├── My Coupons
+├── My Rewards
+├── My Referrals
+├── My Payments
+├── My Chats
+├── Live Shopping
+├── Notifications
+├── Help & Support
+└── Account Settings
+```
+
+# 4. Final seller module requirements
+
+[SaaS & eCommerce Admin Dashboard UI by Naasmind on Dribbble](https://images.openai.com/static-rsc-4/ZXQrv3dZ7w3ufuP-Abn1iyTXz2AnHUkL4RwOZr5Lg5YzgWBLe2bTS3aTwNfGPg23cjrZENZuB-6Vo9ymE3nLRQ-Fzp6WoGVQ58RLYoNhzDkbHOROt8J1d8qWIGuhY5g6OB065FybH9JUJtPqx1JLMrN_Io46Vqx6cz6tGaCCLVU?purpose=inline)
+
+[Multi Vendor Analysis Dashboard :: Behance](https://images.openai.com/static-rsc-4/bQjw-3Dl6iaHfguXbV_V8SyDmvAjfZqQkA4PGEsbRFnpyw3Cqk9_ifGyVP4oDjk5zlejaESEeD9xQzh7pTZeVZe1EkjkvCY4_kE2i15p2KJzwnyVXByUDqgT7vZgoLk8FoHMZT-mI8Dk2J-th8Mv68Kln3n66SuB5O2ADboI_KQ?purpose=inline)
+
+[Seller Dashboard](https://images.openai.com/static-rsc-4/sDJe1sRkQ3fAdMMi9QUg7wlz6X3BN9R0gtBdQumVHiHyWyfYNOUY410j2gCnQ97Emjn78f9pTjE6MT31CzlJR3oJdqFWzYovzvBo-Tz9gJvNHDAiq4_BkSzX1BKq_epH2gMQWtrTCJZqGG3fxjqJ4zHpmMGMpwPpM1DyDYhmAeg?purpose=inline)
+
+9
+
+## Seller registration
+
+- Individual seller registration.
+- Business seller registration.
+- Mobile and email OTP.
+- PAN details.
+- GSTIN where applicable.
+- Business address.
+- Bank account details.
+- KYC document upload.
+- Store logo and banner.
+- Admin approval and verification.
+
+## Seller dashboard navigation
+
+```
+Seller Dashboard
+├── Overview
+├── My Store
+│   ├── Store Profile
+│   ├── Store Logo
+│   ├── Store Banner
+│   └── Store Policies
+├── Products
+│   ├── Add Product
+│   ├── All Products
+│   ├── Pending Approval
+│   ├── Rejected Products
+│   ├── Product Images
+│   ├── Product Videos
+│   └── Bulk Upload
+├── Inventory
+│   ├── Stock Management
+│   ├── Low Stock
+│   ├── Out of Stock
+│   └── Stock History
+├── Orders
+│   ├── New Orders
+│   ├── Processing
+│   ├── Packed
+│   ├── Shipped
+│   ├── Delivered
+│   └── Cancelled
+├── Shipping
+│   ├── Shipping Partners
+│   ├── Pickup Requests
+│   ├── Shipping Labels
+│   └── Tracking
+├── Returns & Refunds
+├── Payments
+│   ├── Earnings
+│   ├── Wallet
+│   ├── Commissions
+│   ├── Settlements
+│   └── Transactions
+├── Coupons & Promotions
+├── Live Shopping
+├── Buyer Messages
+├── Reviews & Ratings
+├── Reports & Analytics
+├── Notifications
+├── Help & Support
+└── Account Settings
+```
+
+Seller storefront URL example:
+
+`primebazaar.co.in/store/seller-name`
+
+Every seller will have a public store page with its own products, logo, banner, ratings and business information.
+
+# 5. Complete PostgreSQL database design
+
+I recommend separating the database into functional groups. The following tables form the required foundation.
+
+## A. User and account database
+
+| Table               | Main columns                                   |
+| ------------------- | ---------------------------------------------- |
+| `users`             | id, name, email, phone, password_hash, status  |
+| `roles`             | id, role_name                                  |
+| `user_roles`        | user_id, role_id                               |
+| `user_addresses`    | id, user_id, address, city, state, pincode     |
+| `user_sessions`     | id, user_id, refresh_token_hash, expires_at    |
+| `otp_verifications` | id, user_id, destination, otp_hash, expires_at |
+| `user_preferences`  | user_id, language, notification_preferences    |
+
+Roles: `BUYER`, `SELLER`, `ADMIN`, `SUPER_ADMIN`, `SUPPORT`.
+
+One user can have multiple roles, for example a buyer can also become a seller.
+
+## B. Seller database
+
+| Table                  | Main columns                                                |
+| ---------------------- | ----------------------------------------------------------- |
+| `seller_profiles`      | id, user_id, business_name, seller_type, status             |
+| `seller_documents`     | id, seller_id, document_type, file_url, verification_status |
+| `seller_addresses`     | id, seller_id, address, city, state, pincode                |
+| `seller_bank_accounts` | id, seller_id, encrypted_account, ifsc                      |
+| `seller_stores`        | id, seller_id, slug, logo, banner, description              |
+| `seller_policies`      | id, seller_id, return_policy, shipping_policy               |
+| `seller_settings`      | seller_id, notification_settings, processing_time           |
+
+## C. Product and inventory database
+
+| Table                 | Main columns                                                    |
+| --------------------- | --------------------------------------------------------------- |
+| `categories`          | id, name, parent_id, slug                                       |
+| `brands`              | id, name, logo                                                  |
+| `products`            | id, seller_id, category_id, brand_id, name, description, status |
+| `product_variants`    | id, product_id, sku, size, color, price, mrp                    |
+| `product_images`      | id, product_id, image_url, sort_order                           |
+| `product_videos`      | id, product_id, video_url, thumbnail_url                        |
+| `product_attributes`  | id, product_id, attribute_name, attribute_value                 |
+| `inventory`           | id, variant_id, available_qty, reserved_qty                     |
+| `inventory_movements` | id, variant_id, movement_type, quantity, reference_id           |
+| `product_reviews`     | id, product_id, buyer_id, rating, comment                       |
+
+## D. Cart and order database
+
+| Table                  | Main columns                                                      |
+| ---------------------- | ----------------------------------------------------------------- |
+| `carts`                | id, buyer_id, status                                              |
+| `cart_items`           | id, cart_id, variant_id, seller_id, quantity                      |
+| `orders`               | id, order_number, buyer_id, total, status                         |
+| `seller_orders`        | id, order_id, seller_id, subtotal, status                         |
+| `order_items`          | id, seller_order_id, product_id, variant_id, quantity, unit_price |
+| `order_addresses`      | id, order_id, address_type, address_snapshot                      |
+| `order_status_history` | id, order_id, status, changed_at                                  |
+
+Important: One customer order can contain products from multiple sellers. Each seller gets an independent suborder for packing, dispatch, delivery and returns.
+
+## E. Payment and settlement database
+
+| Table                    | Main columns                                          |
+| ------------------------ | ----------------------------------------------------- |
+| `payments`               | id, order_id, gateway, transaction_id, amount, status |
+| `payment_webhook_events` | id, gateway, event_id, payload, processed_at          |
+| `commission_rules`       | id, category_id, commission_rate, fixed_fee           |
+| `commission_entries`     | id, seller_order_id, gross_amount, commission_amount  |
+| `seller_wallets`         | id, seller_id, available_balance, pending_balance     |
+| `seller_ledger_entries`  | id, seller_id, entry_type, amount, reference_id       |
+| `settlements`            | id, seller_id, amount, status, reference_number       |
+| `settlement_items`       | id, settlement_id, ledger_entry_id                    |
+| `refunds`                | id, payment_id, amount, reason, status                |
+
+Use an auditable double-entry financial ledger for actual money movements. Wallet balances should be derived or reconciled against ledger entries, rather than trusted as the only financial record.
+
+## F. Shipping database
+
+| Table               | Main columns                                             |
+| ------------------- | -------------------------------------------------------- |
+| `shipping_partners` | id, name, integration_type, active                       |
+| `shipping_rates`    | id, partner_id, origin, destination, rate                |
+| `shipments`         | id, seller_order_id, partner_id, tracking_number, status |
+| `shipment_items`    | id, shipment_id, order_item_id                           |
+| `shipment_events`   | id, shipment_id, event, event_time                       |
+| `pickup_requests`   | id, shipment_id, pickup_date, status                     |
+| `shipping_labels`   | id, shipment_id, label_url                               |
+
+## G. Coupons and loyalty database
+
+| Table                  | Main columns                                                  |
+| ---------------------- | ------------------------------------------------------------- |
+| `coupons`              | id, code, discount_type, discount_value, start_date, end_date |
+| `coupon_rules`         | id, coupon_id, minimum_order, maximum_discount                |
+| `coupon_usages`        | id, coupon_id, buyer_id, order_id                             |
+| `loyalty_accounts`     | id, buyer_id, points_balance                                  |
+| `loyalty_transactions` | id, buyer_id, points, transaction_type, reference_id          |
+| `referral_codes`       | id, user_id, referral_code                                    |
+| `referral_rewards`     | id, referrer_id, referred_id, reward_status                   |
+
+## H. Video, live shopping and chat database
+
+| Table                   | Main columns                                             |
+| ----------------------- | -------------------------------------------------------- |
+| `live_sessions`         | id, seller_id, title, stream_provider, stream_id, status |
+| `live_session_products` | id, session_id, product_id                               |
+| `live_viewers`          | id, session_id, buyer_id, joined_at                      |
+| `chat_conversations`    | id, buyer_id, seller_id, order_id                        |
+| `chat_participants`     | id, conversation_id, user_id                             |
+| `chat_messages`         | id, conversation_id, sender_id, message, message_type    |
+| `chat_attachments`      | id, message_id, file_url                                 |
+| `notifications`         | id, user_id, type, message, read_at                      |
+
+## I. Administration database
+
+| Table                    | Main columns                                |
+| ------------------------ | ------------------------------------------- |
+| `admin_users`            | id, user_id, department                     |
+| `admin_permissions`      | id, permission_name                         |
+| `admin_role_permissions` | role_id, permission_id                      |
+| `audit_logs`             | id, user_id, action, entity_type, entity_id |
+| `support_tickets`        | id, user_id, subject, status                |
+| `support_messages`       | id, ticket_id, sender_id, message           |
+| `platform_settings`      | id, setting_key, setting_value              |
+| `banners`                | id, title, image_url, start_date, end_date  |
+
+### Database relationships
+
+\#chatgpt-mermaid-\_r_n1\_{font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";font-size:16px;fill:rgb(13, 13, 13);}@keyframes edge-animation-frame{from{stroke-dashoffset:0;}}@keyframes dash{to{stroke-dashoffset:0;}}#chatgpt-mermaid-\_r_n1\_ .edge-animation-slow{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}#chatgpt-mermaid-\_r_n1\_ .edge-animation-fast{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}#chatgpt-mermaid-\_r_n1\_ .error-icon{fill:rgb(243, 243, 243);}#chatgpt-mermaid-\_r_n1\_ .error-text{fill:rgb(13, 13, 13);stroke:rgb(13, 13, 13);}#chatgpt-mermaid-\_r_n1\_ .edge-thickness-normal{stroke-width:1px;}#chatgpt-mermaid-\_r_n1\_ .edge-thickness-thick{stroke-width:3.5px;}#chatgpt-mermaid-\_r_n1\_ .edge-pattern-solid{stroke-dasharray:0;}#chatgpt-mermaid-\_r_n1\_ .edge-thickness-invisible{stroke-width:0;fill:none;}#chatgpt-mermaid-\_r_n1\_ .edge-pattern-dashed{stroke-dasharray:3;}#chatgpt-mermaid-\_r_n1\_ .edge-pattern-dotted{stroke-dasharray:2;}#chatgpt-mermaid-\_r_n1\_ .marker{fill:rgb(143, 143, 143);stroke:rgb(143, 143, 143);}#chatgpt-mermaid-\_r_n1\_ .marker.cross{stroke:rgb(143, 143, 143);}#chatgpt-mermaid-\_r_n1\_ svg{font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";font-size:16px;}#chatgpt-mermaid-\_r_n1\_ p{margin:0;}#chatgpt-mermaid-\_r_n1\_ .entityBox{fill:rgb(222, 234, 251);stroke:rgb(83, 154, 248);}#chatgpt-mermaid-\_r_n1\_ .relationshipLabelBox{fill:rgb(243, 243, 243);opacity:0.7;background-color:rgb(243, 243, 243);}#chatgpt-mermaid-\_r_n1\_ .relationshipLabelBox rect{opacity:0.5;}#chatgpt-mermaid-\_r_n1\_ .labelBkg{background-color:rgba(243, 243, 243, 0.5);}#chatgpt-mermaid-\_r_n1\_ .edgeLabel{background-color:rgb(252, 252, 252);}#chatgpt-mermaid-\_r_n1\_ .edgeLabel .label rect{fill:rgb(252, 252, 252);}#chatgpt-mermaid-\_r_n1\_ .edgeLabel .label text{fill:rgb(13, 13, 13);}#chatgpt-mermaid-\_r_n1\_ .edgeLabel .label{fill:rgb(83, 154, 248);font-size:14px;}#chatgpt-mermaid-\_r_n1\_ .label{font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";color:rgb(13, 13, 13);}#chatgpt-mermaid-\_r_n1\_ .edge-pattern-dashed{stroke-dasharray:8,8;}#chatgpt-mermaid-\_r_n1\_ .node rect,#chatgpt-mermaid-\_r_n1\_ .node circle,#chatgpt-mermaid-\_r_n1\_ .node ellipse,#chatgpt-mermaid-\_r_n1\_ .node polygon{fill:rgb(222, 234, 251);stroke:rgb(83, 154, 248);stroke-width:1px;}#chatgpt-mermaid-\_r_n1\_ .relationshipLine{stroke:rgb(143, 143, 143);stroke-width:1px;fill:none;}#chatgpt-mermaid-\_r_n1\_ .marker{fill:none!important;stroke:rgb(143, 143, 143)!important;stroke-width:1;}#chatgpt-mermaid-\_r_n1\_ [data-look=neo].labelBkg{background-color:rgba(243, 243, 243, 0.5);}#chatgpt-mermaid-\_r_n1\_ .node .neo-node{stroke:rgb(83, 154, 248);}#chatgpt-mermaid-\_r_n1\_ [data-look="neo"].node rect,#chatgpt-mermaid-\_r_n1\_ [data-look="neo"].cluster rect,#chatgpt-mermaid-\_r_n1\_ [data-look="neo"].node polygon{stroke:url(#chatgpt-mermaid-\_r_n1\_-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-\_r_n1\_ [data-look="neo"].swimlane.cluster rect{filter:none;}#chatgpt-mermaid-\_r_n1\_ [data-look="neo"].node path{stroke:url(#chatgpt-mermaid-\_r_n1\_-gradient);stroke-width:1px;}#chatgpt-mermaid-\_r_n1\_ [data-look="neo"].node .outer-path{filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-\_r_n1\_ [data-look="neo"].node .neo-line path{stroke:rgb(83, 154, 248);filter:none;}#chatgpt-mermaid-\_r_n1\_ [data-look="neo"].node circle{stroke:url(#chatgpt-mermaid-\_r_n1\_-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-\_r_n1\_ [data-look="neo"].node circle .state-start{fill:#000000;}#chatgpt-mermaid-\_r_n1\_ [data-look="neo"].icon-shape .icon{fill:url(#chatgpt-mermaid-\_r_n1\_-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-\_r_n1\_ [data-look="neo"].icon-shape .icon-neo path{stroke:url(#chatgpt-mermaid-\_r_n1\_-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-\_r_n1\_ :root{--mermaid-font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";}USERSSELLER_PROFILESSELLER_STORESPRODUCTSCATEGORIESPRODUCT_VARIANTSINVENTORYORDERSSELLER_ORDERSORDER_ITEMSPAYMENTSCOMMISSION_ENTRIESSETTLEMENTSSHIPMENTSCHAT_CONVERSATIONSLIVE_SESSIONShasownslistsgroupshastracksplacessplitsfulfillscontainsreceivesgeneratesreceivesshipsparticipateshosts
+
+Additional constraints: use UUID primary keys, unique email/phone where appropriate, unique SKUs, indexes on foreign keys, and soft deletion for records that need to remain auditable.
+
+# 6. Complete API requirements
+
+All endpoints should use:
+
+`https://api.primebazaar.co.in/api/v1`
+
+## Buyer APIs
+
+| Module         | Endpoints                                                                                                  |
+| -------------- | ---------------------------------------------------------------------------------------------------------- |
+| Authentication | `POST /auth/register`, `/auth/login`, `/auth/verify-otp`, `/auth/refresh`, `/auth/logout`                  |
+| Profile        | `GET /buyer/profile`, `PUT /buyer/profile`                                                                 |
+| Addresses      | `GET /buyer/addresses`, `POST /buyer/addresses`, `PUT /buyer/addresses/:id`, `DELETE /buyer/addresses/:id` |
+| Products       | `GET /products`, `GET /products/:slug`, `GET /categories`, `GET /brands`                                   |
+| Search         | `GET /search`, `GET /search/suggestions`                                                                   |
+| Cart           | `GET /buyer/cart`, `POST /buyer/cart/items`, `PUT /buyer/cart/items/:id`, `DELETE /buyer/cart/items/:id`   |
+| Wishlist       | `GET /buyer/wishlist`, `POST /buyer/wishlist`, `DELETE /buyer/wishlist/:id`                                |
+| Checkout       | `POST /checkout/quote`, `POST /checkout/orders`                                                            |
+| Orders         | `GET /buyer/orders`, `GET /buyer/orders/:id`, `POST /buyer/orders/:id/cancel`                              |
+| Returns        | `POST /buyer/returns`, `GET /buyer/returns`, `GET /buyer/refunds`                                          |
+| Payments       | `POST /payments/create`, `GET /payments/:id`                                                               |
+| Reviews        | `POST /buyer/reviews`, `GET /products/:id/reviews`                                                         |
+| Coupons        | `GET /buyer/coupons`, `POST /buyer/coupons/validate`                                                       |
+| Rewards        | `GET /buyer/loyalty`, `GET /buyer/loyalty/transactions`                                                    |
+| Referrals      | `GET /buyer/referrals`, `POST /buyer/referrals/apply`                                                      |
+| Stores         | `GET /stores/:slug`, `GET /stores/:slug/products`                                                          |
+
+## Seller APIs
+
+| Module        | Endpoints                                                                                |
+| ------------- | ---------------------------------------------------------------------------------------- |
+| Registration  | `POST /seller/register`, `POST /seller/documents`                                        |
+| Profile       | `GET /seller/profile`, `PUT /seller/profile`                                             |
+| Store         | `GET /seller/store`, `PUT /seller/store`                                                 |
+| Products      | `POST /seller/products`, `GET /seller/products`, `PUT /seller/products/:id`              |
+| Product media | `POST /seller/products/:id/images`, `POST /seller/products/:id/videos`                   |
+| Inventory     | `GET /seller/inventory`, `PUT /seller/inventory/:variantId`                              |
+| Orders        | `GET /seller/orders`, `GET /seller/orders/:id`, `POST /seller/orders/:id/accept`         |
+| Shipping      | `POST /seller/shipments`, `GET /seller/shipments`                                        |
+| Returns       | `GET /seller/returns`, `POST /seller/returns/:id/respond`                                |
+| Payments      | `GET /seller/wallet`, `GET /seller/settlements`, `GET /seller/transactions`              |
+| Coupons       | `POST /seller/coupons`, `GET /seller/coupons`                                            |
+| Live          | `POST /seller/live-sessions`, `GET /seller/live-sessions`                                |
+| Chat          | `GET /seller/chats`, `GET /seller/chats/:id/messages`, `POST /seller/chats/:id/messages` |
+| Reports       | `GET /seller/reports/sales`, `GET /seller/reports/products`                              |
+
+## Admin APIs
+
+| Module        | Endpoints                                                                      |
+| ------------- | ------------------------------------------------------------------------------ |
+| Dashboard     | `GET /admin/dashboard`                                                         |
+| Sellers       | `GET /admin/sellers`, `POST /admin/sellers/:id/approve`, `/reject`, `/suspend` |
+| KYC           | `GET /admin/seller-documents`, `POST /admin/seller-documents/:id/verify`       |
+| Products      | `GET /admin/products/pending`, `POST /admin/products/:id/approve`, `/reject`   |
+| Categories    | `POST /admin/categories`, `PUT /admin/categories/:id`                          |
+| Orders        | `GET /admin/orders`, `GET /admin/orders/:id`                                   |
+| Shipping      | `GET /admin/shipments`                                                         |
+| Commissions   | `GET /admin/commissions`, `POST /admin/commissions`                            |
+| Settlements   | `GET /admin/settlements`, `POST /admin/settlements/:id/approve`                |
+| Coupons       | `POST /admin/coupons`, `GET /admin/coupons`                                    |
+| Live shopping | `GET /admin/live-sessions`, `POST /admin/live-sessions/:id/moderate`           |
+| Chat          | `GET /admin/support-conversations`                                             |
+| Reports       | `GET /admin/reports/sales`, `/sellers`, `/finance`                             |
+| Settings      | `GET /admin/settings`, `PUT /admin/settings`                                   |
+| Audit         | `GET /admin/audit-logs`                                                        |
+
+Use pagination, filtering, sorting, request validation and consistent error responses across all listing APIs.
+
+# 7. External service integrations for India
+
+These services will connect Prime Bazaar with external providers.
+
+| Requirement          | Recommended provider     | Purpose                        |
+| -------------------- | ------------------------ | ------------------------------ |
+| Payment gateway      | Razorpay                 | UPI, cards, net banking        |
+| Alternative payments | Cashfree Payments        | Payment collection and payouts |
+| Shipping             | Shiprocket               | Courier aggregation            |
+| Shipping alternative | Delhivery                | Courier delivery               |
+| SMS OTP              | MSG91                    | Mobile verification            |
+| Email                | Brevo                    | Emails and notifications       |
+| Push notifications   | Firebase Cloud Messaging | App and browser notifications  |
+| Maps                 | Google Maps Platform     | Address and location           |
+| Live streaming       | Agora                    | Live video shopping            |
+| Real-time messaging  | Socket.IO                | Buyer–seller chat              |
+| Product storage      | Amazon S3                | Images and video storage       |
+
+Provider onboarding, commercial terms, API credentials and marketplace payout eligibility must be verified before production integration.
+
+Important: Use a payment gateway's approved marketplace/split-settlement arrangement for seller payouts. Do not collect customer money into an ordinary personal bank account and manually distribute it without an appropriate legal and payment structure.
+
+# 8. Important business workflows
+
+## A. Seller workflow
+
+\#chatgpt-mermaid-\_r_nm\_{font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";font-size:16px;fill:rgb(13, 13, 13);}@keyframes edge-animation-frame{from{stroke-dashoffset:0;}}@keyframes dash{to{stroke-dashoffset:0;}}#chatgpt-mermaid-\_r_nm\_ .edge-animation-slow{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}#chatgpt-mermaid-\_r_nm\_ .edge-animation-fast{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}#chatgpt-mermaid-\_r_nm\_ .error-icon{fill:rgb(243, 243, 243);}#chatgpt-mermaid-\_r_nm\_ .error-text{fill:rgb(13, 13, 13);stroke:rgb(13, 13, 13);}#chatgpt-mermaid-\_r_nm\_ .edge-thickness-normal{stroke-width:1px;}#chatgpt-mermaid-\_r_nm\_ .edge-thickness-thick{stroke-width:3.5px;}#chatgpt-mermaid-\_r_nm\_ .edge-pattern-solid{stroke-dasharray:0;}#chatgpt-mermaid-\_r_nm\_ .edge-thickness-invisible{stroke-width:0;fill:none;}#chatgpt-mermaid-\_r_nm\_ .edge-pattern-dashed{stroke-dasharray:3;}#chatgpt-mermaid-\_r_nm\_ .edge-pattern-dotted{stroke-dasharray:2;}#chatgpt-mermaid-\_r_nm\_ .marker{fill:rgb(143, 143, 143);stroke:rgb(143, 143, 143);}#chatgpt-mermaid-\_r_nm\_ .marker.cross{stroke:rgb(143, 143, 143);}#chatgpt-mermaid-\_r_nm\_ svg{font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";font-size:16px;}#chatgpt-mermaid-\_r_nm\_ p{margin:0;}#chatgpt-mermaid-\_r_nm\_ .label{font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";color:rgb(13, 13, 13);}#chatgpt-mermaid-\_r_nm\_ .cluster-label text{fill:rgb(13, 13, 13);}#chatgpt-mermaid-\_r_nm\_ .cluster-label span{color:rgb(13, 13, 13);}#chatgpt-mermaid-\_r_nm\_ .cluster-label span p{background-color:transparent;}#chatgpt-mermaid-\_r_nm\_ .label text,#chatgpt-mermaid-\_r_nm\_ span{fill:rgb(13, 13, 13);color:rgb(13, 13, 13);}#chatgpt-mermaid-\_r_nm\_ .node rect,#chatgpt-mermaid-\_r_nm\_ .node circle,#chatgpt-mermaid-\_r_nm\_ .node ellipse,#chatgpt-mermaid-\_r_nm\_ .node polygon,#chatgpt-mermaid-\_r_nm\_ .node path{fill:rgb(222, 234, 251);stroke:rgb(83, 154, 248);stroke-width:1px;}#chatgpt-mermaid-\_r_nm\_ .rough-node .label text,#chatgpt-mermaid-\_r_nm\_ .node .label text,#chatgpt-mermaid-\_r_nm\_ .image-shape .label,#chatgpt-mermaid-\_r_nm\_ .icon-shape .label{text-anchor:middle;}#chatgpt-mermaid-\_r_nm\_ .node .katex path{fill:#000;stroke:#000;stroke-width:1px;}#chatgpt-mermaid-\_r_nm\_ .rough-node .label,#chatgpt-mermaid-\_r_nm\_ .node .label,#chatgpt-mermaid-\_r_nm\_ .image-shape .label,#chatgpt-mermaid-\_r_nm\_ .icon-shape .label{text-align:center;}#chatgpt-mermaid-\_r_nm\_ .node.clickable{cursor:pointer;}#chatgpt-mermaid-\_r_nm\_ .root .anchor path{fill:rgb(143, 143, 143)!important;stroke-width:0;stroke:rgb(143, 143, 143);}#chatgpt-mermaid-\_r_nm\_ .arrowheadPath{fill:rgb(143, 143, 143);}#chatgpt-mermaid-\_r_nm\_ .edgePath .path{stroke:rgb(143, 143, 143);stroke-width:1px;}#chatgpt-mermaid-\_r_nm\_ .flowchart-link{stroke:rgb(143, 143, 143);fill:none;}#chatgpt-mermaid-\_r_nm\_ .edgeLabel{background-color:rgb(252, 252, 252);text-align:center;}#chatgpt-mermaid-\_r_nm\_ .edgeLabel p{background-color:rgb(252, 252, 252);}#chatgpt-mermaid-\_r_nm\_ .edgeLabel rect{opacity:0.5;background-color:rgb(252, 252, 252);fill:rgb(252, 252, 252);}#chatgpt-mermaid-\_r_nm\_ .labelBkg{background-color:rgba(252, 252, 252, 0.5);}#chatgpt-mermaid-\_r_nm\_ .cluster rect{fill:rgb(243, 243, 243);stroke:rgba(0, 0, 0, 0.1);stroke-width:1px;}#chatgpt-mermaid-\_r_nm\_ .cluster text{fill:rgb(13, 13, 13);}#chatgpt-mermaid-\_r_nm\_ .cluster span{color:rgb(13, 13, 13);}#chatgpt-mermaid-\_r_nm\_ div.mermaidTooltip{position:absolute;text-align:center;max-width:200px;padding:2px;font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";font-size:12px;background:rgb(243, 243, 243);border:1px solid rgba(0, 0, 0, 0.1);border-radius:2px;pointer-events:none;z-index:100;}#chatgpt-mermaid-\_r_nm\_ .flowchartTitleText{text-anchor:middle;font-size:18px;fill:rgb(13, 13, 13);}#chatgpt-mermaid-\_r_nm\_ rect.text{fill:none;stroke-width:0;}#chatgpt-mermaid-\_r_nm\_ .icon-shape,#chatgpt-mermaid-\_r_nm\_ .image-shape{background-color:rgb(252, 252, 252);text-align:center;}#chatgpt-mermaid-\_r_nm\_ .icon-shape p,#chatgpt-mermaid-\_r_nm\_ .image-shape p{background-color:rgb(252, 252, 252);padding:2px;}#chatgpt-mermaid-\_r_nm\_ .icon-shape .label rect,#chatgpt-mermaid-\_r_nm\_ .image-shape .label rect{opacity:0.5;background-color:rgb(252, 252, 252);fill:rgb(252, 252, 252);}#chatgpt-mermaid-\_r_nm\_ .label-icon{display:inline-block;height:1em;overflow:visible;vertical-align:-0.125em;}#chatgpt-mermaid-\_r_nm\_ .node .label-icon path{fill:currentColor;stroke:revert;stroke-width:revert;}#chatgpt-mermaid-\_r_nm\_ .node .neo-node{stroke:rgb(83, 154, 248);}#chatgpt-mermaid-\_r_nm\_ [data-look="neo"].node rect,#chatgpt-mermaid-\_r_nm\_ [data-look="neo"].cluster rect,#chatgpt-mermaid-\_r_nm\_ [data-look="neo"].node polygon{stroke:url(#chatgpt-mermaid-\_r_nm\_-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-\_r_nm\_ [data-look="neo"].swimlane.cluster rect{filter:none;}#chatgpt-mermaid-\_r_nm\_ [data-look="neo"].node path{stroke:url(#chatgpt-mermaid-\_r_nm\_-gradient);stroke-width:1px;}#chatgpt-mermaid-\_r_nm\_ [data-look="neo"].node .outer-path{filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-\_r_nm\_ [data-look="neo"].node .neo-line path{stroke:rgb(83, 154, 248);filter:none;}#chatgpt-mermaid-\_r_nm\_ [data-look="neo"].node circle{stroke:url(#chatgpt-mermaid-\_r_nm\_-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-\_r_nm\_ [data-look="neo"].node circle .state-start{fill:#000000;}#chatgpt-mermaid-\_r_nm\_ [data-look="neo"].icon-shape .icon{fill:url(#chatgpt-mermaid-\_r_nm\_-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-\_r_nm\_ [data-look="neo"].icon-shape .icon-neo path{stroke:url(#chatgpt-mermaid-\_r_nm\_-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-\_r_nm\_ .node text{font-size:14px;font-weight:600;letter-spacing:normal;fill:rgb(0, 79, 153);}#chatgpt-mermaid-\_r_nm\_ .edgeLabels text{font-size:13px;font-weight:600;letter-spacing:-0.08px;fill:rgb(0, 79, 153);}#chatgpt-mermaid-\_r_nm\_ .node tspan[font-weight="normal"],#chatgpt-mermaid-\_r_nm\_ .edgeLabels tspan[font-weight="normal"]{font-weight:600;}#chatgpt-mermaid-\_r_nm\_ .edgeLabel .label rect{opacity:1;rx:13px;ry:13px;fill:rgb(245, 250, 255);stroke:rgb(206, 219, 229);stroke-width:1px;}#chatgpt-mermaid-\_r_nm\_ .node rect,#chatgpt-mermaid-\_r_nm\_ .node circle,#chatgpt-mermaid-\_r_nm\_ .node ellipse,#chatgpt-mermaid-\_r_nm\_ .node polygon,#chatgpt-mermaid-\_r_nm\_ .node path{fill:rgb(229, 243, 255);stroke:rgba(0, 0, 0, 0.1);stroke-width:1px;}#chatgpt-mermaid-\_r_nm\_ .node rect{rx:16px;ry:16px;}#chatgpt-mermaid-\_r_nm\_ .mermaid-decision .label-container{fill:rgb(245, 250, 255);stroke:rgb(206, 219, 229);stroke-dasharray:2,2;}#chatgpt-mermaid-\_r_nm\_ .edgePaths .flowchart-link{stroke:rgb(143, 143, 143);stroke-width:1px;stroke-linecap:round;stroke-linejoin:round;}#chatgpt-mermaid-\_r_nm\_ .marker{fill:rgb(143, 143, 143);stroke:rgb(143, 143, 143);}#chatgpt-mermaid-\_r_nm\_ :root{--mermaid-font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";}Seller RegistrationOTP VerificationSubmit Business and KYCAdmin ReviewSeller Dashboard ActivatedCorrection and ResubmissionAdd ProductsAdmin Product ApprovalProducts PublishedReceive Customer OrdersPack and DispatchDeliverySettlement EligibilitySeller PayoutApprovedRejectedApproved
+
+## B. Buyer workflow
+
+\#chatgpt-mermaid-\_r_nt\_{font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";font-size:16px;fill:rgb(13, 13, 13);}@keyframes edge-animation-frame{from{stroke-dashoffset:0;}}@keyframes dash{to{stroke-dashoffset:0;}}#chatgpt-mermaid-\_r_nt\_ .edge-animation-slow{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}#chatgpt-mermaid-\_r_nt\_ .edge-animation-fast{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}#chatgpt-mermaid-\_r_nt\_ .error-icon{fill:rgb(243, 243, 243);}#chatgpt-mermaid-\_r_nt\_ .error-text{fill:rgb(13, 13, 13);stroke:rgb(13, 13, 13);}#chatgpt-mermaid-\_r_nt\_ .edge-thickness-normal{stroke-width:1px;}#chatgpt-mermaid-\_r_nt\_ .edge-thickness-thick{stroke-width:3.5px;}#chatgpt-mermaid-\_r_nt\_ .edge-pattern-solid{stroke-dasharray:0;}#chatgpt-mermaid-\_r_nt\_ .edge-thickness-invisible{stroke-width:0;fill:none;}#chatgpt-mermaid-\_r_nt\_ .edge-pattern-dashed{stroke-dasharray:3;}#chatgpt-mermaid-\_r_nt\_ .edge-pattern-dotted{stroke-dasharray:2;}#chatgpt-mermaid-\_r_nt\_ .marker{fill:rgb(143, 143, 143);stroke:rgb(143, 143, 143);}#chatgpt-mermaid-\_r_nt\_ .marker.cross{stroke:rgb(143, 143, 143);}#chatgpt-mermaid-\_r_nt\_ svg{font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";font-size:16px;}#chatgpt-mermaid-\_r_nt\_ p{margin:0;}#chatgpt-mermaid-\_r_nt\_ .label{font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";color:rgb(13, 13, 13);}#chatgpt-mermaid-\_r_nt\_ .cluster-label text{fill:rgb(13, 13, 13);}#chatgpt-mermaid-\_r_nt\_ .cluster-label span{color:rgb(13, 13, 13);}#chatgpt-mermaid-\_r_nt\_ .cluster-label span p{background-color:transparent;}#chatgpt-mermaid-\_r_nt\_ .label text,#chatgpt-mermaid-\_r_nt\_ span{fill:rgb(13, 13, 13);color:rgb(13, 13, 13);}#chatgpt-mermaid-\_r_nt\_ .node rect,#chatgpt-mermaid-\_r_nt\_ .node circle,#chatgpt-mermaid-\_r_nt\_ .node ellipse,#chatgpt-mermaid-\_r_nt\_ .node polygon,#chatgpt-mermaid-\_r_nt\_ .node path{fill:rgb(222, 234, 251);stroke:rgb(83, 154, 248);stroke-width:1px;}#chatgpt-mermaid-\_r_nt\_ .rough-node .label text,#chatgpt-mermaid-\_r_nt\_ .node .label text,#chatgpt-mermaid-\_r_nt\_ .image-shape .label,#chatgpt-mermaid-\_r_nt\_ .icon-shape .label{text-anchor:middle;}#chatgpt-mermaid-\_r_nt\_ .node .katex path{fill:#000;stroke:#000;stroke-width:1px;}#chatgpt-mermaid-\_r_nt\_ .rough-node .label,#chatgpt-mermaid-\_r_nt\_ .node .label,#chatgpt-mermaid-\_r_nt\_ .image-shape .label,#chatgpt-mermaid-\_r_nt\_ .icon-shape .label{text-align:center;}#chatgpt-mermaid-\_r_nt\_ .node.clickable{cursor:pointer;}#chatgpt-mermaid-\_r_nt\_ .root .anchor path{fill:rgb(143, 143, 143)!important;stroke-width:0;stroke:rgb(143, 143, 143);}#chatgpt-mermaid-\_r_nt\_ .arrowheadPath{fill:rgb(143, 143, 143);}#chatgpt-mermaid-\_r_nt\_ .edgePath .path{stroke:rgb(143, 143, 143);stroke-width:1px;}#chatgpt-mermaid-\_r_nt\_ .flowchart-link{stroke:rgb(143, 143, 143);fill:none;}#chatgpt-mermaid-\_r_nt\_ .edgeLabel{background-color:rgb(252, 252, 252);text-align:center;}#chatgpt-mermaid-\_r_nt\_ .edgeLabel p{background-color:rgb(252, 252, 252);}#chatgpt-mermaid-\_r_nt\_ .edgeLabel rect{opacity:0.5;background-color:rgb(252, 252, 252);fill:rgb(252, 252, 252);}#chatgpt-mermaid-\_r_nt\_ .labelBkg{background-color:rgba(252, 252, 252, 0.5);}#chatgpt-mermaid-\_r_nt\_ .cluster rect{fill:rgb(243, 243, 243);stroke:rgba(0, 0, 0, 0.1);stroke-width:1px;}#chatgpt-mermaid-\_r_nt\_ .cluster text{fill:rgb(13, 13, 13);}#chatgpt-mermaid-\_r_nt\_ .cluster span{color:rgb(13, 13, 13);}#chatgpt-mermaid-\_r_nt\_ div.mermaidTooltip{position:absolute;text-align:center;max-width:200px;padding:2px;font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";font-size:12px;background:rgb(243, 243, 243);border:1px solid rgba(0, 0, 0, 0.1);border-radius:2px;pointer-events:none;z-index:100;}#chatgpt-mermaid-\_r_nt\_ .flowchartTitleText{text-anchor:middle;font-size:18px;fill:rgb(13, 13, 13);}#chatgpt-mermaid-\_r_nt\_ rect.text{fill:none;stroke-width:0;}#chatgpt-mermaid-\_r_nt\_ .icon-shape,#chatgpt-mermaid-\_r_nt\_ .image-shape{background-color:rgb(252, 252, 252);text-align:center;}#chatgpt-mermaid-\_r_nt\_ .icon-shape p,#chatgpt-mermaid-\_r_nt\_ .image-shape p{background-color:rgb(252, 252, 252);padding:2px;}#chatgpt-mermaid-\_r_nt\_ .icon-shape .label rect,#chatgpt-mermaid-\_r_nt\_ .image-shape .label rect{opacity:0.5;background-color:rgb(252, 252, 252);fill:rgb(252, 252, 252);}#chatgpt-mermaid-\_r_nt\_ .label-icon{display:inline-block;height:1em;overflow:visible;vertical-align:-0.125em;}#chatgpt-mermaid-\_r_nt\_ .node .label-icon path{fill:currentColor;stroke:revert;stroke-width:revert;}#chatgpt-mermaid-\_r_nt\_ .node .neo-node{stroke:rgb(83, 154, 248);}#chatgpt-mermaid-\_r_nt\_ [data-look="neo"].node rect,#chatgpt-mermaid-\_r_nt\_ [data-look="neo"].cluster rect,#chatgpt-mermaid-\_r_nt\_ [data-look="neo"].node polygon{stroke:url(#chatgpt-mermaid-\_r_nt\_-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-\_r_nt\_ [data-look="neo"].swimlane.cluster rect{filter:none;}#chatgpt-mermaid-\_r_nt\_ [data-look="neo"].node path{stroke:url(#chatgpt-mermaid-\_r_nt\_-gradient);stroke-width:1px;}#chatgpt-mermaid-\_r_nt\_ [data-look="neo"].node .outer-path{filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-\_r_nt\_ [data-look="neo"].node .neo-line path{stroke:rgb(83, 154, 248);filter:none;}#chatgpt-mermaid-\_r_nt\_ [data-look="neo"].node circle{stroke:url(#chatgpt-mermaid-\_r_nt\_-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-\_r_nt\_ [data-look="neo"].node circle .state-start{fill:#000000;}#chatgpt-mermaid-\_r_nt\_ [data-look="neo"].icon-shape .icon{fill:url(#chatgpt-mermaid-\_r_nt\_-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-\_r_nt\_ [data-look="neo"].icon-shape .icon-neo path{stroke:url(#chatgpt-mermaid-\_r_nt\_-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#chatgpt-mermaid-\_r_nt\_ .node text{font-size:14px;font-weight:600;letter-spacing:normal;fill:rgb(0, 79, 153);}#chatgpt-mermaid-\_r_nt\_ .edgeLabels text{font-size:13px;font-weight:600;letter-spacing:-0.08px;fill:rgb(0, 79, 153);}#chatgpt-mermaid-\_r_nt\_ .node tspan[font-weight="normal"],#chatgpt-mermaid-\_r_nt\_ .edgeLabels tspan[font-weight="normal"]{font-weight:600;}#chatgpt-mermaid-\_r_nt\_ .edgeLabel .label rect{opacity:1;rx:13px;ry:13px;fill:rgb(245, 250, 255);stroke:rgb(206, 219, 229);stroke-width:1px;}#chatgpt-mermaid-\_r_nt\_ .node rect,#chatgpt-mermaid-\_r_nt\_ .node circle,#chatgpt-mermaid-\_r_nt\_ .node ellipse,#chatgpt-mermaid-\_r_nt\_ .node polygon,#chatgpt-mermaid-\_r_nt\_ .node path{fill:rgb(229, 243, 255);stroke:rgba(0, 0, 0, 0.1);stroke-width:1px;}#chatgpt-mermaid-\_r_nt\_ .node rect{rx:16px;ry:16px;}#chatgpt-mermaid-\_r_nt\_ .mermaid-decision .label-container{fill:rgb(245, 250, 255);stroke:rgb(206, 219, 229);stroke-dasharray:2,2;}#chatgpt-mermaid-\_r_nt\_ .edgePaths .flowchart-link{stroke:rgb(143, 143, 143);stroke-width:1px;stroke-linecap:round;stroke-linejoin:round;}#chatgpt-mermaid-\_r_nt\_ .marker{fill:rgb(143, 143, 143);stroke:rgb(143, 143, 143);}#chatgpt-mermaid-\_r_nt\_ :root{--mermaid-font-family:-apple-system-body,ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,"Apple Color Emoji",Arial,sans-serif,"Segoe UI Emoji","Segoe UI Symbol";}Buyer RegistrationBrowse ProductsProduct DetailsAdd to CartApply Coupon and RewardsCheckoutPaymentCreate Confirmed OrderRetry PaymentSplit Into Seller OrdersSeller ProcessingIntegrated ShippingDeliveredReview and RewardsSuccessfulFailed
+
+## C. Multi-seller checkout
+
+Example:
+
+A buyer orders:
+
+- One shirt from Seller A.
+- One pair of shoes from Seller B.
+- One handbag from Seller C.
+
+Prime Bazaar creates:
+
+| Record            | Order      |
+| ----------------- | ---------- |
+| Customer order    | PB-10001   |
+| Seller A suborder | PB-10001-A |
+| Seller B suborder | PB-10001-B |
+| Seller C suborder | PB-10001-C |
+
+Each seller independently handles packing, shipping and returns. The buyer sees one combined order history with three shipment statuses.
+
+## D. Live shopping workflow
+
+1. Seller schedules a live session.
+2. Admin reviews the session if required.
+3. Seller starts broadcasting.
+4. Buyers watch the live session.
+5. Seller pins products on the video.
+6. Buyers open product details.
+7. Buyers add products to cart.
+8. Orders are processed through normal checkout.
+
+Live streaming should use a third-party video service initially rather than building your own streaming infrastructure.
+
+# 9. Admin panel – complete control
+
+Your admin dashboard should have these navigation options:
+
+```
+ADMIN PANEL
+├── Dashboard
+├── Buyer Management
+├── Seller Management
+│   ├── New Applications
+│   ├── Approved Sellers
+│   ├── Rejected Sellers
+│   ├── Suspended Sellers
+│   └── Seller Documents
+├── Product Management
+│   ├── Pending Products
+│   ├── Approved Products
+│   ├── Rejected Products
+│   └── Categories and Brands
+├── Order Management
+├── Shipping Management
+├── Return Management
+├── Refund Management
+├── Payment Management
+├── Commission Management
+├── Seller Settlements
+├── Coupon Management
+├── Loyalty Management
+├── Referral Management
+├── Video Management
+├── Live Shopping Moderation
+├── Chat and Support
+├── Reviews and Ratings
+├── Marketing and Banners
+├── Reports and Analytics
+├── Tax and GST Settings
+├── Staff and Permissions
+├── Audit Logs
+└── System Settings
+```
+
+Admin permission levels should be configurable. For example, customer support staff should not be able to approve financial settlements.
+
+# 10. Indian marketplace compliance
+
+Before launch, include these requirements in the implementation:
+
+- GST registration and tax calculation according to seller and transaction applicability.
+- GST invoice and credit-note generation.
+- Marketplace TCS and other applicable tax reporting workflows.
+- Consumer Protection (E-Commerce) Rules compliance.
+- Privacy and personal data handling under applicable DPDP requirements.
+- Legal Metrology declarations for applicable packaged products.
+- Seller identity and business verification.
+- Clear cancellation, return, refund and grievance policies.
+- Payment gateway and marketplace payout compliance.
+- Appropriate consent and moderation for chat and live content.
+
+Have an Indian CA and legal professional validate your exact GST, marketplace and seller payout arrangements before launch.
+
+# 11. Implementation roadmap
+
+Recommended development order
+
+| Phase | Development                             | Priority |
+| ----- | --------------------------------------- | -------- |
+| 1     | Backend setup, database, authentication | Critical |
+| 2     | Buyer accounts and product catalogue    | Critical |
+| 3     | Seller registration and KYC             | Critical |
+| 4     | Seller dashboard and product uploads    | Critical |
+| 5     | Admin approval and controls             | Critical |
+| 6     | Cart, checkout and multi-seller orders  | Critical |
+| 7     | Payments and commission ledger          | Critical |
+| 8     | Integrated shipping                     | Critical |
+| 9     | Returns, refunds and settlements        | High     |
+| 10    | Coupons and loyalty                     | High     |
+| 11    | Storefront and product videos           | High     |
+| 12    | Buyer–seller chat                       | High     |
+| 13    | Live shopping                           | Advanced |
+| 14    | Reports and analytics                   | High     |
+| 15    | Security testing and production launch  | Critical |
+
+My recommendation is to launch Phases 1–9 as your first production-ready marketplace, then introduce the advanced engagement features.
+
+# 12. Final acceptance checklist
+
+Before launch, the development team should verify:
+
+Launch readiness
+
+# 0/20
+
+Buyer can register, log in and manage addresses.
+
+Individual seller can register and submit KYC.
+
+Business seller can register and submit applicable business details.
+
+Admin can approve, reject and suspend sellers.
+
+Seller can upload products with images and videos.
+
+Admin can approve and reject product listings.
+
+Buyer can search and purchase products.
+
+One order can be split across multiple sellers.
+
+Stock is reserved safely during checkout.
+
+Payment webhooks are authenticated and idempotent.
+
+Each seller receives independent order and shipping records.
+
+Seller commissions and payouts reconcile with the financial ledger.
+
+Buyer can request returns and refunds.
+
+Coupons and loyalty points are applied correctly.
+
+Seller storefront is publicly accessible.
+
+Buyer–seller chat is protected by access permissions.
+
+Live sessions support moderation and reporting.
+
+GST invoices and reports are tested.
+
+Admin actions are recorded in audit logs.
+
+Backups, monitoring and security testing are operational.
+
+&#x20;Copy checklist
+
+# 13. Next step – Build the actual Prime Bazaar backend
+
+Since you have already been working with the Prime Bazaar project in VS Code, the best approach is to implement this specification in your existing project.
+
+I recommend starting with these deliverables:
+
+1. Complete Prisma schema with all database relationships.
+2. NestJS backend with authentication and role permissions.
+3. Buyer, seller and admin API controllers.
+4. Seller registration and admin approval.
+5. Product and inventory management.
+6. Multi-seller checkout and order splitting.
+7. Payment and settlement foundations.
+8. Frontend integration without changing your existing website design.
+
+One important thing: We should inspect your latest source ZIP before changing files, so we preserve your existing code and don't overwrite working features.
+
+Would you like me to review your Prime Bazaar development progress every Monday and prepare the next implementation tasks?
+
+🛍️Weekly Prime Bazaar development reviewTap to set up
+
+Project specification: Prime Bazaar India · Multi-vendor marketplace · Buyer + Seller + Admin

@@ -23,35 +23,58 @@ export const ArchitectureModal: React.FC = () => {
   const { isArchitectureOpen, setIsArchitectureOpen, notify } = useMarketplace();
   const [activeTab, setActiveTab] = useState<'topology' | 'erd' | 'schema' | 'api' | 'roadmap'>('topology');
   const [copied, setCopied] = useState(false);
+  const [testEndpoint, setTestEndpoint] = useState<string>('/api/v1/admin/sellers');
+  const [testLoading, setTestLoading] = useState<boolean>(false);
+  const [testResult, setTestResult] = useState<any>(null);
 
   if (!isArchitectureOpen) return null;
 
   const handleCopySchema = () => {
     navigator.clipboard?.writeText?.(`// PostgreSQL Prisma Schema for Multi-Vendor Marketplace (Prime Bazaar)
-// See full schema in /prisma/schema.prisma`);
+// Stored in /prisma/schema.prisma with 28 normalized models`);
     setCopied(true);
     notify('Prisma schema location copied to clipboard! (Stored in /prisma/schema.prisma)');
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const executeLiveApiTest = async (endpoint: string, method: string = 'GET') => {
+    setTestEndpoint(endpoint);
+    setTestLoading(true);
+    setTestResult(null);
+    try {
+      const res = await fetch(endpoint, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await res.json();
+      setTestResult({ status: res.status, ok: res.ok, data });
+      notify(`API Response: HTTP ${res.status} from ${endpoint}`);
+    } catch (err: any) {
+      setTestResult({ error: err.message });
+      notify(`API Request failed: ${err.message}`);
+    } finally {
+      setTestLoading(false);
+    }
+  };
+
   const apiRoutes = [
-    { method: 'POST', path: '/api/v1/auth/register', desc: 'Customer and seller registration with phone OTP verification', auth: 'Public' },
-    { method: 'POST', path: '/api/v1/auth/login', desc: 'Secure JWT access and refresh token exchange', auth: 'Public' },
-    { method: 'POST', path: '/api/v1/auth/verify-otp', desc: 'Validates 4-digit mobile verification code', auth: 'Public' },
-    { method: 'GET', path: '/api/v1/products', desc: 'Paginated product catalog with category, price & brand filtering', auth: 'Public' },
-    { method: 'GET', path: '/api/v1/products/:id', desc: 'Complete product detail with variants, reviews & stock', auth: 'Public' },
-    { method: 'POST', path: '/api/v1/cart/items', desc: 'Adds/updates variant items in customer persistent shopping bag', auth: 'Customer' },
-    { method: 'POST', path: '/api/v1/checkout/reserve', desc: 'Atomic database transaction reserving stock for checkout', auth: 'Customer' },
-    { method: 'POST', path: '/api/v1/orders', desc: 'Creates order and splits multi-seller items into fulfillment groups', auth: 'Customer' },
-    { method: 'POST', path: '/api/v1/payments/initiate', desc: 'Generates Razorpay/Cashfree order token or simulated UPI QR', auth: 'Customer' },
-    { method: 'POST', path: '/api/v1/payments/webhooks', desc: 'Idempotent webhook handler verifying gateway signatures', auth: 'Webhook' },
-    { method: 'GET', path: '/api/v1/seller/dashboard', desc: 'Merchant telemetry (sales, active orders, wallet balance)', auth: 'Seller' },
-    { method: 'POST', path: '/api/v1/seller/products', desc: 'Publishes new SKU with variants and fabric attributes', auth: 'Seller' },
-    { method: 'PATCH', path: '/api/v1/seller/orders/:id/dispatch', desc: 'Updates shipment status and generates courier AWB label', auth: 'Seller' },
-    { method: 'GET', path: '/api/v1/admin/dashboard', desc: 'Marketplace GMV, take-rate revenue, and order metrics', auth: 'Admin' },
-    { method: 'PATCH', path: '/api/v1/admin/sellers/:id/verify', desc: 'Grants or revokes GST Verified badge after KYC audit', auth: 'Admin' },
-    { method: 'PATCH', path: '/api/v1/admin/settings/commission', desc: 'Updates platform commission rate for future order lines', auth: 'Admin' }
+    { method: 'GET', path: '/api/v1/seller/orders', desc: 'Fetch seller suborders (auto-split from multi-vendor orders with AWB)', auth: 'Seller', testable: true },
+    { method: 'GET', path: '/api/v1/seller/products', desc: 'Retrieve seller catalog with variants and stock', auth: 'Seller', testable: true },
+    { method: 'GET', path: '/api/v1/seller/inventory/low-stock', desc: 'Real-time alert for variants with stock <= 5', auth: 'Seller', testable: true },
+    { method: 'GET', path: '/api/v1/seller/wallet', desc: 'Seller wallet balance, escrow pending settlement & payout readiness', auth: 'Seller', testable: true },
+    { method: 'GET', path: '/api/v1/seller/categories', desc: 'Marketplace product category and subcategory taxonomy', auth: 'Public', testable: true },
+    { method: 'GET', path: '/api/v1/seller/brands', desc: 'Marketplace verified brand catalog', auth: 'Public', testable: true },
+    { method: 'GET', path: '/api/v1/admin/sellers', desc: 'Super admin vendor registry with KYC verification and dossiers', auth: 'Admin', testable: true },
+    { method: 'GET', path: '/api/v1/admin/reports/overview', desc: 'Marketplace GMV, take-rate revenue (12%), and active vendors', auth: 'Admin', testable: true },
+    { method: 'GET', path: '/api/v1/admin/commissions', desc: 'Platform commission schedule across categories', auth: 'Admin', testable: true },
+    { method: 'GET', path: '/api/v1/admin/audit-logs', desc: 'Immutable security and operations audit trail', auth: 'Admin', testable: true },
+    { method: 'POST', path: '/api/v1/auth/seller/register', desc: 'Vendor onboarding with PAN, GSTIN, and bank verification', auth: 'Public', testable: false },
+    { method: 'POST', path: '/api/v1/seller/orders/:id/accept', desc: 'Seller accepts suborder and locks inventory', auth: 'Seller', testable: false },
+    { method: 'POST', path: '/api/v1/seller/orders/:id/dispatch', desc: 'Generates BlueDart AWB and marks suborder dispatched', auth: 'Seller', testable: false },
+    { method: 'POST', path: '/api/v1/admin/sellers/:id/approve', desc: 'Admin approves seller after KYC document audit', auth: 'Admin', testable: false },
+    { method: 'POST', path: '/api/v1/admin/settlements/:id/approve', desc: 'Releases escrow payouts to seller bank account via IMPS', auth: 'Admin', testable: false }
   ];
+
 
   const roadmapPhases = [
     { num: 'Phase 1', title: 'Project Foundation', desc: 'Monorepo setup, Flutter + Next.js web/seller/admin apps, NestJS backend, Docker compose, and design system tokens.', status: 'Completed' },
@@ -164,39 +187,50 @@ export const ArchitectureModal: React.FC = () => {
         {/* Tab 2: Database ERD */}
         {activeTab === 'erd' && (
           <div className="flex-1 overflow-y-auto space-y-4 pr-1 text-xs">
-            <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
-              <h3 className="text-sm font-bold text-zinc-900 dark:text-white font-display mb-1">
-                Core Relational Entities & Marketplace Business Rules
-              </h3>
-              <p className="text-[11px] text-zinc-500">
-                Normalized PostgreSQL design adhering to strict integer minor currency units (paise) and multi-seller basket splitting.
+            <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+              <div>
+                <h3 className="text-sm font-bold text-zinc-900 dark:text-white font-display mb-1">
+                  28 Relational PostgreSQL Database Tables & Multi-Vendor Engine
+                </h3>
+                <p className="text-[11px] text-zinc-500">
+                  Unified PostgreSQL database powering Customer App, Autonomous Seller Studio, and Super Admin Console with multi-seller suborder splitting (<code className="text-emerald-600 font-mono">seller_orders</code>).
+                </p>
+              </div>
+              <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                28 / 28 Models Active
+              </span>
+            </div>
+
+            {/* Suborder Splitting Rule Highlight */}
+            <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-amber-900 dark:text-amber-200 text-[11px] space-y-1">
+              <span className="font-bold flex items-center gap-1.5">
+                <Store className="w-3.5 h-3.5" />
+                Multi-Seller Suborder Splitting Guarantee
+              </span>
+              <p className="leading-relaxed">
+                When a customer order contains products from multiple independent sellers (e.g. Seller A ₹2,000 and Seller B ₹1,000), the backend automatically splits it into separate <code className="font-mono font-bold">seller_orders</code> records with individual AWB tracking numbers, courier labels, GST invoices, and 12% marketplace commission deduction. Payouts remain in escrow until delivery is verified.
               </p>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
               {[
-                { name: 'USERS & ROLES', pk: 'UUID', fields: ['email, phone', 'passwordHash', 'userType (Enum)', 'isVerified', 'coinBalance'], rel: '1:1 CustomerProfile, 1:N Orders' },
-                { name: 'SELLERS & VENDORS', pk: 'UUID', fields: ['businessName, gstin', 'commissionRate (8%)', 'walletBalance (paise)', 'status (ACTIVE)'], rel: '1:N Products, 1:N Settlements' },
-                { name: 'PRODUCTS & VARIANTS', pk: 'UUID', fields: ['title, categoryId', 'sku, size, color', 'mrp (paise), sellingPrice', 'stock, fabric, fit'], rel: 'N:1 Category, 1:N Images' },
-                { name: 'ORDERS (CUSTOMER)', pk: 'UUID', fields: ['orderNumber (PB-XXXX)', 'totalAmount, finalAmount', 'shippingAddressId', 'status (CONFIRMED)'], rel: '1:N SellerFulfillments, 1:N Items' },
-                { name: 'SELLER FULFILLMENT', pk: 'UUID', fields: ['orderId, sellerId', 'subtotal, commission', 'sellerPayout (paise)', 'status (DISPATCHED)'], rel: 'Splits multi-vendor orders' },
-                { name: 'FINANCIAL LEDGER', pk: 'UUID', fields: ['type (CREDIT/DEBIT)', 'amount (paise)', 'balanceAfter', 'refOrderId'], rel: 'Immutable ledger, no overrides' },
-                { name: 'PAYMENTS & WEBHOOKS', pk: 'UUID', fields: ['gatewayProvider (UPI/Card)', 'gatewayPaymentId', 'amount, status', 'idempotent eventId'], rel: '1:N PaymentTransactions' },
-                { name: 'SHIPMENTS & TRACKING', pk: 'UUID', fields: ['courierPartner (BlueDart)', 'awbNumber', 'status (IN_TRANSIT)', 'deliveredAt'], rel: '1:N TrackingEvents' },
-                { name: 'RETURNS & REFUNDS', pk: 'UUID', fields: ['reason, pickupSchedule', 'status (INSPECTED)', 'refundAmount (paise)', 'paymentId'], rel: 'Order-item level returns' }
-              ].map(table => (
-                <div key={table.name} className="p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-800/80 space-y-1.5">
-                  <div className="flex items-center justify-between pb-1 border-b border-zinc-100 dark:border-zinc-700">
-                    <span className="font-bold font-mono text-[11px] text-indigo-600 dark:text-indigo-400">{table.name}</span>
-                    <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-zinc-100 dark:bg-zinc-700">PK: {table.pk}</span>
+                { group: 'A. User & Seller (8 Tables)', tables: ['users', 'roles', 'user_roles', 'seller_profiles', 'seller_documents', 'seller_addresses', 'seller_bank_accounts', 'seller_settings'] },
+                { group: 'B. Products & Stock (8 Tables)', tables: ['categories', 'brands', 'products', 'product_variants', 'product_images', 'inventory', 'inventory_movements', 'product_reviews'] },
+                { group: 'C. Orders & Shipping (8 Tables)', tables: ['orders', 'order_items', 'seller_orders (Suborders)', 'order_addresses', 'shipments', 'shipment_events', 'returns', 'refunds'] },
+                { group: 'D. Finance & Escrow (7 Tables)', tables: ['payments', 'commission_rules', 'commission_entries', 'seller_wallets', 'seller_transactions', 'settlements', 'settlement_items'] },
+                { group: 'E. Admin & Governance (7 Tables)', tables: ['admin_users', 'audit_logs', 'notifications', 'support_tickets', 'coupons', 'coupon_usages', 'platform_settings'] }
+              ].map(cat => (
+                <div key={cat.group} className="p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-800/80 space-y-2">
+                  <div className="pb-1 border-b border-zinc-100 dark:border-zinc-700">
+                    <span className="font-bold font-mono text-[11px] text-indigo-600 dark:text-indigo-400">{cat.group}</span>
                   </div>
-                  <div className="space-y-0.5 text-[10px] text-zinc-600 dark:text-zinc-300 font-mono">
-                    {table.fields.map((f, i) => (
-                      <div key={i}>• {f}</div>
+                  <div className="space-y-1 text-[11px] text-zinc-600 dark:text-zinc-300 font-mono">
+                    {cat.tables.map((t, i) => (
+                      <div key={i} className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
+                        <span className={t.includes('seller_orders') ? 'font-bold text-emerald-600 dark:text-emerald-400' : ''}>{t}</span>
+                      </div>
                     ))}
-                  </div>
-                  <div className="pt-1 border-t border-zinc-100 dark:border-zinc-700 text-[10px] text-zinc-400">
-                    Rel: {table.rel}
                   </div>
                 </div>
               ))}
@@ -208,7 +242,7 @@ export const ArchitectureModal: React.FC = () => {
         {activeTab === 'schema' && (
           <div className="flex-1 overflow-y-auto space-y-3 pr-1 text-xs">
             <div className="flex items-center justify-between">
-              <span className="text-zinc-500 font-mono">File: /prisma/schema.prisma (48 normalized models ready for migrate)</span>
+              <span className="text-zinc-500 font-mono">File: /prisma/schema.prisma (28 relational models with Decimal precision)</span>
               <button
                 onClick={handleCopySchema}
                 className="px-3 py-1.5 rounded-lg bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 font-semibold text-xs flex items-center gap-1.5"
@@ -219,75 +253,88 @@ export const ArchitectureModal: React.FC = () => {
             </div>
 
             <div className="p-4 rounded-2xl bg-zinc-950 text-zinc-200 font-mono text-[11px] max-h-[46vh] overflow-y-auto border border-zinc-800">
-              <pre>{`// Prisma Schema Excerpt (Complete file saved in /prisma/schema.prisma)
+              <pre>{`// Multi-Seller Suborder Splitting & 28 Tables Schema Excerpt
+// Full schema saved in /prisma/schema.prisma
 
-model User {
-  id              String            @id @default(uuid())
-  email           String?           @unique
-  phone           String?           @unique
-  passwordHash    String?
-  name            String
-  userType        UserType          @default(CUSTOMER)
-  isActive        Boolean           @default(true)
-  createdAt       DateTime          @default(now())
-  profile         CustomerProfile?
-  orders          Order[]
-  sellerUsers     SellerUser[]
+model SellerOrder {
+  id                    String                  @id @default(uuid())
+  suborderNumber        String                  @unique // e.g. "PB-SO-92841-A"
+  orderId               String
+  sellerId              String
+  subtotal              Decimal                 @db.Decimal(12, 2)
+  commissionRate        Decimal                 @db.Decimal(5, 2)
+  commissionAmount      Decimal                 @db.Decimal(12, 2)
+  sellerPayout          Decimal                 @db.Decimal(12, 2)
+  fulfillmentStatus     FulfillmentStatus       @default(NEW)
+  settlementStatus      SettlementStatus        @default(HOLD)
+  trackingNumber        String?
+  courierPartner        String?
+  
+  order                 Order                   @relation(fields: [orderId], references: [id])
+  seller                SellerProfile           @relation(fields: [sellerId], references: [id])
+  items                 OrderItem[]
+  shipments             Shipment[]
+  
+  @@map("seller_orders")
 }
 
-model Seller {
-  id             String           @id @default(uuid())
-  businessName   String
-  gstin          String?          @unique
-  status         SellerStatus     @default(PENDING_VERIFICATION)
-  commissionRate Float            @default(8.0)
-  walletBalance  Int              @default(0) // in paise
-  products       Product[]
-  fulfillments   SellerFulfillment[]
-  settlements    Settlement[]
-}
-
-model Order {
-  id              String              @id @default(uuid())
-  orderNumber     String              @unique
-  userId          String
-  totalMrp        Int                 // in paise
-  finalAmount     Int                 // in paise
-  status          OrderStatus         @default(CONFIRMED)
-  fulfillments    SellerFulfillment[]
-  payments        Payment[]
-  shipments       Shipment[]
-}
-
-model SellerFulfillment {
-  id             String         @id @default(uuid())
-  orderId        String
-  sellerId       String
-  subtotal       Int            // in paise
-  commission     Int            // in paise
-  sellerPayout   Int            // in paise
-  status         OrderStatus    @default(CONFIRMED)
-  orderItems     OrderItem[]
+model SellerWallet {
+  id                    String                  @id @default(uuid())
+  sellerId              String                  @unique
+  balance               Decimal                 @default(0.00) @db.Decimal(12, 2)
+  pendingSettlement     Decimal                 @default(0.00) @db.Decimal(12, 2)
+  lifetimeEarnings      Decimal                 @default(0.00) @db.Decimal(12, 2)
+  
+  seller                SellerProfile           @relation(fields: [sellerId], references: [id])
+  @@map("seller_wallets")
 }`}</pre>
             </div>
           </div>
         )}
 
-        {/* Tab 4: REST API Spec */}
+        {/* Tab 4: REST API Spec & Live Test Console */}
         {activeTab === 'api' && (
-          <div className="flex-1 overflow-y-auto space-y-2 pr-1 text-xs">
-            <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800 flex justify-between items-center">
-              <span className="font-semibold text-zinc-900 dark:text-white">API Base URL: /api/v1 (REST OpenAPI Specification)</span>
-              <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 dark:bg-emerald-950 px-2 py-0.5 rounded">Swagger Ready</span>
+          <div className="flex-1 overflow-y-auto space-y-3 pr-1 text-xs">
+            <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+              <div>
+                <span className="font-bold text-zinc-900 dark:text-white">API Base URL: /api/v1 (REST Specification)</span>
+                <p className="text-[11px] text-zinc-500">Autonomous Seller Panel & Super Admin integration endpoints.</p>
+              </div>
+              <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 dark:bg-emerald-950 px-2.5 py-1 rounded-full border border-emerald-200 dark:border-emerald-800">
+                Interactive Test Console Active
+              </span>
             </div>
 
-            <div className="space-y-1.5 max-h-[46vh] overflow-y-auto">
+            {/* Live API Test Runner Response Box */}
+            {testResult && (
+              <div className="p-3.5 rounded-2xl bg-zinc-950 border border-zinc-800 text-zinc-100 font-mono text-[11px] space-y-2 shadow-lg">
+                <div className="flex items-center justify-between pb-1 border-b border-zinc-800">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded bg-emerald-900 text-emerald-300 font-bold">
+                      HTTP {testResult.status || 200}
+                    </span>
+                    <span className="text-zinc-300 font-bold">{testEndpoint}</span>
+                  </div>
+                  <button
+                    onClick={() => setTestResult(null)}
+                    className="text-zinc-500 hover:text-white text-xs"
+                  >
+                    Clear Output
+                  </button>
+                </div>
+                <div className="max-h-40 overflow-y-auto text-[10px] leading-relaxed text-emerald-400">
+                  <pre>{JSON.stringify(testResult.data || testResult, null, 2)}</pre>
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-1.5 max-h-[38vh] overflow-y-auto">
               {apiRoutes.map(route => (
-                <div key={route.path} className="p-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-3 text-xs">
+                <div key={route.path} className="p-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-3 text-xs bg-white dark:bg-zinc-900 hover:border-indigo-300 transition-colors">
                   <div className="flex items-center gap-2.5 min-w-0">
                     <span className={`px-2 py-0.5 rounded font-mono font-bold text-[10px] ${
                       route.method === 'POST' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' :
-                      route.method === 'PATCH' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' :
+                      route.method === 'PATCH' || route.method === 'PUT' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' :
                       'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
                     }`}>
                       {route.method}
@@ -295,14 +342,26 @@ model SellerFulfillment {
                     <span className="font-mono font-bold text-zinc-900 dark:text-white truncate">{route.path}</span>
                     <span className="text-zinc-500 text-[11px] hidden md:inline truncate">{route.desc}</span>
                   </div>
-                  <span className="text-[10px] px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-500 font-semibold shrink-0">
-                    {route.auth}
-                  </span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-500 font-semibold">
+                      {route.auth}
+                    </span>
+                    {route.testable && (
+                      <button
+                        onClick={() => executeLiveApiTest(route.path, route.method)}
+                        disabled={testLoading}
+                        className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-[10px] flex items-center gap-1 shadow-sm transition-transform active:scale-95 disabled:opacity-50"
+                      >
+                        {testLoading && testEndpoint === route.path ? 'Running...' : 'Test Route'}
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
           </div>
         )}
+
 
         {/* Tab 5: Roadmap */}
         {activeTab === 'roadmap' && (

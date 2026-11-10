@@ -10,9 +10,23 @@ import {
   OrderStatus,
   UserProfile,
   SupportMessage,
-  BlueprintFeature
+  BlueprintFeature,
+  SellerReturnRequest,
+  SellerPayout,
+  SellerCoupon,
+  SellerSupportTicket
 } from '../types';
-import { INITIAL_PRODUCTS, INITIAL_REELS, INITIAL_COUPONS, INITIAL_SELLERS, DEFAULT_ADDRESSES } from '../data/mockData';
+import { 
+  INITIAL_PRODUCTS, 
+  INITIAL_REELS, 
+  INITIAL_COUPONS, 
+  INITIAL_SELLERS, 
+  DEFAULT_ADDRESSES,
+  INITIAL_SELLER_COUPONS,
+  INITIAL_SELLER_RETURNS,
+  INITIAL_SELLER_PAYOUTS,
+  INITIAL_SELLER_TICKETS
+} from '../data/mockData';
 import { BLUEPRINT_FEATURES } from '../data/blueprintFeatures';
 import { api } from '../services/api';
 
@@ -22,7 +36,10 @@ export type SupportedCurrency = 'INR' | 'USD' | 'EUR';
 interface MarketplaceContextType {
   products: Product[];
   addProduct: (product: Omit<Product, 'id' | 'rating' | 'reviewCount' | 'reviews'>) => void;
+  updateProduct: (productId: string, updates: Partial<Product>) => void;
   deleteProduct: (productId: string) => void;
+  updateProductStock: (productId: string, newStock: number) => void;
+  bulkUploadProducts: (sellerId: string, products: Partial<Product>[]) => void;
   cart: CartItem[];
   addToCart: (product: Product, size: string, color: string, quantity?: number) => void;
   updateCartQuantity: (cartItemId: string, quantity: number) => void;
@@ -31,22 +48,59 @@ interface MarketplaceContextType {
   cartTotal: number;
   cartDiscount: number;
   wishlist: string[];
-  toggleWishlist: (productId: string) => void;
+  toggleWishlist: (productId: string, productTitle?: string) => void;
   isWishlisted: (productId: string) => boolean;
   orders: Order[];
   placeOrder: (details: {
     address: Address;
-    paymentMethod: 'cod' | 'upi' | 'card' | 'netbanking';
+    paymentMethod: 'cod' | 'upi' | 'card' | 'netbanking' | 'cashfree';
     couponCode?: string;
     coinsUsed: number;
   }) => Order;
   cancelOrder: (orderId: string) => void;
   returnOrder: (orderId: string, reason: string) => void;
   updateOrderStatus: (orderId: string, status: OrderStatus) => void;
+  fulfillSellerOrder: (
+    orderId: string, 
+    action: 'accept' | 'pack' | 'dispatch' | 'cancel', 
+    details?: { courierPartner?: any; trackingNumber?: string; cancelReason?: string }
+  ) => void;
   reels: Reel[];
   toggleReelLike: (reelId: string) => void;
   sellers: Seller[];
+  currentSellerId: string;
+  setCurrentSellerId: (id: string) => void;
+  currentSeller: Seller;
+  registerSeller: (details: {
+    name: string;
+    storeName: string;
+    businessName: string;
+    phone: string;
+    email?: string;
+    businessType?: any;
+    gstNumber?: string;
+    panNumber?: string;
+    pickupAddress?: any;
+    bankAccount?: any;
+    kycDocuments?: any;
+  }) => Seller;
+  updateSeller: (sellerId: string, updates: Partial<Seller>) => void;
+  updateSellerStatus: (sellerId: string, status: Seller['status']) => void;
   toggleSellerVerification: (sellerId: string) => void;
+  sellerReturns: SellerReturnRequest[];
+  handleSellerReturn: (
+    requestId: string, 
+    action: 'approved' | 'rejected' | 'replacement_dispatched' | 'refund_issued', 
+    notes?: string
+  ) => void;
+  sellerPayouts: SellerPayout[];
+  requestSellerPayout: (sellerId: string, amount: number) => void;
+  approveSellerPayout: (payoutId: string) => void;
+  sellerCoupons: SellerCoupon[];
+  createSellerCoupon: (coupon: Omit<SellerCoupon, 'id' | 'usageCount'>) => void;
+  toggleSellerCoupon: (couponId: string) => void;
+  sellerTickets: SellerSupportTicket[];
+  replyToSellerTicket: (ticketId: string, replyText: string, senderRole?: 'seller' | 'admin') => void;
   addresses: Address[];
   addAddress: (address: Omit<Address, 'id'>) => void;
   availableCoupons: Coupon[];
@@ -97,6 +151,9 @@ interface MarketplaceContextType {
   setIsAuthOpen: (open: boolean) => void;
   isProfileOpen: boolean;
   setIsProfileOpen: (open: boolean) => void;
+  profileActiveTab: 'details' | 'wishlist' | 'addresses' | 'preferences' | 'orders' | 'coupons' | 'referrals' | 'chats' | 'live';
+  setProfileActiveTab: (tab: 'details' | 'wishlist' | 'addresses' | 'preferences' | 'orders' | 'coupons' | 'referrals' | 'chats' | 'live') => void;
+  openWishlist: () => void;
 
   // Comparison Tool
   compareList: string[];
@@ -130,7 +187,29 @@ interface MarketplaceContextType {
   // Onboarding Screen
   isOnboardingOpen: boolean;
   setIsOnboardingOpen: (open: boolean) => void;
+
+  // Public Seller Storefront
+  isSellerStoreOpen: boolean;
+  activeSellerStoreId: string | null;
+  openSellerStore: (sellerId: string) => void;
+  closeSellerStore: () => void;
+
+  // Live Shopping
+  isLiveShoppingOpen: boolean;
+  setIsLiveShoppingOpen: (open: boolean) => void;
+
+  // Buyer-Seller Chat
+  isBuyerSellerChatOpen: boolean;
+  setIsBuyerSellerChatOpen: (open: boolean) => void;
+  activeChatSellerId: string | null;
+  chatProductContext: Product | null;
+  chatWithSeller: (sellerId: string, productContext?: Product) => void;
+
+  // Launch Readiness Checklist (Section 12 20/20)
+  isLaunchChecklistOpen: boolean;
+  setIsLaunchChecklistOpen: (open: boolean) => void;
 }
+
 
 const MarketplaceContext = createContext<MarketplaceContextType | undefined>(undefined);
 
@@ -381,8 +460,78 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
   // Reels
   const [reels, setReels] = useState<Reel[]>(INITIAL_REELS);
 
-  // Sellers
-  const [sellers, setSellers] = useState<Seller[]>(INITIAL_SELLERS);
+  // Sellers State
+  const [sellers, setSellers] = useState<Seller[]>(() => {
+    const saved = localStorage.getItem('pb_sellers');
+    return saved ? JSON.parse(saved) : INITIAL_SELLERS;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('pb_sellers', JSON.stringify(sellers));
+  }, [sellers]);
+
+  const [currentSellerId, setCurrentSellerId] = useState<string>(() => {
+    return localStorage.getItem('pb_current_seller_id') || 'seller-1';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('pb_current_seller_id', currentSellerId);
+  }, [currentSellerId]);
+
+  const currentSeller: Seller = sellers.find(s => s.id === currentSellerId) || sellers[0] || {
+    id: 'seller-1',
+    name: 'Devendra Tripathi',
+    businessName: 'Varanasi Weavers Co.',
+    gstNumber: '09AAECV1234M1Z2',
+    location: 'Varanasi, Uttar Pradesh',
+    rating: 4.9,
+    totalOrders: 0,
+    totalRevenue: 0,
+    walletBalance: 0,
+    verified: true,
+    status: 'active',
+    joinedDate: 'Jan 2024'
+  };
+
+  // Seller Returns
+  const [sellerReturns, setSellerReturns] = useState<SellerReturnRequest[]>(() => {
+    const saved = localStorage.getItem('pb_seller_returns');
+    return saved ? JSON.parse(saved) : INITIAL_SELLER_RETURNS;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('pb_seller_returns', JSON.stringify(sellerReturns));
+  }, [sellerReturns]);
+
+  // Seller Payouts
+  const [sellerPayouts, setSellerPayouts] = useState<SellerPayout[]>(() => {
+    const saved = localStorage.getItem('pb_seller_payouts');
+    return saved ? JSON.parse(saved) : INITIAL_SELLER_PAYOUTS;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('pb_seller_payouts', JSON.stringify(sellerPayouts));
+  }, [sellerPayouts]);
+
+  // Seller Coupons
+  const [sellerCoupons, setSellerCoupons] = useState<SellerCoupon[]>(() => {
+    const saved = localStorage.getItem('pb_seller_coupons');
+    return saved ? JSON.parse(saved) : INITIAL_SELLER_COUPONS;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('pb_seller_coupons', JSON.stringify(sellerCoupons));
+  }, [sellerCoupons]);
+
+  // Seller Support Tickets
+  const [sellerTickets, setSellerTickets] = useState<SellerSupportTicket[]>(() => {
+    const saved = localStorage.getItem('pb_seller_tickets');
+    return saved ? JSON.parse(saved) : INITIAL_SELLER_TICKETS;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('pb_seller_tickets', JSON.stringify(sellerTickets));
+  }, [sellerTickets]);
 
   // Addresses
   const [addresses, setAddresses] = useState<Address[]>(DEFAULT_ADDRESSES);
@@ -413,6 +562,12 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const [isRewardsOpen, setIsRewardsOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [profileActiveTab, setProfileActiveTab] = useState<'details' | 'wishlist' | 'addresses' | 'preferences' | 'orders' | 'coupons' | 'referrals' | 'chats' | 'live'>('details');
+
+  const openWishlist = () => {
+    setProfileActiveTab('wishlist');
+    setIsProfileOpen(true);
+  };
   const [isCompareOpen, setIsCompareOpen] = useState(false);
   const [isTryOnOpen, setIsTryOnOpen] = useState(false);
   const [tryOnProduct, setTryOnProduct] = useState<Product | null>(null);
@@ -421,6 +576,34 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const [isArchitectureOpen, setIsArchitectureOpen] = useState(false);
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
   const [notification, setNotification] = useState<string | null>(null);
+
+  // Public Seller Storefront
+  const [isSellerStoreOpen, setIsSellerStoreOpen] = useState(false);
+  const [activeSellerStoreId, setActiveSellerStoreId] = useState<string | null>('seller-1');
+  const openSellerStore = (sellerId: string) => {
+    setActiveSellerStoreId(sellerId);
+    setIsSellerStoreOpen(true);
+  };
+  const closeSellerStore = () => setIsSellerStoreOpen(false);
+
+  // Live Shopping
+  const [isLiveShoppingOpen, setIsLiveShoppingOpen] = useState(false);
+
+  // Buyer-Seller Chat
+  const [isBuyerSellerChatOpen, setIsBuyerSellerChatOpen] = useState(false);
+  const [activeChatSellerId, setActiveChatSellerId] = useState<string | null>('seller-1');
+  const [chatProductContext, setChatProductContext] = useState<Product | null>(null);
+  const chatWithSeller = (sellerId: string, productContext?: Product) => {
+    setActiveChatSellerId(sellerId);
+    if (productContext) {
+      setChatProductContext(productContext);
+    }
+    setIsBuyerSellerChatOpen(true);
+  };
+
+  // Launch Readiness Checklist
+  const [isLaunchChecklistOpen, setIsLaunchChecklistOpen] = useState(false);
+
 
   // Blueprint features list
   const [blueprintFeatures] = useState<BlueprintFeature[]>(BLUEPRINT_FEATURES);
@@ -518,6 +701,54 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     notify('Product removed from catalog.');
   };
 
+  const updateProduct = (productId: string, updates: Partial<Product>) => {
+    setProducts(prev => prev.map(p => p.id === productId ? { ...p, ...updates } : p));
+    notify('Product listing updated successfully.');
+  };
+
+  const updateProductStock = (productId: string, newStock: number) => {
+    setProducts(prev => prev.map(p => p.id === productId ? { ...p, inStock: Math.max(0, newStock) } : p));
+    notify(`Inventory stock adjusted to ${newStock} units.`);
+  };
+
+  const bulkUploadProducts = (sellerId: string, newProducts: Partial<Product>[]) => {
+    const seller = sellers.find(s => s.id === sellerId) || currentSeller;
+    const created: Product[] = newProducts.map((p, idx) => ({
+      id: `prod-${Date.now()}-${idx}`,
+      title: p.title || `Product #${idx + 1}`,
+      brand: p.brand || seller.businessName,
+      category: p.category || 'ethnic',
+      subcategory: p.subcategory || 'General',
+      sku: p.sku || `SKU-${Date.now().toString(36)}-${idx}`,
+      barcode: p.barcode || `890${Math.floor(1000000000 + Math.random() * 9000000000)}`,
+      price: Number(p.price) || 999,
+      originalPrice: Number(p.originalPrice) || (Number(p.price) || 999) * 2,
+      discountPercent: p.discountPercent || 50,
+      gstRate: p.gstRate || 12,
+      weightGrams: p.weightGrams || 500,
+      dimensions: p.dimensions || { lengthCm: 25, widthCm: 20, heightCm: 5 },
+      rating: 4.8,
+      reviewCount: 0,
+      inStock: Number(p.inStock) || 25,
+      images: p.images && p.images.length ? p.images : ['/src/assets/images/collection_ethnic_wear_1793466539838.jpg'],
+      colors: p.colors || [{ name: 'Standard', hex: '#18181B' }],
+      sizes: p.sizes || [{ size: 'Free Size', available: true, stockCount: Number(p.inStock) || 25 }],
+      description: p.description || 'Quality product sourced and delivered via Prime Bazaar.',
+      sellerId: seller.id,
+      sellerName: seller.businessName,
+      sellerRating: seller.rating,
+      codAvailable: true,
+      returnPeriodDays: 7,
+      status: 'approved',
+      warrantyPolicy: '7-day replacement warranty',
+      reviews: []
+    }));
+
+    setProducts(prev => [...created, ...prev]);
+    notify(`Bulk Upload Success: ${created.length} products imported into catalog!`);
+    api.sellers.bulkUpload(seller.id, created).catch(() => {});
+  };
+
   const addToCart = (product: Product, size: string, color: string, quantity: number = 1) => {
     const cartItemId = `${product.id}-${size}-${color}`;
     setCart(prev => {
@@ -559,14 +790,18 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     setCart([]);
   };
 
-  const toggleWishlist = (productId: string) => {
+  const toggleWishlist = (productId: string, productTitle?: string) => {
+    const item = products.find(p => p.id === productId);
+    const title = productTitle || item?.title || 'Item';
+    const shortened = title.length > 28 ? title.slice(0, 26) + '...' : title;
+
     setWishlist(prev => {
       const exists = prev.includes(productId);
       if (exists) {
-        notify('Removed from your wishlist.');
+        notify(`Removed "${shortened}" from your Wishlist.`);
         return prev.filter(id => id !== productId);
       } else {
-        notify('Saved to your wishlist! ❤️');
+        notify(`Saved "${shortened}" to your Wishlist! ❤️`);
         return [...prev, productId];
       }
     });
@@ -597,6 +832,223 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
       )
     );
     notify('Seller verification status updated.');
+  };
+
+  const registerSeller = (details: {
+    name: string;
+    storeName: string;
+    businessName: string;
+    phone: string;
+    email?: string;
+    businessType?: any;
+    gstNumber?: string;
+    panNumber?: string;
+    pickupAddress?: any;
+    bankAccount?: any;
+    kycDocuments?: any;
+  }): Seller => {
+    const newId = `seller-${Date.now().toString(36)}`;
+    const newSeller: Seller = {
+      id: newId,
+      name: details.name,
+      storeName: details.storeName || details.businessName,
+      businessName: details.businessName,
+      phone: details.phone,
+      email: details.email || `${details.name.toLowerCase().replace(/\s+/g, '')}@sellers.primebazaar.in`,
+      businessType: details.businessType || 'Proprietorship',
+      gstNumber: details.gstNumber || '09AAECV0000Z1Z1',
+      panNumber: details.panNumber || 'AAECV0000Z',
+      location: details.pickupAddress?.city ? `${details.pickupAddress.city}, ${details.pickupAddress.state}` : 'India',
+      pickupAddress: details.pickupAddress,
+      bankAccount: details.bankAccount,
+      kycDocuments: details.kycDocuments || { status: 'pending', submittedAt: 'Just now' },
+      rating: 5.0,
+      totalOrders: 0,
+      totalRevenue: 0,
+      walletBalance: 0,
+      pendingSettlement: 0,
+      commissionRate: 12,
+      verified: false,
+      status: 'pending_approval',
+      joinedDate: 'Nov 2026'
+    };
+
+    setSellers(prev => [newSeller, ...prev]);
+    setCurrentSellerId(newId);
+    notify(`Seller account "${newSeller.businessName}" submitted for approval! Studio is ready.`);
+    api.sellers.register(newSeller).catch(err => console.warn('Backend seller register:', err));
+    return newSeller;
+  };
+
+  const updateSeller = (sellerId: string, updates: Partial<Seller>) => {
+    setSellers(prev => prev.map(s => s.id === sellerId ? { ...s, ...updates } : s));
+    notify('Store settings updated successfully!');
+  };
+
+  const updateSellerStatus = (sellerId: string, status: Seller['status']) => {
+    setSellers(prev => prev.map(s => s.id === sellerId ? { ...s, status, verified: status === 'active' } : s));
+    api.sellers.updateStatus(sellerId, status).catch(() => {});
+    notify(`Seller status updated to ${status}.`);
+  };
+
+  const fulfillSellerOrder = (
+    orderId: string, 
+    action: 'accept' | 'pack' | 'dispatch' | 'cancel', 
+    details?: { courierPartner?: any; trackingNumber?: string; cancelReason?: string }
+  ) => {
+    setOrders(prev => prev.map(ord => {
+      if (ord.id !== orderId) return ord;
+      if (action === 'accept') {
+        notify(`Order #${orderId} accepted for fulfillment.`);
+        return {
+          ...ord,
+          status: 'placed',
+          trackingSteps: [
+            ...ord.trackingSteps,
+            { step: 'Order Accepted by Merchant', timestamp: 'Just now', completed: true, current: true }
+          ]
+        };
+      }
+      if (action === 'pack') {
+        notify(`Order #${orderId} marked as Packed. Ready for courier handover.`);
+        return {
+          ...ord,
+          status: 'packed',
+          shippingLabelGenerated: true,
+          invoiceNumber: `INV-${orderId}`,
+          trackingSteps: ord.trackingSteps.map((step, idx) => {
+            if (idx <= 1) return { ...step, completed: true, current: idx === 1 };
+            return step;
+          })
+        };
+      }
+      if (action === 'dispatch') {
+        const partner = details?.courierPartner || 'BlueDart Express';
+        const awb = details?.trackingNumber || `AWB-BD-${Math.floor(100000000 + Math.random() * 900000000)}`;
+        notify(`Order #${orderId} dispatched via ${partner} (AWB: ${awb})!`);
+        return {
+          ...ord,
+          status: 'shipped',
+          courierPartner: partner,
+          trackingNumber: awb,
+          pickupDate: new Date().toLocaleDateString('en-IN'),
+          trackingSteps: ord.trackingSteps.map((step, idx) => {
+            if (idx <= 2) return { ...step, completed: true, current: idx === 2 };
+            return step;
+          })
+        };
+      }
+      if (action === 'cancel') {
+        notify(`Order #${orderId} cancelled by merchant.`);
+        return {
+          ...ord,
+          status: 'cancelled',
+          cancelReason: details?.cancelReason || 'Out of stock at merchant warehouse',
+          trackingSteps: [
+            ...ord.trackingSteps,
+            { step: `Order Cancelled by Merchant: ${details?.cancelReason || 'Out of stock'}`, timestamp: 'Just now', completed: true, current: true }
+          ]
+        };
+      }
+      return ord;
+    }));
+  };
+
+  const handleSellerReturn = (
+    requestId: string, 
+    action: 'approved' | 'rejected' | 'replacement_dispatched' | 'refund_issued', 
+    notes?: string
+  ) => {
+    setSellerReturns(prev => prev.map(ret => {
+      if (ret.id !== requestId) return ret;
+      return {
+        ...ret,
+        status: action,
+        actionNotes: notes || `Action updated to ${action.replace('_', ' ')}`
+      };
+    }));
+    notify(`Return request #${requestId} updated to ${action.toUpperCase()}!`);
+  };
+
+  const requestSellerPayout = (sellerId: string, amount: number) => {
+    const seller = sellers.find(s => s.id === sellerId);
+    if (!seller || amount <= 0 || amount > seller.walletBalance) {
+      notify('Invalid payout amount or insufficient wallet balance.');
+      return;
+    }
+    const commission = Math.round(amount * (seller.commissionRate || 12) / 100);
+    const gst = Math.round(commission * 0.18);
+    const net = amount - commission - gst;
+
+    const newPayout: SellerPayout = {
+      id: `pay-${Date.now()}`,
+      sellerId: seller.id,
+      sellerName: seller.businessName,
+      amount,
+      grossSales: amount,
+      commissionDeducted: commission,
+      gstOnCommission: gst,
+      netPayout: Math.max(0, net),
+      accountNumber: seller.bankAccount?.accountNumber ? `•••• ${seller.bankAccount.accountNumber.slice(-4)}` : '•••• 9041',
+      bankName: seller.bankAccount?.bankName || 'HDFC Bank',
+      requestedAt: new Date().toLocaleString('en-IN'),
+      status: 'pending'
+    };
+
+    setSellerPayouts(prev => [newPayout, ...prev]);
+    setSellers(prev => prev.map(s => s.id === sellerId ? { ...s, walletBalance: s.walletBalance - amount } : s));
+    api.sellers.requestPayout(sellerId, amount).catch(() => {});
+    notify(`Payout request of ₹${amount.toLocaleString('en-IN')} submitted! (Net: ₹${newPayout.netPayout.toLocaleString('en-IN')})`);
+  };
+
+  const approveSellerPayout = (payoutId: string) => {
+    setSellerPayouts(prev => prev.map(p => {
+      if (p.id !== payoutId) return p;
+      return {
+        ...p,
+        status: 'processed',
+        bankRefNumber: `NEFT-${Math.floor(1000000000 + Math.random() * 9000000000)}`
+      };
+    }));
+    notify(`Payout #${payoutId} approved and processed via NEFT!`);
+  };
+
+  const createSellerCoupon = (coupon: Omit<SellerCoupon, 'id' | 'usageCount'>) => {
+    const newCoupon: SellerCoupon = {
+      ...coupon,
+      id: `sc-${Date.now()}`,
+      usageCount: 0
+    };
+    setSellerCoupons(prev => [newCoupon, ...prev]);
+    notify(`Promotional code "${newCoupon.code}" created and active!`);
+  };
+
+  const toggleSellerCoupon = (couponId: string) => {
+    setSellerCoupons(prev => prev.map(c => {
+      if (c.id !== couponId) return c;
+      const nextStatus = c.status === 'active' ? 'paused' : 'active';
+      return { ...c, status: nextStatus };
+    }));
+    notify('Coupon campaign status updated.');
+  };
+
+  const replyToSellerTicket = (ticketId: string, replyText: string, senderRole: 'seller' | 'admin' = 'seller') => {
+    setSellerTickets(prev => prev.map(tkt => {
+      if (tkt.id !== ticketId) return tkt;
+      const newMsg = {
+        id: `msg-${Date.now()}`,
+        sender: senderRole,
+        senderName: senderRole === 'seller' ? currentSeller.businessName : 'Prime Bazaar Support Desk',
+        text: replyText,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+      return {
+        ...tkt,
+        status: 'in_progress',
+        messages: [...tkt.messages, newMsg]
+      };
+    }));
+    notify('Message sent to customer ticket!');
   };
 
   const addAddress = (address: Omit<Address, 'id'>) => {
@@ -648,7 +1100,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   const placeOrder = (details: {
     address: Address;
-    paymentMethod: 'cod' | 'upi' | 'card' | 'netbanking';
+    paymentMethod: 'cod' | 'upi' | 'card' | 'netbanking' | 'cashfree';
     couponCode?: string;
     coinsUsed: number;
   }): Order => {
@@ -766,7 +1218,10 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
       value={{
         products,
         addProduct,
+        updateProduct,
         deleteProduct,
+        updateProductStock,
+        bulkUploadProducts,
         cart,
         addToCart,
         updateCartQuantity,
@@ -782,10 +1237,27 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
         cancelOrder,
         returnOrder,
         updateOrderStatus,
+        fulfillSellerOrder,
         reels,
         toggleReelLike,
         sellers,
+        currentSellerId,
+        setCurrentSellerId,
+        currentSeller,
+        registerSeller,
+        updateSeller,
+        updateSellerStatus,
         toggleSellerVerification,
+        sellerReturns,
+        handleSellerReturn,
+        sellerPayouts,
+        requestSellerPayout,
+        approveSellerPayout,
+        sellerCoupons,
+        createSellerCoupon,
+        toggleSellerCoupon,
+        sellerTickets,
+        replyToSellerTicket,
         addresses,
         addAddress,
         availableCoupons,
@@ -834,6 +1306,9 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
         setIsAuthOpen,
         isProfileOpen,
         setIsProfileOpen,
+        profileActiveTab,
+        setProfileActiveTab,
+        openWishlist,
 
         compareList,
         toggleCompare,
@@ -860,10 +1335,25 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
         setIsArchitectureOpen,
 
         isOnboardingOpen,
-        setIsOnboardingOpen
+        setIsOnboardingOpen,
+
+        isSellerStoreOpen,
+        activeSellerStoreId,
+        openSellerStore,
+        closeSellerStore,
+        isLiveShoppingOpen,
+        setIsLiveShoppingOpen,
+        isBuyerSellerChatOpen,
+        setIsBuyerSellerChatOpen,
+        activeChatSellerId,
+        chatProductContext,
+        chatWithSeller,
+        isLaunchChecklistOpen,
+        setIsLaunchChecklistOpen
       }}
     >
       {children}
+
     </MarketplaceContext.Provider>
   );
 };

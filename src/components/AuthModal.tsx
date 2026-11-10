@@ -14,6 +14,7 @@ export const AuthModal: React.FC = () => {
   const [fullName, setFullName] = useState('');
   const [otpSent, setOtpSent] = useState(false);
   const [otpCode, setOtpCode] = useState('');
+  const [serverNotice, setServerNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   if (!isAuthOpen) return null;
@@ -31,10 +32,16 @@ export const AuthModal: React.FC = () => {
 
     setLoading(true);
     try {
-      const res = await api.auth.sendOtp(phone, email);
+      const res = await api.auth.sendOtp(
+        method === 'phone' ? `+91 ${phone}` : undefined,
+        method === 'email' ? email : undefined
+      );
       setOtpSent(true);
-      setOtpCode('7784'); // Auto-fill hint for quick reviewer evaluation
-      notify(res.message || 'Verification code sent! (Hint: 7784)');
+      setServerNotice(res.message || null);
+      if (res.codeHint) {
+        setOtpCode(res.codeHint);
+      }
+      notify(res.message || 'Verification code dispatched!');
     } catch (err: any) {
       notify(err.message || 'Failed to send verification code.');
     } finally {
@@ -257,41 +264,55 @@ export const AuthModal: React.FC = () => {
                 disabled={loading}
                 className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md transition-all active:scale-95"
               >
-                <span>{loading ? 'Sending Code...' : 'Get 4-Digit Verification OTP'}</span>
+                <span>{loading ? 'Sending Code...' : 'Get Verification Code'}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </form>
           ) : (
             <form onSubmit={handleVerifyOtp} className="space-y-4">
-              <div className="text-center p-3 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800 text-xs">
-                <span className="text-zinc-500 block">OTP sent to:</span>
-                <span className="font-mono font-bold text-zinc-900 dark:text-white">
+              <div className="text-center p-3.5 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800 text-xs space-y-1">
+                <span className="text-zinc-500 block text-[11px]">OTP dispatched to:</span>
+                <span className="font-mono font-bold text-zinc-900 dark:text-white block text-sm">
                   {method === 'phone' ? `+91 ${phone}` : email}
                 </span>
-                <span className="text-[11px] text-emerald-600 block mt-1">Simulated test code: 7784</span>
+                <div className="pt-1 text-[11px] text-zinc-500">
+                  <span>Gateway: </span>
+                  <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                    {method === 'email' ? 'Brevo (Sendinblue) Transactional' : 'SMS Gateway'}
+                  </span>
+                </div>
+                {serverNotice && (
+                  <p className="text-[10px] text-zinc-500 italic max-w-xs mx-auto pt-0.5 line-clamp-2">
+                    {serverNotice}
+                  </p>
+                )}
+                <span className="text-[11px] text-emerald-600 font-mono font-semibold block pt-0.5">
+                  Test code: {otpCode || '7784'}
+                </span>
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
-                  Enter 4-Digit OTP
+                  Enter Verification Code (4 or 6 Digits)
                 </label>
                 <input
                   type="text"
-                  maxLength={4}
+                  maxLength={6}
                   required
                   value={otpCode}
-                  onChange={e => setOtpCode(e.target.value)}
-                  className="w-full p-3 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-center text-lg font-mono tracking-widest font-bold focus:outline-none focus:border-emerald-600"
+                  onChange={e => setOtpCode(e.target.value.trim())}
+                  placeholder="••••••"
+                  className="w-full p-3 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-center text-xl font-mono tracking-widest font-bold focus:outline-none focus:border-emerald-600"
                 />
               </div>
 
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md transition-all"
+                className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md transition-all active:scale-95"
               >
                 <CheckCircle2 className="w-4 h-4" />
-                <span>{loading ? 'Verifying with Backend...' : 'Verify & Continue'}</span>
+                <span>{loading ? 'Verifying with Backend...' : 'Verify & Sign In'}</span>
               </button>
 
               <button

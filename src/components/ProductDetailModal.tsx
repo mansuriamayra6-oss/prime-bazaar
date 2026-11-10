@@ -14,7 +14,9 @@ import {
   MapPin,
   Store,
   Shirt,
-  SlidersHorizontal
+  SlidersHorizontal,
+  MessageSquare,
+  ExternalLink
 } from 'lucide-react';
 
 export const ProductDetailModal: React.FC = () => {
@@ -29,6 +31,8 @@ export const ProductDetailModal: React.FC = () => {
     openTryOn,
     toggleCompare,
     isCompared,
+    openSellerStore,
+    chatWithSeller,
     notify 
   } = useMarketplace();
 
@@ -136,20 +140,55 @@ export const ProductDetailModal: React.FC = () => {
               </div>
             )}
 
-            {/* Seller attribution */}
-            <div className="p-4 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex items-center justify-between text-xs">
-              <div className="flex items-center gap-2">
-                <Store className="w-4 h-4 text-rose-600 shrink-0" />
+            {/* Seller attribution with direct storefront link & chat */}
+            <div className="p-4 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+              <div 
+                className="flex items-center gap-2.5 cursor-pointer group/seller"
+                onClick={() => {
+                  setSelectedProduct(null);
+                  openSellerStore(product.sellerId);
+                }}
+                title="View seller public storefront"
+              >
+                <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-200 dark:border-emerald-800">
+                  <Store className="w-4 h-4" />
+                </div>
                 <div>
-                  <span className="font-semibold text-zinc-900 dark:text-white">{product.sellerName}</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-zinc-900 dark:text-white group-hover/seller:text-emerald-600 transition-colors">
+                      {product.sellerName}
+                    </span>
+                    <ExternalLink className="w-3 h-3 text-zinc-400 group-hover/seller:text-emerald-600" />
+                  </div>
                   <div className="flex items-center gap-1 text-[11px] text-zinc-500">
-                    <span>Verified Seller</span>
+                    <span className="text-emerald-600 font-medium">GST Verified</span>
                     <span>·</span>
                     <span className="text-amber-500 font-semibold">{product.sellerRating}★</span>
                   </div>
                 </div>
               </div>
-              <span className="text-emerald-600 dark:text-emerald-400 font-medium">98% Positive Ratings</span>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedProduct(null);
+                    openSellerStore(product.sellerId);
+                  }}
+                  className="flex-1 sm:flex-initial px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-200 font-medium text-[11px] transition-colors"
+                >
+                  Visit Store
+                </button>
+                <button
+                  type="button"
+                  onClick={() => chatWithSeller(product.sellerId, product)}
+                  className="flex-1 sm:flex-initial px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-[11px] flex items-center justify-center gap-1 shadow-xs transition-colors"
+                  title="Chat directly with vendor"
+                >
+                  <MessageSquare className="w-3.5 h-3.5" />
+                  <span>Chat</span>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -335,10 +374,10 @@ export const ProductDetailModal: React.FC = () => {
                   <SlidersHorizontal className="w-5 h-5" />
                 </button>
                 <button
-                  onClick={() => toggleWishlist(product.id)}
+                  onClick={() => toggleWishlist(product.id, product.title)}
                   className={`p-3.5 rounded-xl border transition-all ${
                     wishlisted
-                      ? 'bg-rose-50 border-rose-300 text-rose-600 dark:bg-rose-950/40 dark:border-rose-900'
+                      ? 'bg-rose-50 border-rose-300 text-rose-600 dark:bg-rose-950/40 dark:border-rose-900 ring-2 ring-rose-500/20'
                       : 'border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800'
                   }`}
                   title={wishlisted ? 'Saved in Wishlist' : 'Add to Wishlist'}

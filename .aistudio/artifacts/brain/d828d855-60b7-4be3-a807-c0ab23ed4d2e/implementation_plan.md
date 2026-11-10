@@ -1,148 +1,88 @@
-# Prime Bazaar: Social Fashion Marketplace (Myntra + Meesho Hybrid)
+# Prime Bazaar Autonomous Seller Panel & Multi-Vendor Architecture
 
-A comprehensive multi-vendor social commerce and fashion marketplace combining Myntra's high-appeal fashion discovery and video feed with Meesho's community reselling, seller management, and transparent multi-vendor admin controls.
-
-### User Review & Critical Decisions
-
-> [!IMPORTANT]
-> The clarifying questions were resolved with recommended industry defaults:
-> - **Marketplace Model**: Hybrid Myntra + Meesho architecture combining editorial fashion curation, interactive video reels shopping, and community reselling/rewards.
-> - **Product Catalog**: Curated fashion, streetwear, ethnic wear, footwear, and lifestyle accessories.
-> - **Switchable Portals**: Three distinct interconnected portals accessible via top workspace role switcher: **Customer Shopping App**, **Seller Merchant Studio**, and **Super Admin Control Center**.
-
-- **Confirmed Decision 1**: Client-side reactive persistence using localStorage for cart, orders, wishlist, seller product listings, and community coins balance.
-- **Confirmed Decision 2**: Interactive video shopping feed ("TrendStream") with direct tap-to-buy overlays, creator tagging, and sound toggles.
-- **Confirmed Decision 3**: Full simulated checkout supporting Cash on Delivery (COD), instant UPI QR simulation, and Card payments with live tracking timeline and GST receipt generation.
+## 1. Overview
+The **Prime Bazaar Seller Panel** enables merchants to autonomously register, upload products, manage live inventory and variants, fulfill orders, print AWB shipping labels and GST invoices, handle returns, withdraw earnings, run promotional coupon campaigns, and resolve buyer tickets without requiring manual administrator intervention for everyday operations.
 
 ---
 
-### 1. Overview & Core Concept
+## 2. Completed Seller Panel Modules (12-Section Architecture)
 
-- **What It Does**: Prime Bazaar delivers a complete end-to-end e-commerce ecosystem. Shoppers browse dynamic campaign banners, filter by categories, brands, sizes, colors, and prices, watch interactive vertical product reels with one-tap bag addition, search visually by photo upload, checkout via realistic multi-step payment flows, and track deliveries. Sellers manage inventory, upload listings, and view commission payouts. Admins oversee order fulfillment, approve vendor catalogs, configure banner campaigns, and manage platform take rates.
-- **Target Audience / Persona**:
-  - *Fashion-Forward Consumers & Budget Shoppers*: Seeking trendy apparel, authentic reviews, video demonstrations, and rewards.
-  - *Independent Sellers & Boutiques*: Managing inventory, pricing, order dispatch, and earnings.
-  - *Marketplace Operators*: Monitoring GMV, return rates, seller compliance, and promotion codes.
-- **Key Value**: Merges the inspiration-driven discovery of modern fashion apps with the pragmatic, low-friction vendor and checkout mechanics of leading social commerce platforms.
+### 1. Dashboard
+- **Live Metrics**: Total Sales GMV, Total Orders, Pending Dispatch count, and Available Settlement Wallet balance.
+- **Action Queue**: Instant order dispatch preview and daily revenue velocity tracking.
 
----
+### 2. Seller Registration (5-Step Autonomous Wizard)
+- **Step 1: Contact Verification**: Mobile phone and email verification with Brevo OTP delivery.
+- **Step 2: Business Details**: Seller name, trade/store name, entity classification (Proprietorship, Partnership, Private Limited, Individual Artisan), and warehouse pickup address with PIN code.
+- **Step 3: Document Verification & Bank Details**: PAN number, GSTIN, bank account number, IFSC code, bank name, and KYC uploads (PAN Card, GSTIN Certificate, Cancelled Cheque).
+- **Step 4: Verification Status**: Instant audit status review.
+- **Step 5: Studio Launcher**: Auto-provisions and opens the merchant's dedicated dashboard with zero friction.
 
-### 2. User Experience & Visual Design
+### 3. Products & Catalog
+- **Upload Form with All 14 Mandatory Fields**:
+  1. Product name
+  2. Category and subcategory
+  3. Product description
+  4. Brand name
+  5. Multiple product images gallery
+  6. Product video (optional stream)
+  7. Size and colour variants
+  8. SKU / product code
+  9. MRP (original price)
+  10. Selling price
+  11. GST / tax slab details (0%, 5%, 12%, 18%, 28%)
+  12. Available stock units
+  13. Weight (grams) and package dimensions ($L \times W \times H\text{ cm}$)
+  14. Return window and warranty policy
+- **Bulk Upload**: Simulated Excel/CSV upload with downloadable CSV sample template and instant validation preview.
+- **Actions**: Edit listing, live status badge, and catalog removal.
 
-#### Key User Flows
-1. **Shopper Discovery & Curation**:
-   - Dynamic campaign hero & category quick-filters (Ethnic, Western, Footwear, Streetwear, Accessories).
-   - Product grid with filter drawer (price slider, brand checklist, rating filter, sort by popularity/price).
-   - Visual search modal with image upload and similarity matching.
-2. **Product Detail Page (PDP) & Interactivity**:
-   - Multi-image gallery with zoom preview and video demonstration.
-   - Size selector with live stock indicators and fit guides.
-   - Color swatch selector with instant imagery swap.
-   - Customer review breakdown, star distribution, and verified buyer badges.
-   - Contiguous sticky purchase module: "Add to Bag", "Wishlist", and "Share & Earn Coins".
-3. **TrendStream (Video Shopping Reels)**:
-   - Full-bleed vertical video feed with swipeable reel cards.
-   - Creator overlay, sound toggle, tagged product drawer, and direct "Add to Cart" button.
-4. **Checkout & Order Lifecycle**:
-   - Cart drawer with promo coupon applicator (`MYNTRA500`, `MEESHO20`).
-   - Delivery address selection with validation.
-   - Payment step with Cash on Delivery (COD), simulated UPI QR scanning, and mock Cards.
-   - Post-order confirmation with downloadable GST invoice and live order tracking stepper (Placed $\to$ Packed $\to$ Shipped $\to$ Out for Delivery).
-5. **Seller Merchant Studio**:
-   - KPI metrics: Total Sales, Active Listings, Pending Orders, Commission Settlements.
-   - Catalog manager: Add new product with photo preview, variants, SKU, price, and stock count.
-   - Order fulfillment manager: Update order status to Packed/Shipped.
-6. **Super Admin Control Center**:
-   - Marketplace health scoreboard: Platform Gross Merchandise Volume (GMV), Seller count, Active orders.
-   - Seller approval queue and catalog moderation.
-   - Coupon and banner promotion manager.
+### 4. Inventory Management
+- **Stock Tracking**: Live stock counts across all catalog SKUs.
+- **Low-Stock Alerts**: Automatic warning banner when inventory falls below 5 units.
+- **Barcode & SKU**: EAN-13 barcode display and product code tracking.
+- **Quick Adjust**: Inline $+$ / $-$ controls for instantaneous stock replenishment.
 
-#### Visual Identity & Theme
-- **Aesthetic Direction**: High-fashion editorial vibrancy balanced with crisp utility. Clean surfaces, refined type hierarchy, and high-impact photography avoid AI-slop tropes while delivering an authentic retail aesthetic.
-- **Color Palette**:
-  - Dominant Neutral: Crisp Chalk Canvas (`#FAFAFA` in light, `#09090B` in dark)
-  - Structural Surfaces: Pure White / Rich Zinc (`#FFFFFF` / `#18181B`) with hairline borders (`#E4E4E7` / `#27272A`)
-  - Accent Color: Vivid Sunset Coral (`#F43F5E`) and Deep Fashion Indigo (`#4F46E5`) for primary CTAs and active states
-  - Strict 60-30-10 distribution; no unboxed pill badges or rainbow chips for static metadata.
-- **Typography & Hierarchy**:
-  - Display Face: `Plus Jakarta Sans` for bold headlines, brand identity, and prices.
-  - Body Face: `DM Sans` for descriptions, specs, and form controls.
-  - Tabular Numerals: Tabular figures on all currency prices (`₹`, `tabular-nums`) and stock counters.
-- **Top Bar Contract**:
-  - Single-line wordmark `Prime Bazaar`
-  - Clean text navigation (`Discover`, `Collections`, `TrendStream Reels`, `Rewards`)
-  - Right action zone: Search trigger, Wishlist counter, Shopping Bag drawer trigger, and Portal Switcher (`Customer` | `Seller` | `Admin`).
+### 5. Orders & Fulfillment
+- **Order Lifecycle**: Accept $\rightarrow$ Pack $\rightarrow$ Dispatch $\rightarrow$ Delivered $\rightarrow$ Cancel.
+- **Status Filtering**: Segmented tabs for *All*, *Placed*, *Packed*, *Shipped*, *Delivered*, and *Cancelled*.
+- **Sync**: Connected to the centralized customer order store and Express backend.
 
----
+### 6. Shipping & Logistics
+- **Courier Integration**: Integrated partners (BlueDart Express Air, Delhivery Surface, Shiprocket).
+- **Shipping Label Generator**: Printable Air Waybill (AWB) modal with routing barcode, POD QR code, Ship To / Ship From addresses, and SKU manifest.
+- **Tax Invoice**: Itemized GST tax invoice with taxable values, CGST/SGST calculations, and COD/Prepaid indicators.
 
-### 3. Key Product Decisions & Trade-Offs
+### 7. Returns & Refunds
+- **Return Requests Queue**: Displays buyer return reasons, item photos, and contact info.
+- **Merchant Actions**: Approve return, dispatch replacement shipment, or issue direct UPI/card refund.
 
-- **Decision 1: Switchable Three-in-One Multi-Vendor Portal System**:
-  - *Chosen Approach*: Embed the Customer App, Seller Merchant Dashboard, and Super Admin Console in a single fluid applet with a persistent role switcher in the header.
-  - *Why*: Allows immediate evaluation and testing of the entire marketplace lifecycle (from adding a product as a seller, to buying it as a customer, to moderating it as an admin) without needing separate deployments.
-  - *Alternatives Considered*: Customer-only view would fail to deliver on the Meesho seller/admin platform requirements specified by the user.
-- **Decision 2: Realistic Seed Catalog with High-Fidelity Fashion Assets**:
-  - *Chosen Approach*: Seed a rich catalog of 16+ realistic fashion, ethnic, and streetwear items across diverse categories, complete with realistic ratings, reviews, color variations, and stock levels.
-  - *Why*: Ensures filters, search, cart, and reviews are deeply testable immediately.
-- **Decision 3: Interactive Video Shopping Feed ("TrendStream")**:
-  - *Chosen Approach*: Custom vertical video player component with simulated high-energy fashion clips, pause/play controls, audio mute/unmute, and floating product purchase cards.
-  - *Why*: Directly delivers the Myntra Glamstream / social commerce feature highlighted in the prompt.
-- **Decision 4: Client-Side Persistent State Engine**:
-  - *Chosen Approach*: LocalStorage-backed reactive state store managing products, custom listings, cart items, wishlisted items, submitted orders, and coins.
-  - *Why*: Instant reactivity, offline stability, zero external setup friction, and fully persistent across page reloads.
+### 8. Payments & Settlements
+- **Earnings Ledger**: Available balance and pending settlements (orders in transit).
+- **Transparent Take Rate**: 12% marketplace commission deduction $+$ 18% GST on commission with net payout preview.
+- **Instant Bank Withdrawal**: Payout modal depositing directly to linked bank account via NEFT.
+
+### 9. Offers & Discounts
+- **Seller Vouchers**: Create percentage or flat discount promotional coupons.
+- **Campaign Controls**: Configure minimum order amounts, maximum discount caps, and toggle active/paused status.
+
+### 10. Analytics & Reports
+- **Sales Intelligence**: Real-time conversion rate (3.82%), average order value (AOV), and customer review ratings (4.9★).
+- **Top SKUs**: Best-selling product leaderboard ranked by gross merchandise value.
+
+### 11. Customer Support & Inquiries
+- **In-App Dispute Desk**: Buyer inquiries categorized by order disputes, sizing questions, and delivery tracking.
+- **Live Response Composer**: Merchant reply thread synced with buyer support messages.
+
+### 12. Store Settings
+- **Storefront Profile**: Brand display name, phone, email, and pickup warehouse address.
+- **Bank Account Configuration**: Linked settlement details and credentials.
 
 ---
 
-### 4. Technical Architecture & Data Strategy
-
-#### Architecture & Component Diagram
-
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│                        Prime Bazaar Application                         │
-│   ┌────────────────────────────────────────────────────────────────┐   │
-│   │ Top Bar: Brand Wordmark · Nav Links · Search · Bag · Role Switch│   │
-│   └───────────────────────────────┬────────────────────────────────┘   │
-│                                   │                                    │
-│       ┌───────────────────────────┼───────────────────────────┐        │
-│       ▼                           ▼                           ▼        │
-│ ┌───────────────┐         ┌───────────────┐           ┌──────────────┐ │
-│ │ Customer View │         │  Seller View  │           │  Admin View  │ │
-│ └───────┬───────┘         └───────┬───────┘           └──────┬───────┘ │
-│         │                         │                          │         │
-│         ├─ Promotional Hero       ├─ Merchant KPI Summary    ├─ GMV    │
-│         ├─ Category Quick Strip   ├─ Product Inventory Grid  ├─ Sellers│
-│         ├─ Product Catalog Grid   ├─ New Listing Creator     ├─ Orders │
-│         ├─ Filter & Sort Sheet    ├─ Orders & Dispatch       └─ Coupons│
-│         ├─ Product Detail Modal   └─ Earnings & Settlements            │
-│         ├─ TrendStream Reels Feed                                      │
-│         ├─ AI Visual Search                                            │
-│         ├─ Shopping Bag Drawer                                         │
-│         ├─ Multi-Step Checkout                                         │
-│         └─ Order Tracking Center                                       │
-│                                                                        │
-│   ┌────────────────────────────────────────────────────────────────┐   │
-│   │        Unified Marketplace State (LocalStorage + React Context)│   │
-│   │   • Products & Variants     • Cart & Quantities                │   │
-│   │   • Wishlist Items          • Completed Orders & Tracking      │   │
-│   │   • Active Coupons          • Community Coins & Wallet Balance │   │
-│   └────────────────────────────────────────────────────────────────┘   │
-└────────────────────────────────────────────────────────────────────────┘
-```
-
-#### Data Entities & State Model
-- **Product**: `id`, `title`, `brand`, `category`, `price`, `originalPrice`, `discountPercent`, `rating`, `reviewCount`, `inStock`, `colors`, `sizes`, `images`, `description`, `sellerId`, `sellerName`, `isTrending`, `isNew`.
-- **Reel**: `id`, `videoUrl`, `creatorName`, `creatorAvatar`, `caption`, `likes`, `productId`, `musicTitle`.
-- **CartItem**: `productId`, `selectedColor`, `selectedSize`, `quantity`.
-- **Order**: `id`, `items`, `totalAmount`, `discountAmount`, `shippingAddress`, `paymentMethod`, `status` (`Placed` | `Packed` | `Shipped` | `Delivered`), `trackingSteps`, `createdAt`.
-- **Seller**: `id`, `name`, `rating`, `totalSales`, `joinedDate`, `verified`.
-
-#### Interactive Component & State Mapping
-- `App.tsx`: Root coordinator handling active portal state (`customer`, `seller`, `admin`), global notification toasts, and theme context.
-- `CustomerPortal.tsx`: Home feed, hero carousel, product catalog, category filters, and quick view.
-- `ProductDetailModal.tsx`: Comprehensive PDP view with image thumbnail switcher, size selector with stock warnings, customer reviews, and contiguous "Add to Bag" action.
-- `TrendStreamModal.tsx`: Vertical video player with creator badges, like button, and live "Shop This Look" pill drawer.
-- `CartDrawer.tsx` & `CheckoutModal.tsx`: Slide-over cart calculation, promo code validation (`MYNTRA500`, `MEESHO20`), address form, and payment selector with simulated instant success.
-- `VisualSearchModal.tsx`: Camera/file upload interface analyzing image color/style to recommend matching apparel items.
-- `SellerDashboard.tsx`: Merchant studio with catalog table, "Add Product" drawer with form validation, and order fulfillment actions.
-- `AdminDashboard.tsx`: High-level metrics, seller verification toggles, and commission rate configuration.
+## 3. Super Admin Controls & Sync
+- **Seller Directory Audit**: Approve, reject, or suspend seller accounts; inspect KYC dossiers (PAN, GSTIN, bank details).
+- **Catalog Moderation**: Super admin quality audit over seller listings.
+- **Payout Management**: 1-click NEFT payout approvals and reference code generation.
+- **Platform Commission Control**: Adjustable marketplace commission rate (2%–20%) and free delivery thresholds.
+- **Unified State**: Customer app, seller studio, and admin panel operate on the same persistent database and REST backend.

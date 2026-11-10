@@ -27,6 +27,7 @@ export const Header: React.FC = () => {
     setActivePortal,
     cart,
     wishlist,
+    openWishlist,
     coins,
     setIsCartOpen,
     setIsReelsOpen,
@@ -41,6 +42,9 @@ export const Header: React.FC = () => {
     setIsProfileOpen,
     setIsAuthOpen,
     setIsOnboardingOpen,
+    setIsLiveShoppingOpen,
+    setIsLaunchChecklistOpen,
+    openSellerStore,
     user,
     searchQuery,
     setSearchQuery,
@@ -50,54 +54,17 @@ export const Header: React.FC = () => {
     language
   } = useMarketplace();
 
+
   const totalCartItems = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 dark:bg-zinc-950/95 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800 transition-colors">
-      {/* Top micro announcement */}
-      <div className="bg-zinc-900 dark:bg-zinc-900 text-white text-xs py-1.5 px-4 text-center flex items-center justify-between gap-3">
-        <div className="hidden lg:flex items-center gap-2 text-[11px] text-zinc-400">
-          <button onClick={() => setIsOnboardingOpen(true)} className="hover:text-white flex items-center gap-1">
-            <Globe className="w-3 h-3" />
-            <span className="uppercase">{language} · {currency}</span>
-          </button>
-        </div>
-
-        <div className="flex-1 text-center">
-          <span className="font-medium tracking-wide">FESTIVE MEGA SALE: Up to 60% Off + Extra 20% with code MEESHO20</span>
-          <span className="hidden sm:inline text-zinc-400 mx-2">·</span>
-          <span className="hidden sm:inline text-zinc-300">Free Express Delivery on orders above ₹999</span>
-        </div>
-
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            onClick={() => setIsArchitectureOpen(true)}
-            className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-indigo-500/25 text-indigo-300 hover:bg-indigo-500/35 font-mono text-[10px] font-bold border border-indigo-400/40 transition-colors"
-            title="Inspect System Architecture, PostgreSQL ERD & API Spec"
-          >
-            <Database className="w-3 h-3 text-indigo-400" />
-            <span className="hidden sm:inline">Architecture & DB</span>
-            <span className="sm:hidden">ERD</span>
-          </button>
-
-          <button
-            onClick={() => setIsBlueprintOpen(true)}
-            className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 font-mono text-[10px] font-bold border border-emerald-500/40 transition-colors"
-            title="Inspect Complete 58-Feature SRS Architecture"
-          >
-            <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-            <span className="hidden sm:inline">SRS Blueprint (58/58)</span>
-            <span className="sm:hidden">58/58</span>
-          </button>
-        </div>
-      </div>
-
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4 md:gap-8">
-        {/* Zone 1: Brand Logo */}
-        <div className="flex items-center gap-3 shrink-0">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-3 sm:gap-6">
+        {/* Zone 1: Brand Logo & Search Bar near Logo */}
+        <div className="flex items-center gap-2 sm:gap-3 flex-1 max-w-xl">
           <button
             onClick={() => setActivePortal('customer')}
-            className="text-left group flex items-center focus:outline-none transition-transform active:scale-98"
+            className="text-left group flex items-center focus:outline-none transition-transform active:scale-98 shrink-0"
             aria-label="Prime Bazaar Home"
           >
             <div className="h-11 sm:h-12 px-2 py-1 rounded-xl bg-white border border-zinc-200/90 shadow-xs flex items-center justify-center">
@@ -108,25 +75,61 @@ export const Header: React.FC = () => {
               />
             </div>
           </button>
+
+          {/* Search bar directly beside the logo */}
+          {activePortal === 'customer' && (
+            <div className="relative flex-1 max-w-xs sm:max-w-sm md:max-w-md flex items-center">
+              <Search className="w-4 h-4 text-zinc-400 absolute left-3 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Search kurti, jacket, sneakers..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-9 py-2 text-xs bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-xl border border-zinc-200/80 dark:border-zinc-700/80 focus:border-emerald-500 dark:focus:border-emerald-500 focus:outline-none transition-all shadow-2xs font-medium placeholder:text-zinc-400"
+              />
+              <button
+                onClick={() => setIsVisualSearchOpen(true)}
+                title="Search by image (AI visual match)"
+                className="absolute right-2.5 p-1 text-zinc-400 hover:text-emerald-600 transition-colors"
+              >
+                <Camera className="w-4 h-4" />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Zone 2: Navigation Links */}
-        <nav className="hidden lg:flex items-center gap-6 text-sm font-medium text-zinc-600 dark:text-zinc-300">
+        <nav className="hidden xl:flex items-center gap-4 text-xs font-semibold text-zinc-600 dark:text-zinc-300">
           <button
             onClick={() => setActivePortal('customer')}
             className={`whitespace-nowrap transition-colors hover:text-rose-600 ${
-              activePortal === 'customer' ? 'text-rose-600 font-semibold' : ''
+              activePortal === 'customer' ? 'text-rose-600 font-bold' : ''
             }`}
           >
             Discover
           </button>
           <button
+            onClick={() => setIsLiveShoppingOpen(true)}
+            className="flex items-center gap-1.5 whitespace-nowrap transition-colors text-rose-600 font-bold hover:text-rose-700"
+          >
+            <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>
+            <span>Live Shopping</span>
+          </button>
+          <button
+            onClick={() => openSellerStore('seller-1')}
+            className="flex items-center gap-1.5 whitespace-nowrap transition-colors hover:text-emerald-600"
+          >
+            <Store className="w-3.5 h-3.5 text-emerald-600" />
+            <span>Stores</span>
+          </button>
+          <button
             onClick={() => setIsReelsOpen(true)}
-            className="flex items-center gap-1.5 whitespace-nowrap transition-colors hover:text-rose-600 text-rose-600 font-medium"
+            className="flex items-center gap-1.5 whitespace-nowrap transition-colors hover:text-rose-600"
           >
             <Play className="w-3.5 h-3.5 fill-current" />
-            <span>TrendStream Reels</span>
+            <span>Reels</span>
           </button>
+
           <button
             onClick={() => setIsCompareOpen(true)}
             className="flex items-center gap-1.5 whitespace-nowrap transition-colors hover:text-indigo-600"
@@ -139,67 +142,40 @@ export const Header: React.FC = () => {
             onClick={() => setIsRewardsOpen(true)}
             className="flex items-center gap-1.5 whitespace-nowrap transition-colors hover:text-amber-500"
           >
-            <Coins className="w-4 h-4 text-amber-500" />
+            <Coins className="w-3.5 h-3.5 text-amber-500" />
             <span>Coins ({coins})</span>
           </button>
           <button
             onClick={() => setIsOrdersOpen(true)}
             className="flex items-center gap-1.5 whitespace-nowrap transition-colors hover:text-zinc-900 dark:hover:text-white"
           >
-            <Package className="w-4 h-4" />
+            <Package className="w-3.5 h-3.5" />
             <span>Track Orders</span>
           </button>
+
           <button
-            onClick={() => setIsSupportOpen(true)}
-            className="flex items-center gap-1.5 whitespace-nowrap transition-colors hover:text-rose-600"
-            title="Live AI Support"
+            onClick={() => setIsLaunchChecklistOpen(true)}
+            className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 font-mono text-[10px] font-bold border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 transition-colors"
+            title="Section 12: 20/20 Acceptance Verification"
           >
-            <Headphones className="w-4 h-4" />
-            <span>24/7 Help</span>
+            <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+            <span>20/20</span>
           </button>
         </nav>
 
-        {/* Zone 3: Search, Bag, Profile, Portals */}
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-          {/* Search bar & Visual Search trigger */}
-          {activePortal === 'customer' && (
-            <div className="relative hidden md:flex items-center">
-              <input
-                type="text"
-                placeholder="Search kurti, jacket, sneakers..."
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                className="w-40 xl:w-56 pl-8 pr-8 py-1.5 text-xs bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-lg border border-transparent focus:border-zinc-300 dark:focus:border-zinc-700 focus:outline-none transition-all"
-              />
-              <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-2.5 pointer-events-none" />
-              <button
-                onClick={() => setIsVisualSearchOpen(true)}
-                title="Search by image (AI visual match)"
-                className="absolute right-2 p-1 text-zinc-400 hover:text-rose-600 transition-colors"
-              >
-                <Camera className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          )}
-
-          {/* Visual search button on mobile */}
-          <button
-            onClick={() => setIsVisualSearchOpen(true)}
-            title="AI Visual Search"
-            className="md:hidden p-2 text-zinc-600 dark:text-zinc-300 hover:text-rose-600 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-          >
-            <Camera className="w-4 h-4" />
-          </button>
+        {/* Zone 3: Bag, Wishlist, Profile, Portals */}
+        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
 
           {/* Wishlist count */}
           <button
-            onClick={() => setActivePortal('customer')}
-            title="Wishlist"
+            onClick={() => openWishlist()}
+            title="View Saved Wishlist"
+            aria-label={`Wishlist (${wishlist.length} saved)`}
             className="relative p-2 text-zinc-600 dark:text-zinc-300 hover:text-rose-600 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
           >
-            <Heart className="w-4 h-4" />
+            <Heart className={`w-4 h-4 ${wishlist.length > 0 ? 'text-rose-600' : ''}`} />
             {wishlist.length > 0 && (
-              <span className="absolute top-1 right-1 w-4 h-4 rounded-full bg-rose-600 text-white text-[10px] font-bold flex items-center justify-center">
+              <span className="absolute top-1 right-1 w-4 h-4 rounded-full bg-rose-600 text-white text-[10px] font-bold flex items-center justify-center animate-scale-up">
                 {wishlist.length}
               </span>
             )}

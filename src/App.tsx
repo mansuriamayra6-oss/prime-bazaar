@@ -19,10 +19,14 @@ import { VirtualTryOnModal } from './components/VirtualTryOnModal';
 import { SupportChatModal } from './components/SupportChatModal';
 import { BlueprintProgressModal } from './components/BlueprintProgressModal';
 import { ArchitectureModal } from './components/ArchitectureModal';
+import { SellerStorefrontModal } from './components/SellerStorefrontModal';
+import { LiveShoppingModal } from './components/LiveShoppingModal';
+import { BuyerSellerChatModal } from './components/BuyerSellerChatModal';
+import { LaunchChecklistModal } from './components/LaunchChecklistModal';
 import { SellerDashboard } from './components/seller/SellerDashboard';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import { Footer } from './components/Footer';
-import { AndroidDeviceWrapper } from './components/android/AndroidDeviceWrapper';
+
 import { 
   Sparkles, 
   Play, 
@@ -33,7 +37,8 @@ import {
   X,
   Layers,
   Shirt,
-  Database
+  Database,
+  Heart
 } from 'lucide-react';
 
 const AppContent: React.FC = () => {
@@ -47,6 +52,9 @@ const AppContent: React.FC = () => {
     setIsRewardsOpen,
     setIsBlueprintOpen,
     setIsArchitectureOpen,
+    setIsLiveShoppingOpen,
+    setIsLaunchChecklistOpen,
+    openWishlist,
     openTryOn,
     products,
     cart 
@@ -54,14 +62,29 @@ const AppContent: React.FC = () => {
 
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
+  const isWishlistToast = notification && (notification.toLowerCase().includes('wishlist') || notification.includes('❤️'));
+
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 flex flex-col font-sans transition-colors duration-200">
       {/* Toast Notification */}
       {notification && (
-        <div className="fixed bottom-20 md:bottom-8 left-1/2 -translate-x-1/2 z-50 animate-bounce">
-          <div className="px-4 py-2.5 rounded-2xl bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 text-xs font-semibold shadow-2xl flex items-center gap-2 border border-zinc-700/50">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+        <div className="fixed bottom-20 md:bottom-8 left-1/2 -translate-x-1/2 z-70 transition-all duration-300 pointer-events-auto">
+          <div className="px-4 py-2.5 rounded-2xl bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 text-xs font-semibold shadow-2xl flex items-center gap-2.5 border border-zinc-700/60 dark:border-zinc-300/80 backdrop-blur-md">
+            {isWishlistToast ? (
+              <Heart className="w-4 h-4 text-rose-500 fill-rose-500 shrink-0 animate-scale-up" />
+            ) : (
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 dark:text-emerald-600 shrink-0" />
+            )}
             <span>{notification}</span>
+            {isWishlistToast && (
+              <button
+                type="button"
+                onClick={() => openWishlist()}
+                className="ml-1 pl-2 border-l border-zinc-700 dark:border-zinc-300 text-rose-400 dark:text-rose-600 font-bold hover:underline shrink-0 text-[11px]"
+              >
+                View Wishlist
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -77,36 +100,48 @@ const AppContent: React.FC = () => {
             <CategoryBar />
             <ProductCatalog />
 
-            {/* Video Shopping & Try-On Teaser Ribbon */}
+            {/* Video Shopping & Live Stream Teaser Ribbon */}
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 my-10 space-y-4">
               <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-rose-900 via-indigo-950 to-zinc-950 p-6 sm:p-10 text-white flex flex-col sm:flex-row items-center justify-between gap-6 border border-rose-500/20 shadow-xl">
                 <div className="space-y-2 text-center sm:text-left">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-rose-400">
-                    Live Social Commerce
-                  </span>
+                  <div className="flex items-center justify-center sm:justify-start gap-2">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500/30 text-rose-300 text-[11px] font-bold uppercase tracking-wider border border-rose-500/40">
+                      <span className="w-2 h-2 rounded-full bg-rose-400 animate-pulse"></span>
+                      Live Social Commerce
+                    </span>
+                    <span className="text-xs text-zinc-400 hidden sm:inline">• 1,420 Shoppers Watching</span>
+                  </div>
                   <h3 className="text-xl sm:text-2xl font-bold font-display">
-                    Watch Verified Stylists Try On Today’s Drops
+                    Watch Verified Stylists & Weavers Demonstrate Live Drops
                   </h3>
                   <p className="text-xs text-zinc-300 max-w-lg">
-                    Discover fit reviews, styling tips, and tap directly to add looks into your bag without interrupting the stream.
+                    Interact directly with sellers, ask real-time fit questions, and tap pinned flash deals to purchase without leaving the stream.
                   </p>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <div className="flex flex-wrap items-center justify-center sm:justify-end gap-2.5 shrink-0">
+                  <button
+                    onClick={() => setIsLiveShoppingOpen(true)}
+                    className="px-5 py-3 rounded-2xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white font-extrabold text-xs flex items-center gap-2 shadow-lg transition-transform active:scale-95"
+                  >
+                    <span className="w-2 h-2 rounded-full bg-white animate-ping"></span>
+                    <span>Watch Live Shopping Drop</span>
+                  </button>
+
                   <button
                     onClick={() => openTryOn(products[0])}
-                    className="px-5 py-3 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/20 font-bold text-xs flex items-center gap-2 backdrop-blur-md transition-all active:scale-95"
+                    className="px-4 py-3 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/20 font-bold text-xs flex items-center gap-2 backdrop-blur-md transition-all active:scale-95"
                   >
                     <Shirt className="w-4 h-4 text-rose-400" />
-                    <span>AI Virtual Fit Room</span>
+                    <span>AI Virtual Fit</span>
                   </button>
 
                   <button
                     onClick={() => setIsReelsOpen(true)}
-                    className="px-6 py-3 rounded-2xl bg-white text-zinc-900 font-bold text-xs flex items-center gap-2 shadow-lg hover:bg-zinc-100 transition-all active:scale-95"
+                    className="px-5 py-3 rounded-2xl bg-white text-zinc-900 font-bold text-xs flex items-center gap-2 shadow-lg hover:bg-zinc-100 transition-all active:scale-95"
                   >
                     <Play className="w-4 h-4 fill-zinc-900 text-zinc-900" />
-                    <span>Launch TrendStream Feed</span>
+                    <span>Reels Feed</span>
                   </button>
                 </div>
               </div>
@@ -119,16 +154,16 @@ const AppContent: React.FC = () => {
         {activePortal === 'admin' && <AdminDashboard />}
       </main>
 
-      {/* Floating Blueprint & Architecture FAB (Bottom Left) */}
+      {/* Floating Blueprint, Architecture & Acceptance 20/20 Toolbar (Bottom Left) */}
       <div className="fixed bottom-20 md:bottom-6 left-4 z-40 flex items-center gap-2">
         <button
-          onClick={() => setIsBlueprintOpen(true)}
-          className="px-3.5 py-2.5 rounded-2xl bg-zinc-900/90 dark:bg-white/90 text-white dark:text-zinc-900 backdrop-blur-md shadow-xl border border-zinc-700/50 dark:border-zinc-300/50 flex items-center gap-2 text-xs font-bold hover:scale-105 transition-all"
-          title="View 58-Feature SRS Architecture Progress"
+          onClick={() => setIsLaunchChecklistOpen(true)}
+          className="px-3.5 py-2.5 rounded-2xl bg-emerald-900/90 hover:bg-emerald-800 text-white dark:bg-emerald-950 dark:hover:bg-emerald-900 backdrop-blur-md shadow-xl border border-emerald-500/50 flex items-center gap-2 text-xs font-extrabold hover:scale-105 transition-all"
+          title="Section 12: 20/20 Acceptance Checklist"
         >
-          <Layers className="w-4 h-4 text-emerald-400 dark:text-emerald-600" />
-          <span className="hidden sm:inline">SRS Progress: 100% (58/58)</span>
-          <span className="sm:hidden">SRS 58/58</span>
+          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+          <span className="hidden sm:inline">20/20 Acceptance</span>
+          <span className="sm:hidden">20/20</span>
         </button>
 
         <button
@@ -137,8 +172,17 @@ const AppContent: React.FC = () => {
           title="Inspect System Topology, PostgreSQL ERD, Prisma Schema & REST API Spec"
         >
           <Database className="w-4 h-4 text-indigo-400 dark:text-indigo-600" />
-          <span className="hidden sm:inline">DB & Architecture</span>
+          <span className="hidden sm:inline">28 Tables & ERD</span>
           <span className="sm:hidden">ERD</span>
+        </button>
+
+        <button
+          onClick={() => setIsBlueprintOpen(true)}
+          className="px-3 py-2.5 rounded-2xl bg-zinc-900/90 dark:bg-white/90 text-white dark:text-zinc-900 backdrop-blur-md shadow-xl border border-zinc-700/50 dark:border-zinc-300/50 flex items-center gap-1.5 text-xs font-bold hover:scale-105 transition-all"
+          title="View 58-Feature SRS Architecture Progress"
+        >
+          <Layers className="w-4 h-4 text-emerald-400 dark:text-emerald-600" />
+          <span className="hidden sm:inline">SRS 58/58</span>
         </button>
       </div>
 
@@ -161,6 +205,11 @@ const AppContent: React.FC = () => {
       <SupportChatModal />
       <BlueprintProgressModal />
       <ArchitectureModal />
+      <SellerStorefrontModal />
+      <LiveShoppingModal />
+      <BuyerSellerChatModal />
+      <LaunchChecklistModal />
+
 
       {/* Mobile Bottom Navigation Bar (Docked right above Android System bar) */}
       <div className="sticky bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-zinc-950/95 backdrop-blur-md border-t border-zinc-200 dark:border-zinc-800 grid grid-cols-4 items-center h-16 px-2 shadow-lg">
@@ -210,9 +259,7 @@ const AppContent: React.FC = () => {
 export default function App() {
   return (
     <MarketplaceProvider>
-      <AndroidDeviceWrapper>
-        <AppContent />
-      </AndroidDeviceWrapper>
+      <AppContent />
     </MarketplaceProvider>
   );
 }

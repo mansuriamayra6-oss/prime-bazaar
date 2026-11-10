@@ -1,21 +1,26 @@
 import React, { useState, useMemo } from 'react';
 import { useMarketplace } from '../context/MarketplaceContext';
 import { ProductCard } from './ProductCard';
-import { SlidersHorizontal, ArrowUpDown, X, RotateCcw } from 'lucide-react';
+import { SlidersHorizontal, ArrowUpDown, X, RotateCcw, Heart } from 'lucide-react';
 
 export const ProductCatalog: React.FC = () => {
-  const { products, selectedCategory, searchQuery, setSearchQuery } = useMarketplace();
+  const { products, selectedCategory, searchQuery, setSearchQuery, wishlist } = useMarketplace();
 
   // Local filter states
   const [sortBy, setSortBy] = useState<'trending' | 'price-low' | 'price-high' | 'rating'>('trending');
   const [maxPrice, setMaxPrice] = useState<number>(5000);
   const [minRating, setMinRating] = useState<number>(0);
   const [codOnly, setCodOnly] = useState<boolean>(false);
+  const [showWishlistOnly, setShowWishlistOnly] = useState<boolean>(false);
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState<boolean>(false);
 
   // Filtered and sorted products
   const filteredProducts = useMemo(() => {
     return products.filter(p => {
+      // Wishlist only filter
+      if (showWishlistOnly && !wishlist.includes(p.id)) {
+        return false;
+      }
       // Category filter
       if (selectedCategory !== 'all' && p.category !== selectedCategory) {
         return false;
@@ -50,14 +55,15 @@ export const ProductCatalog: React.FC = () => {
       // Default trending
       return (b.isTrending ? 1 : 0) - (a.isTrending ? 1 : 0);
     });
-  }, [products, selectedCategory, searchQuery, maxPrice, minRating, codOnly, sortBy]);
+  }, [products, selectedCategory, searchQuery, maxPrice, minRating, codOnly, sortBy, showWishlistOnly, wishlist]);
 
-  const activeFiltersCount = (maxPrice < 5000 ? 1 : 0) + (minRating > 0 ? 1 : 0) + (codOnly ? 1 : 0);
+  const activeFiltersCount = (maxPrice < 5000 ? 1 : 0) + (minRating > 0 ? 1 : 0) + (codOnly ? 1 : 0) + (showWishlistOnly ? 1 : 0);
 
   const resetFilters = () => {
     setMaxPrice(5000);
     setMinRating(0);
     setCodOnly(false);
+    setShowWishlistOnly(false);
     setSortBy('trending');
     setSearchQuery('');
   };
@@ -68,16 +74,43 @@ export const ProductCatalog: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-zinc-200 dark:border-zinc-800">
         <div>
           <h2 className="text-xl font-bold tracking-tight text-zinc-900 dark:text-white font-display">
-            {selectedCategory === 'all' ? 'All Collections' : `${selectedCategory.toUpperCase()} DROP`}
+            {showWishlistOnly 
+              ? 'Saved in Wishlist' 
+              : selectedCategory === 'all' 
+                ? 'All Collections' 
+                : `${selectedCategory.toUpperCase()} DROP`}
           </h2>
           <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-            Showing <span className="font-semibold text-zinc-900 dark:text-white">{filteredProducts.length}</span> curated styles
+            Showing <span className="font-semibold text-zinc-900 dark:text-white">{filteredProducts.length}</span> {showWishlistOnly ? 'saved wishlist items' : 'curated styles'}
             {searchQuery && <span> for &ldquo;{searchQuery}&rdquo;</span>}
           </p>
         </div>
 
         {/* Filter and Sort triggers */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+          {/* Wishlist quick toggle */}
+          <button
+            onClick={() => setShowWishlistOnly(!showWishlistOnly)}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold border transition-all active:scale-95 ${
+              showWishlistOnly
+                ? 'bg-rose-50 text-rose-700 border-rose-300 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900 shadow-xs ring-1 ring-rose-500/20'
+                : 'bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 border-zinc-300 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800'
+            }`}
+            title="Filter to Saved Wishlist items"
+          >
+            <Heart className={`w-3.5 h-3.5 ${showWishlistOnly ? 'fill-rose-600 text-rose-600' : 'text-zinc-500'}`} />
+            <span>Wishlist</span>
+            {wishlist.length > 0 && (
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                showWishlistOnly 
+                  ? 'bg-rose-600 text-white' 
+                  : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300'
+              }`}>
+                {wishlist.length}
+              </span>
+            )}
+          </button>
+
           {/* Filter button */}
           <button
             onClick={() => setIsFilterDrawerOpen(!isFilterDrawerOpen)}
