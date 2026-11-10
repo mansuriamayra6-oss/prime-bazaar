@@ -3,7 +3,7 @@ import { useMarketplace } from '../context/MarketplaceContext';
 import { ShieldCheck, Truck, RotateCcw, Heart, Sparkles } from 'lucide-react';
 
 export const Footer: React.FC = () => {
-  const { setActivePortal, setIsReelsOpen, setIsOrdersOpen, setIsRewardsOpen } = useMarketplace();
+  const { setActivePortal, setIsReelsOpen, setIsOrdersOpen, setIsRewardsOpen, openMerchantAuth } = useMarketplace();
 
   return (
     <footer className="mt-20 border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-600 dark:text-zinc-400 text-xs">
@@ -67,8 +67,8 @@ export const Footer: React.FC = () => {
                 </button>
               </li>
               <li>
-                <button onClick={() => setActivePortal('seller')} className="hover:text-rose-600">
-                  Merchant Seller Studio
+                <button onClick={() => openMerchantAuth('login')} className="hover:text-emerald-600 font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                  <span>Merchant Partner (Login / Sign Up)</span>
                 </button>
               </li>
               <li>

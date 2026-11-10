@@ -23,6 +23,7 @@ import { SellerStorefrontModal } from './components/SellerStorefrontModal';
 import { LiveShoppingModal } from './components/LiveShoppingModal';
 import { BuyerSellerChatModal } from './components/BuyerSellerChatModal';
 import { LaunchChecklistModal } from './components/LaunchChecklistModal';
+import { MerchantPartnerModal } from './components/seller/MerchantPartnerModal';
 import { SellerDashboard } from './components/seller/SellerDashboard';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import { Footer } from './components/Footer';
@@ -209,6 +210,7 @@ const AppContent: React.FC = () => {
       <LiveShoppingModal />
       <BuyerSellerChatModal />
       <LaunchChecklistModal />
+      <MerchantPartnerModal />
 
 
       {/* Mobile Bottom Navigation Bar (Docked right above Android System bar) */}

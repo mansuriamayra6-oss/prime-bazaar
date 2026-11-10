@@ -18,7 +18,8 @@ import {
   SlidersHorizontal,
   CheckCircle2,
   Globe,
-  Database
+  Database,
+  Building2
 } from 'lucide-react';
 
 export const Header: React.FC = () => {
@@ -45,6 +46,7 @@ export const Header: React.FC = () => {
     setIsLiveShoppingOpen,
     setIsLaunchChecklistOpen,
     openSellerStore,
+    openMerchantAuth,
     user,
     searchQuery,
     setSearchQuery,
@@ -219,6 +221,17 @@ export const Header: React.FC = () => {
             <span className="hidden sm:inline">
               {user?.isLoggedIn ? user.name.split(' ')[0] : 'Sign In'}
             </span>
+          </button>
+
+          {/* Merchant Partner Login / Sign Up Button */}
+          <button
+            onClick={() => openMerchantAuth('login')}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-sm shadow-emerald-600/25 active:scale-95 transition-all shrink-0"
+            title="Merchant Partner - Login or Register as Seller"
+          >
+            <Building2 className="w-3.5 h-3.5 shrink-0" />
+            <span className="hidden md:inline">Merchant Partner</span>
+            <span className="md:hidden">Partner</span>
           </button>
 
           {/* Theme Switcher */}

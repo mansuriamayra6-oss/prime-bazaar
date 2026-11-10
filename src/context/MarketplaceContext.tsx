@@ -208,6 +208,13 @@ interface MarketplaceContextType {
   // Launch Readiness Checklist (Section 12 20/20)
   isLaunchChecklistOpen: boolean;
   setIsLaunchChecklistOpen: (open: boolean) => void;
+
+  // Merchant Partner Authentication (Login & Signup)
+  isMerchantAuthOpen: boolean;
+  setIsMerchantAuthOpen: (open: boolean) => void;
+  merchantAuthMode: 'login' | 'signup';
+  setMerchantAuthMode: (mode: 'login' | 'signup') => void;
+  openMerchantAuth: (mode?: 'login' | 'signup') => void;
 }
 
 
@@ -603,6 +610,14 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   // Launch Readiness Checklist
   const [isLaunchChecklistOpen, setIsLaunchChecklistOpen] = useState(false);
+
+  // Merchant Partner Authentication (Login & Signup)
+  const [isMerchantAuthOpen, setIsMerchantAuthOpen] = useState(false);
+  const [merchantAuthMode, setMerchantAuthMode] = useState<'login' | 'signup'>('login');
+  const openMerchantAuth = (mode: 'login' | 'signup' = 'login') => {
+    setMerchantAuthMode(mode);
+    setIsMerchantAuthOpen(true);
+  };
 
 
   // Blueprint features list
@@ -1349,7 +1364,13 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
         chatProductContext,
         chatWithSeller,
         isLaunchChecklistOpen,
-        setIsLaunchChecklistOpen
+        setIsLaunchChecklistOpen,
+
+        isMerchantAuthOpen,
+        setIsMerchantAuthOpen,
+        merchantAuthMode,
+        setMerchantAuthMode,
+        openMerchantAuth
       }}
     >
       {children}

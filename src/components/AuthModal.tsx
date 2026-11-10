@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { useMarketplace } from '../context/MarketplaceContext';
 import { api } from '../services/api';
-import { X, Phone, Mail, Sparkles, CheckCircle2, ArrowRight, ShieldCheck, KeyRound, UserCheck } from 'lucide-react';
+import { X, Phone, Mail, Sparkles, CheckCircle2, ArrowRight, ShieldCheck, KeyRound, UserCheck, Building2 } from 'lucide-react';
 
 export const AuthModal: React.FC = () => {
-  const { isAuthOpen, setIsAuthOpen, loginUser, notify } = useMarketplace();
+  const { isAuthOpen, setIsAuthOpen, loginUser, openMerchantAuth, notify } = useMarketplace();
 
   const [authMode, setAuthMode] = useState<'otp' | 'password'>('otp');
   const [method, setMethod] = useState<'phone' | 'email'>('phone');
@@ -374,6 +374,27 @@ export const AuthModal: React.FC = () => {
             </button>
           </form>
         )}
+
+        {/* Merchant Partner Gateway */}
+        <div className="mt-4 p-3.5 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/80 flex items-center justify-between text-xs">
+          <div>
+            <div className="flex items-center gap-1.5 font-bold text-zinc-900 dark:text-white">
+              <Building2 className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Are you a Merchant / Seller?</span>
+            </div>
+            <p className="text-[11px] text-zinc-500 mt-0.5">Sell fashion & lifestyle across India with 0% listing fee.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setIsAuthOpen(false);
+              openMerchantAuth('login');
+            }}
+            className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shrink-0 shadow-xs transition-colors"
+          >
+            Merchant Partner
+          </button>
+        </div>
 
         <div className="mt-4 pt-3 border-t border-zinc-200 dark:border-zinc-800 text-center">
           <div className="flex items-center justify-center gap-1.5 text-[11px] text-zinc-400">
