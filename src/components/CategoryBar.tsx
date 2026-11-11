@@ -15,12 +15,12 @@ export const CategoryBar: React.FC = () => {
   const { selectedCategory, setSelectedCategory, products } = useMarketplace();
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 my-6">
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-lg font-bold tracking-tight text-zinc-900 dark:text-white font-display">
+    <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 my-2 sm:my-3">
+      <div className="flex items-center justify-between mb-2 sm:mb-2.5">
+        <h2 className="text-base sm:text-lg font-bold tracking-tight text-zinc-900 dark:text-white font-display">
           Curated Category Departments
         </h2>
-        <span className="text-xs text-zinc-500 dark:text-zinc-400">
+        <span className="text-[11px] sm:text-xs text-zinc-500 dark:text-zinc-400">
           {products.length} live styles ready to ship
         </span>
       </div>

@@ -39,7 +39,8 @@ import {
   Layers,
   Shirt,
   Database,
-  Heart
+  Heart,
+  User
 } from 'lucide-react';
 
 const AppContent: React.FC = () => {
@@ -57,6 +58,10 @@ const AppContent: React.FC = () => {
     setIsLaunchChecklistOpen,
     openWishlist,
     openTryOn,
+    setIsProfileOpen,
+    setIsAuthOpen,
+    user,
+    wishlist,
     products,
     cart 
   } = useMarketplace();
@@ -94,7 +99,7 @@ const AppContent: React.FC = () => {
       <Header />
 
       {/* Main View Router */}
-      <main className="flex-1 pb-16 md:pb-0">
+      <main className="flex-1 pb-20 md:pb-8">
         {activePortal === 'customer' && (
           <div>
             <HeroBanner />
@@ -155,8 +160,8 @@ const AppContent: React.FC = () => {
         {activePortal === 'admin' && <AdminDashboard />}
       </main>
 
-      {/* Floating Blueprint, Architecture & Acceptance 20/20 Toolbar (Bottom Left) */}
-      <div className="fixed bottom-20 md:bottom-6 left-4 z-40 flex items-center gap-2">
+      {/* Floating Blueprint, Architecture & Acceptance 20/20 Toolbar (Tablet & Desktop only) */}
+      <div className="fixed bottom-6 left-4 z-40 hidden sm:flex items-center gap-2">
         <button
           onClick={() => setIsLaunchChecklistOpen(true)}
           className="px-3.5 py-2.5 rounded-2xl bg-emerald-900/90 hover:bg-emerald-800 text-white dark:bg-emerald-950 dark:hover:bg-emerald-900 backdrop-blur-md shadow-xl border border-emerald-500/50 flex items-center gap-2 text-xs font-extrabold hover:scale-105 transition-all"
@@ -213,12 +218,17 @@ const AppContent: React.FC = () => {
       <MerchantPartnerModal />
 
 
-      {/* Mobile Bottom Navigation Bar (Docked right above Android System bar) */}
-      <div className="sticky bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-zinc-950/95 backdrop-blur-md border-t border-zinc-200 dark:border-zinc-800 grid grid-cols-4 items-center h-16 px-2 shadow-lg">
+      {/* Native Mobile Bottom App Navigation Bar (Phone viewport only, auto-hides on PC/Tablet) */}
+      <nav 
+        aria-label="Mobile Bottom App Bar"
+        className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-zinc-950/95 backdrop-blur-lg border-t border-zinc-200 dark:border-zinc-800 grid grid-cols-5 items-center h-16 px-1 shadow-[0_-4px_24px_rgba(0,0,0,0.08)] pb-[max(0.25rem,env(safe-area-inset-bottom,0px))]"
+      >
         <button
           onClick={() => setActivePortal('customer')}
-          className={`flex flex-col items-center justify-center gap-1 transition-colors ${
-            activePortal === 'customer' ? 'text-emerald-600 font-bold' : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
+          className={`flex flex-col items-center justify-center gap-1 transition-all active:scale-90 ${
+            activePortal === 'customer' 
+              ? 'text-emerald-600 dark:text-emerald-400 font-bold' 
+              : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
           }`}
         >
           <Sparkles className="w-5 h-5" />
@@ -227,33 +237,56 @@ const AppContent: React.FC = () => {
 
         <button
           onClick={() => setIsReelsOpen(true)}
-          className="flex flex-col items-center justify-center gap-1 text-zinc-500 hover:text-rose-600 transition-colors"
+          className="flex flex-col items-center justify-center gap-1 text-zinc-500 hover:text-rose-600 transition-all active:scale-90"
         >
           <Play className="w-5 h-5" />
           <span className="text-[10px] font-medium tracking-tight">Reels</span>
         </button>
 
         <button
-          onClick={() => setIsRewardsOpen(true)}
-          className="flex flex-col items-center justify-center gap-1 text-zinc-500 hover:text-amber-500 transition-colors"
+          onClick={() => openWishlist()}
+          className="relative flex flex-col items-center justify-center gap-1 text-zinc-500 hover:text-rose-600 transition-all active:scale-90"
         >
-          <Coins className="w-5 h-5" />
-          <span className="text-[10px] font-medium tracking-tight">Coins</span>
+          <Heart className={`w-5 h-5 ${wishlist.length > 0 ? 'text-rose-600 fill-rose-600' : ''}`} />
+          <span className="text-[10px] font-medium tracking-tight">Wishlist</span>
+          {wishlist.length > 0 && (
+            <span className="absolute top-0 right-3.5 w-4 h-4 rounded-full bg-rose-600 text-white text-[9px] font-bold flex items-center justify-center animate-scale-up">
+              {wishlist.length}
+            </span>
+          )}
         </button>
 
         <button
           onClick={() => setIsCartOpen(true)}
-          className="relative flex flex-col items-center justify-center gap-1 text-zinc-500 hover:text-emerald-600 transition-colors"
+          className="relative flex flex-col items-center justify-center gap-1 text-zinc-500 hover:text-emerald-600 transition-all active:scale-90"
         >
           <ShoppingBag className="w-5 h-5" />
           <span className="text-[10px] font-medium tracking-tight">Bag</span>
           {cartCount > 0 && (
-            <span className="absolute top-1 right-5 w-4 h-4 rounded-full bg-emerald-600 text-white text-[9px] font-bold flex items-center justify-center">
+            <span className="absolute top-0 right-3.5 w-4 h-4 rounded-full bg-emerald-600 text-white text-[9px] font-bold flex items-center justify-center animate-scale-up">
               {cartCount}
             </span>
           )}
         </button>
-      </div>
+
+        <button
+          onClick={() => {
+            if (user?.isLoggedIn) {
+              setIsProfileOpen(true);
+            } else {
+              setIsAuthOpen(true);
+            }
+          }}
+          className="flex flex-col items-center justify-center gap-1 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-all active:scale-90"
+        >
+          {user?.isLoggedIn && user.avatar ? (
+            <img src={user.avatar} alt="Profile" className="w-5 h-5 rounded-full object-cover border border-emerald-500" />
+          ) : (
+            <User className="w-5 h-5" />
+          )}
+          <span className="text-[10px] font-medium tracking-tight">{user?.isLoggedIn ? 'Account' : 'Sign In'}</span>
+        </button>
+      </nav>
     </div>
   );
 };

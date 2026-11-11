@@ -267,7 +267,7 @@ export const SellerDashboard: React.FC = () => {
               PRIME BAZAAR – SELLER PANEL
             </span>
 
-            <nav className="space-y-0.5">
+            <nav className="flex lg:flex-col overflow-x-auto lg:overflow-visible pb-1 lg:pb-0 gap-1.5 lg:gap-0 lg:space-y-0.5 no-scrollbar">
               {[
                 { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, badge: null },
                 { id: 'registration', label: 'Seller Registration', icon: UserCheck, badge: currentSeller.verified ? 'Verified' : 'Pending' },
@@ -288,23 +288,23 @@ export const SellerDashboard: React.FC = () => {
                   <button
                     key={item.id}
                     onClick={() => setActiveTab(item.id as SellerTab)}
-                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-semibold transition-all ${
+                    className={`shrink-0 lg:shrink lg:w-full flex items-center justify-between px-3 sm:px-3.5 py-2 sm:py-2.5 rounded-2xl text-xs font-semibold transition-all whitespace-nowrap ${
                       isActive
                         ? 'bg-rose-600 text-white shadow-md shadow-rose-600/20'
-                        : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-white'
+                        : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-white bg-zinc-50 dark:bg-zinc-800/60 lg:bg-transparent'
                     }`}
                   >
-                    <div className="flex items-center gap-2.5 truncate">
+                    <div className="flex items-center gap-2 truncate">
                       <Icon className="w-4 h-4 shrink-0" />
-                      <span className="truncate">{item.label}</span>
+                      <span>{item.label}</span>
                     </div>
                     {item.badge && (
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
+                      <span className={`ml-2 text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
                         isActive 
                           ? 'bg-white/20 text-white' 
                           : String(item.badge).includes('low') 
                             ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
-                            : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300'
+                            : 'bg-zinc-200/80 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300'
                       }`}>
                         {item.badge}
                       </span>

@@ -153,36 +153,36 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
       </div>
 
       {/* Product Content Details */}
-      <div className="p-4 flex flex-col flex-1 justify-between gap-2">
+      <div className="p-2.5 sm:p-4 flex flex-col flex-1 justify-between gap-1.5 sm:gap-2">
         <div>
-          <div className="flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400 mb-1">
-            <span className="font-semibold uppercase tracking-wider text-[11px] text-zinc-700 dark:text-zinc-300">
+          <div className="flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400 mb-0.5 sm:mb-1">
+            <span className="font-semibold uppercase tracking-wider text-[10px] sm:text-[11px] text-zinc-700 dark:text-zinc-300 truncate max-w-[90px] sm:max-w-none">
               {product.brand}
             </span>
-            <div className="flex items-center gap-1 text-zinc-700 dark:text-zinc-300 font-medium">
-              <Star className="w-3 h-3 text-amber-500 fill-amber-500" />
-              <span>{product.rating}</span>
-              <span className="text-zinc-400 text-[10px]">({product.reviewCount})</span>
+            <div className="flex items-center gap-1 text-zinc-700 dark:text-zinc-300 font-medium shrink-0">
+              <Star className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-amber-500 fill-amber-500" />
+              <span className="text-[11px] sm:text-xs">{product.rating}</span>
+              <span className="text-zinc-400 text-[9px] sm:text-[10px]">({product.reviewCount})</span>
             </div>
           </div>
 
-          <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 line-clamp-1 group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors">
+          <h3 className="text-xs sm:text-sm font-semibold text-zinc-900 dark:text-zinc-100 line-clamp-1 group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors">
             {product.title}
           </h3>
 
-          <div className="mt-1 flex items-center justify-between text-[11px] text-zinc-500 dark:text-zinc-400">
+          <div className="mt-1 flex items-center justify-between text-[10px] sm:text-[11px] text-zinc-500 dark:text-zinc-400 gap-1">
             <button
               type="button"
               onClick={e => {
                 e.stopPropagation();
                 openSellerStore(product.sellerId);
               }}
-              className="text-[11px] text-zinc-500 hover:text-emerald-600 dark:hover:text-emerald-400 truncate max-w-[130px] transition-colors text-left"
+              className="text-[10px] sm:text-[11px] text-zinc-500 hover:text-emerald-600 dark:hover:text-emerald-400 truncate max-w-[95px] sm:max-w-[130px] transition-colors text-left"
               title={`Visit ${product.sellerName}'s storefront`}
             >
               by <span className="font-medium underline decoration-dotted">{product.sellerName}</span>
             </button>
-            <div className="flex items-center gap-1 shrink-0">
+            <div className="hidden sm:flex items-center gap-1 shrink-0">
               <span className="text-zinc-400">Sizes:</span>
               {product.sizes.slice(0, 3).map(s => (
                 <span
@@ -197,19 +197,19 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
         </div>
 
         {/* Price & Discount Section with formatPrice */}
-        <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800 flex items-baseline justify-between">
-          <div className="flex items-baseline gap-2">
-            <span className="text-base font-bold text-zinc-900 dark:text-white font-mono tabular-nums">
+        <div className="pt-1.5 sm:pt-2 border-t border-zinc-100 dark:border-zinc-800 flex items-baseline justify-between gap-1">
+          <div className="flex items-baseline gap-1 sm:gap-2">
+            <span className="text-sm sm:text-base font-bold text-zinc-900 dark:text-white font-mono tabular-nums">
               {formatPrice(product.price)}
             </span>
             {product.originalPrice > product.price && (
-              <span className="text-xs text-zinc-400 line-through font-mono tabular-nums">
+              <span className="text-[10px] sm:text-xs text-zinc-400 line-through font-mono tabular-nums">
                 {formatPrice(product.originalPrice)}
               </span>
             )}
           </div>
           {product.discountPercent > 0 && (
-            <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 font-mono">
+            <span className="text-[10px] sm:text-xs font-semibold text-emerald-600 dark:text-emerald-400 font-mono shrink-0">
               {product.discountPercent}% OFF
             </span>
           )}

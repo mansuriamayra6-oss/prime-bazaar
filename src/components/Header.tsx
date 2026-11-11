@@ -60,48 +60,48 @@ export const Header: React.FC = () => {
   const totalCartItems = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   return (
-    <header className="sticky top-0 z-40 bg-white/95 dark:bg-zinc-950/95 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800 transition-colors">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-3 sm:gap-6">
+    <header className="sticky top-0 z-40 bg-white/95 dark:bg-zinc-950/95 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800 transition-colors pt-[env(safe-area-inset-top,0px)]">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-2 sm:gap-4 lg:gap-6">
         {/* Zone 1: Brand Logo & Search Bar near Logo */}
-        <div className="flex items-center gap-2 sm:gap-3 flex-1 max-w-xl">
+        <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0 max-w-xl">
           <button
             onClick={() => setActivePortal('customer')}
             className="text-left group flex items-center focus:outline-none transition-transform active:scale-98 shrink-0"
             aria-label="Prime Bazaar Home"
           >
-            <div className="h-11 sm:h-12 px-2 py-1 rounded-xl bg-white border border-zinc-200/90 shadow-xs flex items-center justify-center">
+            <div className="h-9 sm:h-11 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-xl bg-white border border-zinc-200/90 shadow-2xs flex items-center justify-center">
               <img
                 src="/assets/aistudio/Prime_Bazaar_Shopping_Logo_0c82d149.png"
                 alt="Prime Bazaar - Shop Smarter. Live Better."
-                className="h-8 sm:h-9 w-auto object-contain"
+                className="h-7 sm:h-8 w-auto object-contain"
               />
             </div>
           </button>
 
           {/* Search bar directly beside the logo */}
           {activePortal === 'customer' && (
-            <div className="relative flex-1 max-w-xs sm:max-w-sm md:max-w-md flex items-center">
-              <Search className="w-4 h-4 text-zinc-400 absolute left-3 pointer-events-none" />
+            <div className="relative flex-1 min-w-[130px] max-w-xs sm:max-w-sm md:max-w-md flex items-center">
+              <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-2.5 sm:left-3 pointer-events-none" />
               <input
                 type="text"
                 placeholder="Search kurti, jacket, sneakers..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-9 py-2 text-xs bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-xl border border-zinc-200/80 dark:border-zinc-700/80 focus:border-emerald-500 dark:focus:border-emerald-500 focus:outline-none transition-all shadow-2xs font-medium placeholder:text-zinc-400"
+                className="w-full pl-8 sm:pl-9 pr-7 sm:pr-9 py-1.5 sm:py-2 text-xs bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-xl border border-zinc-200/80 dark:border-zinc-700/80 focus:border-emerald-500 dark:focus:border-emerald-500 focus:outline-none transition-all shadow-2xs font-medium placeholder:text-zinc-400"
               />
               <button
                 onClick={() => setIsVisualSearchOpen(true)}
                 title="Search by image (AI visual match)"
-                className="absolute right-2.5 p-1 text-zinc-400 hover:text-emerald-600 transition-colors"
+                className="absolute right-1.5 sm:right-2.5 p-1 text-zinc-400 hover:text-emerald-600 transition-colors"
               >
-                <Camera className="w-4 h-4" />
+                <Camera className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               </button>
             </div>
           )}
         </div>
 
-        {/* Zone 2: Navigation Links */}
-        <nav className="hidden xl:flex items-center gap-4 text-xs font-semibold text-zinc-600 dark:text-zinc-300">
+        {/* Zone 2: Navigation Links (adaptive for tablet and PC) */}
+        <nav className="hidden lg:flex items-center gap-3 xl:gap-4 text-xs font-semibold text-zinc-600 dark:text-zinc-300">
           <button
             onClick={() => setActivePortal('customer')}
             className={`whitespace-nowrap transition-colors hover:text-rose-600 ${
@@ -115,7 +115,7 @@ export const Header: React.FC = () => {
             className="flex items-center gap-1.5 whitespace-nowrap transition-colors text-rose-600 font-bold hover:text-rose-700"
           >
             <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>
-            <span>Live Shopping</span>
+            <span>Live</span>
           </button>
           <button
             onClick={() => openSellerStore('seller-1')}
@@ -134,7 +134,7 @@ export const Header: React.FC = () => {
 
           <button
             onClick={() => setIsCompareOpen(true)}
-            className="flex items-center gap-1.5 whitespace-nowrap transition-colors hover:text-indigo-600"
+            className="hidden xl:flex items-center gap-1.5 whitespace-nowrap transition-colors hover:text-indigo-600"
             title="Side-by-Side Product Comparison"
           >
             <SlidersHorizontal className="w-3.5 h-3.5" />
@@ -142,7 +142,7 @@ export const Header: React.FC = () => {
           </button>
           <button
             onClick={() => setIsRewardsOpen(true)}
-            className="flex items-center gap-1.5 whitespace-nowrap transition-colors hover:text-amber-500"
+            className="hidden xl:flex items-center gap-1.5 whitespace-nowrap transition-colors hover:text-amber-500"
           >
             <Coins className="w-3.5 h-3.5 text-amber-500" />
             <span>Coins ({coins})</span>
@@ -152,7 +152,8 @@ export const Header: React.FC = () => {
             className="flex items-center gap-1.5 whitespace-nowrap transition-colors hover:text-zinc-900 dark:hover:text-white"
           >
             <Package className="w-3.5 h-3.5" />
-            <span>Track Orders</span>
+            <span className="hidden xl:inline">Track Orders</span>
+            <span className="xl:hidden">Orders</span>
           </button>
 
           <button
@@ -166,14 +167,14 @@ export const Header: React.FC = () => {
         </nav>
 
         {/* Zone 3: Bag, Wishlist, Profile, Portals */}
-        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
 
-          {/* Wishlist count */}
+          {/* Wishlist count (visible on tablet and PC; docked in bottom bar on phone) */}
           <button
             onClick={() => openWishlist()}
             title="View Saved Wishlist"
             aria-label={`Wishlist (${wishlist.length} saved)`}
-            className="relative p-2 text-zinc-600 dark:text-zinc-300 hover:text-rose-600 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+            className="hidden sm:flex relative p-2 text-zinc-600 dark:text-zinc-300 hover:text-rose-600 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
           >
             <Heart className={`w-4 h-4 ${wishlist.length > 0 ? 'text-rose-600' : ''}`} />
             {wishlist.length > 0 && (
@@ -186,7 +187,7 @@ export const Header: React.FC = () => {
           {/* Shopping Bag Drawer Trigger */}
           <button
             onClick={() => setIsCartOpen(true)}
-            className="relative flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 font-medium text-xs hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-colors shrink-0"
+            className="relative flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-lg bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 font-medium text-xs hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-colors shrink-0"
           >
             <ShoppingBag className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Bag</span>
@@ -197,7 +198,7 @@ export const Header: React.FC = () => {
             )}
           </button>
 
-          {/* User Account / Profile Button */}
+          {/* User Account / Profile Button (visible on tablet/PC; phone has bottom tab) */}
           <button
             onClick={() => {
               if (user?.isLoggedIn) {
@@ -207,7 +208,7 @@ export const Header: React.FC = () => {
               }
             }}
             title={user?.isLoggedIn ? `Account (${user.name})` : 'Sign In'}
-            className="flex items-center gap-1.5 p-1.5 sm:px-2.5 sm:py-1 rounded-lg border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-xs font-semibold text-zinc-700 dark:text-zinc-200"
+            className="hidden sm:flex items-center gap-1.5 p-1.5 sm:px-2.5 sm:py-1 rounded-lg border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-xs font-semibold text-zinc-700 dark:text-zinc-200"
           >
             {user?.isLoggedIn && user.avatar ? (
               <img
@@ -218,7 +219,7 @@ export const Header: React.FC = () => {
             ) : (
               <User className="w-4 h-4 text-zinc-600 dark:text-zinc-300" />
             )}
-            <span className="hidden sm:inline">
+            <span className="hidden md:inline">
               {user?.isLoggedIn ? user.name.split(' ')[0] : 'Sign In'}
             </span>
           </button>
@@ -226,25 +227,26 @@ export const Header: React.FC = () => {
           {/* Merchant Partner Login / Sign Up Button */}
           <button
             onClick={() => openMerchantAuth('login')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-sm shadow-emerald-600/25 active:scale-95 transition-all shrink-0"
+            className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-xs active:scale-95 transition-all shrink-0"
             title="Merchant Partner - Login or Register as Seller"
           >
             <Building2 className="w-3.5 h-3.5 shrink-0" />
             <span className="hidden md:inline">Merchant Partner</span>
-            <span className="md:hidden">Partner</span>
+            <span className="hidden sm:inline md:hidden">Partner</span>
+            <span className="sm:hidden text-[11px]">Partner</span>
           </button>
 
           {/* Theme Switcher */}
           <button
             onClick={toggleTheme}
             title={theme === 'dark' ? 'Switch to Light' : 'Switch to Dark'}
-            className="p-2 text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+            className="p-1.5 sm:p-2 text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
           >
-            {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            {theme === 'dark' ? <Sun className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <Moon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
           </button>
 
-          {/* Portal Switcher */}
-          <div className="relative border-l border-zinc-200 dark:border-zinc-800 pl-2 sm:pl-3">
+          {/* Portal Switcher (visible on tablet and PC) */}
+          <div className="hidden sm:block relative border-l border-zinc-200 dark:border-zinc-800 pl-2 sm:pl-3">
             <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-800 p-1 rounded-lg">
               <button
                 onClick={() => setActivePortal('customer')}
@@ -256,7 +258,7 @@ export const Header: React.FC = () => {
                 title="Customer Storefront"
               >
                 <User className="w-3 h-3" />
-                <span className="hidden sm:inline">Shop</span>
+                <span className="hidden md:inline">Shop</span>
               </button>
               <button
                 onClick={() => setActivePortal('seller')}
@@ -268,7 +270,7 @@ export const Header: React.FC = () => {
                 title="Seller Studio"
               >
                 <Store className="w-3 h-3" />
-                <span className="hidden sm:inline">Seller</span>
+                <span className="hidden md:inline">Seller</span>
               </button>
               <button
                 onClick={() => setActivePortal('admin')}
@@ -280,7 +282,7 @@ export const Header: React.FC = () => {
                 title="Admin Control Center"
               >
                 <ShieldCheck className="w-3 h-3" />
-                <span className="hidden sm:inline">Admin</span>
+                <span className="hidden md:inline">Admin</span>
               </button>
             </div>
           </div>
