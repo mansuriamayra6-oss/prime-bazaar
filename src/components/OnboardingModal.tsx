@@ -54,11 +54,11 @@ export const OnboardingModal: React.FC = () => {
         {/* Step Indicator */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-2.5">
-            <div className="px-2 py-1 rounded-xl bg-white border border-zinc-200/90 shadow-xs flex items-center">
+            <div className="px-3 py-1.5 rounded-2xl bg-white border border-zinc-200/90 shadow-xs flex items-center">
               <img
                 src="/assets/aistudio/Prime_Bazaar_Shopping_Logo_0c82d149.png"
                 alt="Prime Bazaar"
-                className="h-7 w-auto object-contain"
+                className="h-10 sm:h-11 w-auto object-contain"
               />
             </div>
             <span className="font-bold text-sm text-zinc-900 dark:text-white font-display">

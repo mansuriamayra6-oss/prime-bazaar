@@ -26,7 +26,13 @@ import {
   Copy,
   Check,
   Truck,
-  AlertCircle
+  AlertCircle,
+  CreditCard,
+  Shield,
+  Smartphone,
+  Key,
+  Lock,
+  Plus
 } from 'lucide-react';
 
 export const ProfileModal: React.FC = () => {
@@ -220,6 +226,8 @@ export const ProfileModal: React.FC = () => {
                 { id: 'orders', label: `My Orders (${orders.length})`, icon: Package },
                 { id: 'wishlist', label: `Wishlist (${wishlist.length})`, icon: Heart },
                 { id: 'addresses', label: 'My Addresses', icon: MapPin },
+                { id: 'payments', label: 'Saved Payments', icon: CreditCard },
+                { id: 'security', label: 'Security & Devices', icon: Shield },
                 { id: 'coupons', label: 'My Coupons', icon: Tag },
                 { id: 'referrals', label: 'Refer & Earn', icon: Share2 },
                 { id: 'chats', label: 'Seller Chats', icon: MessageSquare },
@@ -703,6 +711,145 @@ export const ProfileModal: React.FC = () => {
                       </button>
                     ))}
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* Tab 10: Saved Payments */}
+            {activeTab === 'payments' && (
+              <div className="space-y-4 text-xs">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-bold text-sm text-zinc-900 dark:text-white">Saved Payment Methods</h3>
+                    <p className="text-[11px] text-zinc-400">Manage 1-click UPI and tokenized credit/debit cards</p>
+                  </div>
+                  <button
+                    onClick={() => notify('Add Payment Method dialog opened. PCI-DSS compliant tokenization ready.')}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 font-bold text-xs"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add New</span>
+                  </button>
+                </div>
+
+                {/* Saved UPI IDs */}
+                <div className="space-y-2">
+                  <span className="text-[10px] uppercase font-bold tracking-wider text-zinc-400 block">Instant UPI Handles</span>
+                  {[
+                    { id: 'upi-1', handle: 'amayra@okhdfcbank', app: 'Google Pay', isDefault: true },
+                    { id: 'upi-2', handle: '9876543210@paytm', app: 'Paytm UPI', isDefault: false }
+                  ].map(u => (
+                    <div key={u.id} className="p-3.5 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 flex items-center justify-center font-bold text-xs font-mono">
+                          UPI
+                        </div>
+                        <div>
+                          <span className="font-bold font-mono text-zinc-900 dark:text-white block">{u.handle}</span>
+                          <span className="text-[10px] text-zinc-400">{u.app}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {u.isDefault && (
+                          <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950 px-2 py-0.5 rounded-full border border-emerald-200">
+                            Default
+                          </span>
+                        )}
+                        <button
+                          onClick={() => notify(`Removed ${u.handle}`)}
+                          className="p-1.5 text-zinc-400 hover:text-rose-600 transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Saved Cards */}
+                <div className="space-y-2 pt-2">
+                  <span className="text-[10px] uppercase font-bold tracking-wider text-zinc-400 block">Saved Cards</span>
+                  <div className="p-3.5 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <CreditCard className="w-6 h-6 text-indigo-500" />
+                      <div>
+                        <span className="font-bold text-zinc-900 dark:text-white block font-mono">•••• •••• •••• 4129</span>
+                        <span className="text-[10px] text-zinc-400">HDFC Bank Millennia Visa · Exp 08/29</span>
+                      </div>
+                    </div>
+                    <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 dark:bg-emerald-950 px-2 py-0.5 rounded-full border border-emerald-200">
+                      Tokenized
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Tab 11: Security & Devices */}
+            {activeTab === 'security' && (
+              <div className="space-y-4 text-xs">
+                <div>
+                  <h3 className="font-bold text-sm text-zinc-900 dark:text-white">Account Security & Device Management</h3>
+                  <p className="text-[11px] text-zinc-400">Manage 2-factor authentication, active sessions, and data rights</p>
+                </div>
+
+                {/* Two Factor Authentication */}
+                <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Shield className="w-6 h-6 text-emerald-500 shrink-0" />
+                    <div>
+                      <span className="font-bold text-zinc-900 dark:text-white block">Two-Factor OTP Authentication</span>
+                      <span className="text-[11px] text-zinc-400">Requires SMS OTP verification on every new device login</span>
+                    </div>
+                  </div>
+                  <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-bold text-[10px]">
+                    Enabled
+                  </span>
+                </div>
+
+                {/* Active Sessions */}
+                <div className="space-y-2">
+                  <span className="text-[10px] uppercase font-bold tracking-wider text-zinc-400 block">Active Device Sessions</span>
+                  {[
+                    { device: 'Chrome on macOS (Arm64)', loc: 'Mumbai, MH, India', current: true },
+                    { device: 'Prime Bazaar Android App v2.4', loc: 'Bengaluru, KA, India', current: false }
+                  ].map((s, idx) => (
+                    <div key={idx} className="p-3 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <Smartphone className="w-4 h-4 text-zinc-400" />
+                        <div>
+                          <span className="font-semibold text-zinc-900 dark:text-white block">{s.device}</span>
+                          <span className="text-[10px] text-zinc-400">{s.loc}</span>
+                        </div>
+                      </div>
+                      {s.current ? (
+                        <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 dark:bg-emerald-950 px-2 py-0.5 rounded-full">
+                          This Device
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => notify('Terminated remote session on Android App.')}
+                          className="text-[11px] font-bold text-rose-600 hover:underline"
+                        >
+                          Revoke
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Legal Policy Account Deletion (Criterion A.20) */}
+                <div className="pt-2 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+                  <div>
+                    <span className="font-bold text-rose-600 block">Delete Account & Personal Data</span>
+                    <span className="text-[10px] text-zinc-400">Permanently purge your order history, KYC, and saved cards according to IT Act 2000</span>
+                  </div>
+                  <button
+                    onClick={() => notify('Account deletion request initiated. A confirmation link has been sent to your verified email.')}
+                    className="px-3 py-1.5 rounded-xl border border-rose-300 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-xs font-bold transition-colors"
+                  >
+                    Request Deletion
+                  </button>
                 </div>
               </div>
             )}

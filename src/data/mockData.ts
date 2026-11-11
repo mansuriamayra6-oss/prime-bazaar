@@ -400,6 +400,202 @@ export const INITIAL_PRODUCTS: Product[] = [
         helpfulCount: 27
       }
     ]
+  },
+  {
+    id: 'prod-9',
+    title: 'SonicPro Spatial ANC Wireless Earbuds with 48h Battery',
+    brand: 'SonicPro Audio',
+    category: 'electronics',
+    price: 1699,
+    originalPrice: 4999,
+    discountPercent: 66,
+    rating: 4.8,
+    reviewCount: 3120,
+    inStock: 45,
+    images: [
+      'https://images.unsplash.com/photo-1590658268037-6bf12165a8df?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1572569511254-d8f925fe2cbb?auto=format&fit=crop&w=800&q=80'
+    ],
+    videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+    colors: [
+      { name: 'Matte Obsidian', hex: '#18181B' },
+      { name: 'Arctic Ivory', hex: '#F4F4F5' },
+      { name: 'Cyber Blue', hex: '#0284C7' }
+    ],
+    sizes: [
+      { size: 'Standard In-Ear (S/M/L Tips)', available: true, stockCount: 45 }
+    ],
+    description: '35dB Active Noise Cancellation, Quad-Mic ENC for crystal clear calling, 13mm dynamic titanium drivers, and IPX5 sweat resistance with low-latency gaming mode.',
+    sellerId: 'seller-2',
+    sellerName: 'Bengaluru Tech Logistics',
+    sellerRating: 4.8,
+    subcategory: 'Audio',
+    sku: 'SP-ANC-2026-BLK',
+    barcode: '8909876543210',
+    gstRate: 18,
+    weightGrams: 85,
+    dimensions: { lengthCm: 6, widthCm: 5, heightCm: 3 },
+    status: 'approved',
+    warrantyPolicy: '1-year brand doorstep replacement warranty',
+    codAvailable: true,
+    returnPeriodDays: 7,
+    isTrending: true,
+    isBestSeller: true,
+    reviews: [
+      {
+        id: 'rev-10',
+        userName: 'Rohan Deshmukh',
+        rating: 5,
+        date: '28 Oct 2026',
+        comment: 'The bass response is unbelievable for under ₹1,700. ANC works great on metro commutes.',
+        verifiedPurchase: true,
+        helpfulCount: 88
+      }
+    ]
+  },
+  {
+    id: 'prod-10',
+    title: 'Ayurvedic Kumkumadi Radiance Elixir & Saffron Glow Serum (30ml)',
+    brand: 'VedaHerbals Organic',
+    category: 'beauty',
+    price: 649,
+    originalPrice: 1499,
+    discountPercent: 57,
+    rating: 4.9,
+    reviewCount: 1840,
+    inStock: 50,
+    images: [
+      'https://images.unsplash.com/photo-1608248597359-2e11894a46a7?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1571781926291-c477ebfd024b?auto=format&fit=crop&w=800&q=80'
+    ],
+    colors: [
+      { name: 'Natural Gold Extract', hex: '#F59E0B' }
+    ],
+    sizes: [
+      { size: '30ml Dropper Bottle', available: true, stockCount: 50 }
+    ],
+    description: '100% cold-pressed Ayurvedic facial oil infused with Kashmiri Saffron (Kesar), Sandalwood, and 26 classical botanical herbs to diminish dark spots and boost collagen.',
+    sellerId: 'seller-3',
+    sellerName: 'Jaipur Crafts & Silks',
+    sellerRating: 4.9,
+    subcategory: 'Skincare',
+    sku: 'VEDA-KUM-30ML',
+    barcode: '8906543210987',
+    gstRate: 18,
+    weightGrams: 120,
+    dimensions: { lengthCm: 10, widthCm: 4, heightCm: 4 },
+    status: 'approved',
+    warrantyPolicy: 'Authenticity guarantee & 100% natural return policy',
+    codAvailable: true,
+    returnPeriodDays: 7,
+    isTrending: true,
+    reviews: [
+      {
+        id: 'rev-11',
+        userName: 'Dr. Shalini Varma',
+        rating: 5,
+        date: '01 Nov 2026',
+        comment: 'Absorbs without making skin greasy. Visible glow within a week of nightly use.',
+        verifiedPurchase: true,
+        helpfulCount: 47
+      }
+    ]
+  },
+  {
+    id: 'prod-11',
+    title: 'Vintage Pure Brass Masala Dabba with Hand-Etched Lid (7 Containers)',
+    brand: 'Heritage Kitchen India',
+    category: 'home-kitchen',
+    price: 1299,
+    originalPrice: 2799,
+    discountPercent: 54,
+    rating: 4.7,
+    reviewCount: 960,
+    inStock: 22,
+    images: [
+      'https://images.unsplash.com/photo-1584990347449-397223bdf2eb?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1544816155-12df9643f363?auto=format&fit=crop&w=800&q=80'
+    ],
+    colors: [
+      { name: 'Traditional Brass Glow', hex: '#D97706' }
+    ],
+    sizes: [
+      { size: 'Standard 8-inch Diameter', available: true, stockCount: 22 }
+    ],
+    description: 'Food-grade pure brass spice organizer with 7 individual spice canisters and miniature brass measuring spoon. Hand-embossed paisley motif on lid.',
+    sellerId: 'seller-3',
+    sellerName: 'Jaipur Crafts & Silks',
+    sellerRating: 4.9,
+    subcategory: 'Kitchen Utensils',
+    sku: 'HERIT-BRASS-DABBA',
+    barcode: '8901239874561',
+    gstRate: 12,
+    weightGrams: 950,
+    dimensions: { lengthCm: 22, widthCm: 22, heightCm: 9 },
+    status: 'approved',
+    warrantyPolicy: 'Lifetime brass authenticity warranty',
+    codAvailable: true,
+    returnPeriodDays: 7,
+    isBestSeller: true,
+    reviews: [
+      {
+        id: 'rev-12',
+        userName: 'Ananya Banerjee',
+        rating: 5,
+        date: '19 Oct 2026',
+        comment: 'Heavy, solid brass craftsmanship! Gives such a royal touch to my kitchen counter.',
+        verifiedPurchase: true,
+        helpfulCount: 39
+      }
+    ]
+  },
+  {
+    id: 'prod-12',
+    title: 'Non-Slip Dual-Tone Eco TPE Fitness & Yoga Mat with Alignment Lines (6mm)',
+    brand: 'ZenAthletica',
+    category: 'sports-outdoor',
+    price: 899,
+    originalPrice: 1999,
+    discountPercent: 55,
+    rating: 4.8,
+    reviewCount: 650,
+    inStock: 35,
+    images: [
+      'https://images.unsplash.com/photo-1601925260368-ae2f83cf8b7f?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?auto=format&fit=crop&w=800&q=80'
+    ],
+    colors: [
+      { name: 'Forest Teal / Moss', hex: '#0D9488' },
+      { name: 'Dusk Purple / Lavender', hex: '#7C3AED' }
+    ],
+    sizes: [
+      { size: '72 x 24 Inches (6mm thick)', available: true, stockCount: 35 }
+    ],
+    description: 'High-density, biodegradable TPE material with body alignment laser markings to guide posture. Includes free shoulder carrying strap.',
+    sellerId: 'seller-2',
+    sellerName: 'Bengaluru Tech Logistics',
+    sellerRating: 4.8,
+    subcategory: 'Fitness',
+    sku: 'ZEN-YOGA-6MM-TEAL',
+    barcode: '8907894561230',
+    gstRate: 18,
+    weightGrams: 880,
+    dimensions: { lengthCm: 61, widthCm: 12, heightCm: 12 },
+    status: 'approved',
+    warrantyPolicy: '6-month tear resistance guarantee',
+    codAvailable: true,
+    returnPeriodDays: 7,
+    reviews: [
+      {
+        id: 'rev-13',
+        userName: 'Vikram Joshi',
+        rating: 5,
+        date: '22 Oct 2026',
+        comment: 'Zero slippage even during sweaty power yoga sessions. Excellent knee cushioning.',
+        verifiedPurchase: true,
+        helpfulCount: 29
+      }
+    ]
   }
 ];
 

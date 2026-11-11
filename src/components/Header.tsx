@@ -61,19 +61,19 @@ export const Header: React.FC = () => {
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 dark:bg-zinc-950/95 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800 transition-colors pt-[env(safe-area-inset-top,0px)]">
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-2 sm:gap-4 lg:gap-6">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 sm:h-20 flex items-center justify-between gap-2 sm:gap-4 lg:gap-6">
         {/* Zone 1: Brand Logo & Search Bar near Logo */}
-        <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0 max-w-xl">
+        <div className="flex items-center gap-2.5 sm:gap-4 flex-1 min-w-0 max-w-xl">
           <button
             onClick={() => setActivePortal('customer')}
             className="text-left group flex items-center focus:outline-none transition-transform active:scale-98 shrink-0"
             aria-label="Prime Bazaar Home"
           >
-            <div className="h-9 sm:h-11 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-xl bg-white border border-zinc-200/90 shadow-2xs flex items-center justify-center">
+            <div className="h-12 sm:h-15 px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-2xl bg-white border border-zinc-200/90 shadow-xs flex items-center justify-center transition-all group-hover:shadow-md">
               <img
                 src="/assets/aistudio/Prime_Bazaar_Shopping_Logo_0c82d149.png"
                 alt="Prime Bazaar - Shop Smarter. Live Better."
-                className="h-7 sm:h-8 w-auto object-contain"
+                className="h-9 sm:h-12 md:h-13 w-auto object-contain transition-transform group-hover:scale-102"
               />
             </div>
           </button>
@@ -142,10 +142,15 @@ export const Header: React.FC = () => {
           </button>
           <button
             onClick={() => setIsRewardsOpen(true)}
-            className="hidden xl:flex items-center gap-1.5 whitespace-nowrap transition-colors hover:text-amber-500"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800 text-xs font-bold whitespace-nowrap hover:bg-amber-100 transition-colors"
+            title="Deals, Games & Rewards Hub (Spin the Wheel, Scratch Card, Flash Sale)"
           >
-            <Coins className="w-3.5 h-3.5 text-amber-500" />
-            <span>Coins ({coins})</span>
+            <Coins className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+            <span className="hidden md:inline">Deals & Games</span>
+            <span className="md:hidden">Deals</span>
+            <span className="px-1.5 py-0.2 rounded-full bg-amber-500 text-white text-[10px] font-mono">
+              {coins}
+            </span>
           </button>
           <button
             onClick={() => setIsOrdersOpen(true)}

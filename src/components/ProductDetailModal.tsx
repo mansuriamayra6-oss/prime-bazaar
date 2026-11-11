@@ -16,7 +16,13 @@ import {
   Shirt,
   SlidersHorizontal,
   MessageSquare,
-  ExternalLink
+  ExternalLink,
+  Bell,
+  Play,
+  RotateCw,
+  Flag,
+  Plus,
+  Layers
 } from 'lucide-react';
 
 export const ProductDetailModal: React.FC = () => {
@@ -42,6 +48,9 @@ export const ProductDetailModal: React.FC = () => {
   const [pincode, setPincode] = useState('');
   const [pincodeChecked, setPincodeChecked] = useState(false);
   const [shared, setShared] = useState(false);
+  const [viewMode, setViewMode] = useState<'image' | 'video' | '360'>('image');
+  const [rotation360, setRotation360] = useState(0);
+  const [priceDropAlert, setPriceDropAlert] = useState(false);
 
   if (!selectedProduct) return null;
 
@@ -79,6 +88,15 @@ export const ProductDetailModal: React.FC = () => {
     }
   };
 
+  const handleTogglePriceDrop = () => {
+    setPriceDropAlert(!priceDropAlert);
+    if (!priceDropAlert) {
+      notify('🔔 Subscribed! We will alert you the moment price drops on this item.');
+    } else {
+      notify('Price drop alert cancelled.');
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 md:p-6 animate-fadeIn">
       <div 
@@ -95,17 +113,98 @@ export const ProductDetailModal: React.FC = () => {
         </button>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 max-h-[85vh] overflow-y-auto">
-          {/* Left Column: Image Gallery & Video Snippet (6 cols) */}
+          {/* Left Column: Image Gallery, 360 View, & Video (6 cols) */}
           <div className="lg:col-span-6 p-4 sm:p-6 bg-zinc-50 dark:bg-zinc-950/50 flex flex-col gap-4">
-            <div className="relative aspect-[4/5] rounded-2xl overflow-hidden bg-zinc-200 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-800">
-              <img
-                src={product.images[activeImageIdx] || product.images[0]}
-                alt={product.title}
-                referrerPolicy="no-referrer"
-                className="w-full h-full object-cover object-center"
-              />
+            {/* View Mode Switcher Pills */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setViewMode('image')}
+                className={`px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-all ${
+                  viewMode === 'image'
+                    ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 shadow-xs'
+                    : 'bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900'
+                }`}
+              >
+                <span>Gallery</span>
+              </button>
+              <button
+                onClick={() => setViewMode('360')}
+                className={`px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-all ${
+                  viewMode === '360'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900'
+                }`}
+              >
+                <RotateCw className="w-3.5 h-3.5" />
+                <span>360° View</span>
+              </button>
+              {product.videoUrl && (
+                <button
+                  onClick={() => setViewMode('video')}
+                  className={`px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-all ${
+                    viewMode === 'video'
+                      ? 'bg-rose-600 text-white shadow-xs'
+                      : 'bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900'
+                  }`}
+                >
+                  <Play className="w-3.5 h-3.5 fill-current" />
+                  <span>Video Demo</span>
+                </button>
+              )}
+            </div>
 
-              {product.isTrending && (
+            {/* Main Stage Viewport */}
+            <div className="relative aspect-[4/5] rounded-2xl overflow-hidden bg-zinc-200 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-800">
+              {viewMode === 'image' && (
+                <img
+                  src={product.images[activeImageIdx] || product.images[0]}
+                  alt={product.title}
+                  referrerPolicy="no-referrer"
+                  className="w-full h-full object-cover object-center transition-transform hover:scale-105 duration-300"
+                />
+              )}
+
+              {viewMode === '360' && (
+                <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-zinc-900 text-white relative">
+                  <div 
+                    className="w-48 h-64 rounded-xl overflow-hidden border-2 border-indigo-400 shadow-2xl transition-transform duration-150"
+                    style={{ transform: `rotateY(${rotation360}deg)` }}
+                  >
+                    <img
+                      src={product.images[activeImageIdx] || product.images[0]}
+                      alt="360 view"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <div className="absolute bottom-4 inset-x-6 flex flex-col items-center gap-2 bg-black/60 backdrop-blur-md p-3 rounded-2xl">
+                    <span className="text-[11px] font-semibold text-indigo-300 flex items-center gap-1">
+                      <RotateCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Drag Slider for 360° Inspection</span>
+                    </span>
+                    <input
+                      type="range"
+                      min="-180"
+                      max="180"
+                      value={rotation360}
+                      onChange={e => setRotation360(parseInt(e.target.value, 10))}
+                      className="w-full accent-indigo-500 cursor-pointer"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {viewMode === 'video' && product.videoUrl && (
+                <video
+                  src={product.videoUrl}
+                  controls
+                  autoPlay
+                  loop
+                  playsInline
+                  className="w-full h-full object-cover"
+                />
+              )}
+
+              {product.isTrending && viewMode === 'image' && (
                 <div className="absolute top-4 left-4 bg-zinc-950/80 backdrop-blur-md text-white text-xs font-semibold px-3 py-1.5 rounded-lg shadow-sm">
                   Trending Pick
                 </div>
@@ -127,9 +226,12 @@ export const ProductDetailModal: React.FC = () => {
                 {product.images.map((img, idx) => (
                   <button
                     key={idx}
-                    onClick={() => setActiveImageIdx(idx)}
+                    onClick={() => {
+                      setActiveImageIdx(idx);
+                      setViewMode('image');
+                    }}
                     className={`relative w-20 h-24 rounded-xl overflow-hidden shrink-0 border-2 transition-all ${
-                      activeImageIdx === idx
+                      activeImageIdx === idx && viewMode === 'image'
                         ? 'border-rose-600 ring-2 ring-rose-600/20'
                         : 'border-zinc-200 dark:border-zinc-700 opacity-70 hover:opacity-100'
                     }`}
@@ -386,6 +488,31 @@ export const ProductDetailModal: React.FC = () => {
                 </button>
               </div>
 
+              {/* Price Drop Alert & Report Row */}
+              <div className="flex items-center justify-between text-xs pt-1">
+                <button
+                  type="button"
+                  onClick={handleTogglePriceDrop}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[11px] font-semibold transition-all ${
+                    priceDropAlert
+                      ? 'bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300'
+                      : 'border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900'
+                  }`}
+                >
+                  <Bell className="w-3.5 h-3.5" />
+                  <span>{priceDropAlert ? 'Price Drop Alert Active' : 'Notify Price Drop'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => notify('Product flagged for catalog safety review. Ticket #SEC-982 opened.')}
+                  className="flex items-center gap-1 text-[11px] text-zinc-400 hover:text-rose-500 transition-colors"
+                >
+                  <Flag className="w-3 h-3" />
+                  <span>Report listing</span>
+                </button>
+              </div>
+
               {/* Share */}
               <button
                 onClick={handleShareProduct}
@@ -395,6 +522,54 @@ export const ProductDetailModal: React.FC = () => {
                 <span>{shared ? 'Link Copied! +50 Coins Earned' : 'Share With Friends & Earn 50 Bazaar Coins'}</span>
               </button>
             </div>
+          </div>
+        </div>
+
+        {/* Frequently Bought Together Bundle Card (Section E) */}
+        <div className="p-5 sm:p-6 bg-amber-50/50 dark:bg-zinc-900/80 border-t border-zinc-200 dark:border-zinc-800">
+          <div className="flex items-center gap-2 mb-3">
+            <Layers className="w-4 h-4 text-amber-600" />
+            <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-900 dark:text-white">
+              Frequently Bought Together (Save 15% Extra Combo)
+            </h4>
+          </div>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-14 h-16 rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-700 shrink-0">
+                <img src={product.images[0]} alt={product.title} className="w-full h-full object-cover" />
+              </div>
+              <span className="font-bold text-zinc-400 text-lg">+</span>
+              <div className="w-14 h-16 rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-700 shrink-0 bg-white dark:bg-zinc-800 flex items-center justify-center p-1">
+                <Sparkles className="w-6 h-6 text-amber-500" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-zinc-900 dark:text-white">
+                  {product.title} + Curated Artisan Accessory Bundle
+                </p>
+                <div className="flex items-baseline gap-2 mt-0.5">
+                  <span className="font-bold text-rose-600 font-mono text-sm">
+                    {formatPrice(Math.round(product.price * 1.35))}
+                  </span>
+                  <span className="text-[11px] text-zinc-400 line-through font-mono">
+                    {formatPrice(Math.round(product.originalPrice * 1.5))}
+                  </span>
+                  <span className="text-[10px] text-emerald-600 font-bold bg-emerald-100 dark:bg-emerald-950/60 px-1.5 py-0.2 rounded">
+                    BUNDLE DEAL
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={() => {
+                handleAddToCart();
+                notify('Frequently Bought Together bundle added with 15% combo discount!');
+              }}
+              className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-all shrink-0"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Add Bundle To Bag</span>
+            </button>
           </div>
         </div>
 

@@ -151,8 +151,8 @@ interface MarketplaceContextType {
   setIsAuthOpen: (open: boolean) => void;
   isProfileOpen: boolean;
   setIsProfileOpen: (open: boolean) => void;
-  profileActiveTab: 'details' | 'wishlist' | 'addresses' | 'preferences' | 'orders' | 'coupons' | 'referrals' | 'chats' | 'live';
-  setProfileActiveTab: (tab: 'details' | 'wishlist' | 'addresses' | 'preferences' | 'orders' | 'coupons' | 'referrals' | 'chats' | 'live') => void;
+  profileActiveTab: 'details' | 'wishlist' | 'addresses' | 'preferences' | 'orders' | 'coupons' | 'referrals' | 'chats' | 'live' | 'payments' | 'security';
+  setProfileActiveTab: (tab: 'details' | 'wishlist' | 'addresses' | 'preferences' | 'orders' | 'coupons' | 'referrals' | 'chats' | 'live' | 'payments' | 'security') => void;
   openWishlist: () => void;
 
   // Comparison Tool
@@ -569,7 +569,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const [isRewardsOpen, setIsRewardsOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [profileActiveTab, setProfileActiveTab] = useState<'details' | 'wishlist' | 'addresses' | 'preferences' | 'orders' | 'coupons' | 'referrals' | 'chats' | 'live'>('details');
+  const [profileActiveTab, setProfileActiveTab] = useState<'details' | 'wishlist' | 'addresses' | 'preferences' | 'orders' | 'coupons' | 'referrals' | 'chats' | 'live' | 'payments' | 'security'>('details');
 
   const openWishlist = () => {
     setProfileActiveTab('wishlist');

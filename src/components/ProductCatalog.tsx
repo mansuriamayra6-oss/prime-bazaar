@@ -7,12 +7,17 @@ export const ProductCatalog: React.FC = () => {
   const { products, selectedCategory, searchQuery, setSearchQuery, wishlist } = useMarketplace();
 
   // Local filter states
-  const [sortBy, setSortBy] = useState<'trending' | 'price-low' | 'price-high' | 'rating'>('trending');
+  const [discoveryTab, setDiscoveryTab] = useState<'all' | 'trending' | 'flash' | 'bestsellers' | 'deals' | 'group'>('all');
+  const [sortBy, setSortBy] = useState<'trending' | 'price-low' | 'price-high' | 'rating' | 'discount'>('trending');
   const [maxPrice, setMaxPrice] = useState<number>(5000);
   const [minRating, setMinRating] = useState<number>(0);
+  const [minDiscount, setMinDiscount] = useState<number>(0);
   const [codOnly, setCodOnly] = useState<boolean>(false);
   const [showWishlistOnly, setShowWishlistOnly] = useState<boolean>(false);
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState<boolean>(false);
+
+  // Quick search keywords
+  const popularKeywords = ['Raw Silk Kurti', 'Cargo Jacket', 'ANC Earbuds', 'Kundan Jewellery', 'Saffron Serum', 'Yoga Mat'];
 
   // Filtered and sorted products
   const filteredProducts = useMemo(() => {
@@ -21,9 +26,22 @@ export const ProductCatalog: React.FC = () => {
       if (showWishlistOnly && !wishlist.includes(p.id)) {
         return false;
       }
+      // Discovery sub-tab filter
+      if (discoveryTab === 'trending' && !p.isTrending) return false;
+      if (discoveryTab === 'bestsellers' && !p.isBestSeller) return false;
+      if (discoveryTab === 'flash' && p.discountPercent < 50) return false;
+      if (discoveryTab === 'deals' && p.discountPercent < 40) return false;
+      if (discoveryTab === 'group' && p.price < 1000) return false;
+
       // Category filter
-      if (selectedCategory !== 'all' && p.category !== selectedCategory) {
-        return false;
+      if (selectedCategory !== 'all') {
+        if (selectedCategory === 'fashion') {
+          if (p.category !== 'ethnic' && p.category !== 'streetwear' && p.category !== 'western' && p.category !== 'fashion') {
+            return false;
+          }
+        } else if (p.category !== selectedCategory) {
+          return false;
+        }
       }
       // Search query
       if (searchQuery.trim()) {
@@ -43,6 +61,10 @@ export const ProductCatalog: React.FC = () => {
       if (minRating > 0 && p.rating < minRating) {
         return false;
       }
+      // Min Discount
+      if (minDiscount > 0 && p.discountPercent < minDiscount) {
+        return false;
+      }
       // COD
       if (codOnly && !p.codAvailable) {
         return false;
@@ -52,37 +74,80 @@ export const ProductCatalog: React.FC = () => {
       if (sortBy === 'price-low') return a.price - b.price;
       if (sortBy === 'price-high') return b.price - a.price;
       if (sortBy === 'rating') return b.rating - a.rating;
+      if (sortBy === 'discount') return b.discountPercent - a.discountPercent;
       // Default trending
       return (b.isTrending ? 1 : 0) - (a.isTrending ? 1 : 0);
     });
-  }, [products, selectedCategory, searchQuery, maxPrice, minRating, codOnly, sortBy, showWishlistOnly, wishlist]);
+  }, [products, selectedCategory, searchQuery, maxPrice, minRating, minDiscount, codOnly, sortBy, showWishlistOnly, wishlist, discoveryTab]);
 
-  const activeFiltersCount = (maxPrice < 5000 ? 1 : 0) + (minRating > 0 ? 1 : 0) + (codOnly ? 1 : 0) + (showWishlistOnly ? 1 : 0);
+  const activeFiltersCount = (maxPrice < 5000 ? 1 : 0) + (minRating > 0 ? 1 : 0) + (minDiscount > 0 ? 1 : 0) + (codOnly ? 1 : 0) + (showWishlistOnly ? 1 : 0) + (discoveryTab !== 'all' ? 1 : 0);
 
   const resetFilters = () => {
     setMaxPrice(5000);
     setMinRating(0);
+    setMinDiscount(0);
     setCodOnly(false);
     setShowWishlistOnly(false);
+    setDiscoveryTab('all');
     setSortBy('trending');
     setSearchQuery('');
   };
 
   return (
-    <section id="catalog-section" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    <section id="catalog-section" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+      {/* Quick Discovery Segmented Tabs (Section B) */}
+      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-3 mb-2 border-b border-zinc-100 dark:border-zinc-800 text-xs font-semibold">
+        {[
+          { id: 'all', label: '🌟 All Items' },
+          { id: 'trending', label: '🔥 Trending' },
+          { id: 'flash', label: '⚡ Flash Sale (50%+ Off)' },
+          { id: 'bestsellers', label: '⭐ Best Sellers' },
+          { id: 'deals', label: "🏷️ Today's Deals" },
+          { id: 'group', label: '👥 Group Buying' }
+        ].map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setDiscoveryTab(tab.id as any)}
+            className={`px-3 py-1.5 rounded-full whitespace-nowrap transition-all shrink-0 ${
+              discoveryTab === tab.id
+                ? 'bg-rose-600 text-white shadow-xs font-bold'
+                : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700 hover:text-zinc-900'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Popular Search Suggestions (Section D) */}
+      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-2 text-[11px] text-zinc-500">
+        <span className="font-semibold text-zinc-400 shrink-0">Popular:</span>
+        {popularKeywords.map(kw => (
+          <button
+            key={kw}
+            onClick={() => setSearchQuery(kw)}
+            className="px-2.5 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800/80 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 whitespace-nowrap transition-colors"
+          >
+            {kw}
+          </button>
+        ))}
+      </div>
+
       {/* Catalog Header & Filter Control Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-zinc-200 dark:border-zinc-800">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 pb-4 border-b border-zinc-200 dark:border-zinc-800">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-zinc-900 dark:text-white font-display">
+          <h2 className="text-lg sm:text-xl font-bold tracking-tight text-zinc-900 dark:text-white font-display">
             {showWishlistOnly 
               ? 'Saved in Wishlist' 
-              : selectedCategory === 'all' 
-                ? 'All Collections' 
-                : `${selectedCategory.toUpperCase()} DROP`}
+              : discoveryTab === 'flash'
+                ? '⚡ Lightning Flash Sale Drops'
+                : selectedCategory === 'all' 
+                  ? 'All Collections' 
+                  : `${selectedCategory.toUpperCase()} COLLECTION`}
           </h2>
           <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-            Showing <span className="font-semibold text-zinc-900 dark:text-white">{filteredProducts.length}</span> {showWishlistOnly ? 'saved wishlist items' : 'curated styles'}
-            {searchQuery && <span> for &ldquo;{searchQuery}&rdquo;</span>}
+            Showing <span className="font-semibold text-zinc-900 dark:text-white">{filteredProducts.length}</span> {showWishlistOnly ? 'saved wishlist items' : 'curated products'}
+            {searchQuery && <span> matching &ldquo;{searchQuery}&rdquo;</span>}
           </p>
         </div>
 
@@ -91,7 +156,7 @@ export const ProductCatalog: React.FC = () => {
           {/* Wishlist quick toggle */}
           <button
             onClick={() => setShowWishlistOnly(!showWishlistOnly)}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold border transition-all active:scale-95 ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 sm:py-2 rounded-xl text-xs font-semibold border transition-all active:scale-95 ${
               showWishlistOnly
                 ? 'bg-rose-50 text-rose-700 border-rose-300 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900 shadow-xs ring-1 ring-rose-500/20'
                 : 'bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 border-zinc-300 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800'
@@ -114,7 +179,7 @@ export const ProductCatalog: React.FC = () => {
           {/* Filter button */}
           <button
             onClick={() => setIsFilterDrawerOpen(!isFilterDrawerOpen)}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold border transition-colors ${
+            className={`flex items-center gap-2 px-3 py-1.5 sm:py-2 rounded-xl text-xs font-semibold border transition-colors ${
               activeFiltersCount > 0
                 ? 'bg-rose-50 text-rose-700 border-rose-300 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900'
                 : 'bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 border-zinc-300 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800'
@@ -130,7 +195,7 @@ export const ProductCatalog: React.FC = () => {
           </button>
 
           {/* Sort By Dropdown */}
-          <div className="flex items-center gap-2 bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-1.5 text-xs">
+          <div className="flex items-center gap-2 bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-xl px-2.5 sm:px-3 py-1.5 text-xs">
             <ArrowUpDown className="w-3.5 h-3.5 text-zinc-400" />
             <select
               value={sortBy}
@@ -140,7 +205,8 @@ export const ProductCatalog: React.FC = () => {
               <option value="trending" className="dark:bg-zinc-900">Trending First</option>
               <option value="price-low" className="dark:bg-zinc-900">Price: Low to High</option>
               <option value="price-high" className="dark:bg-zinc-900">Price: High to Low</option>
-              <option value="rating" className="dark:bg-zinc-900">Highest Customer Rating</option>
+              <option value="rating" className="dark:bg-zinc-900">Highest Rated</option>
+              <option value="discount" className="dark:bg-zinc-900">Biggest Discount %</option>
             </select>
           </div>
         </div>
@@ -192,6 +258,28 @@ export const ProductCatalog: React.FC = () => {
             </div>
           </div>
 
+          {/* Min Discount */}
+          <div>
+            <span className="block text-xs font-semibold text-zinc-800 dark:text-zinc-200 mb-2">
+              Minimum Discount
+            </span>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {[0, 30, 50, 60].map(d => (
+                <button
+                  key={d}
+                  onClick={() => setMinDiscount(d)}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                    minDiscount === d
+                      ? 'bg-rose-600 text-white font-semibold'
+                      : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700'
+                  }`}
+                >
+                  {d === 0 ? 'Any' : `${d}%+`}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Cash on delivery filter */}
           <div>
             <span className="block text-xs font-semibold text-zinc-800 dark:text-zinc-200 mb-2">
@@ -209,7 +297,7 @@ export const ProductCatalog: React.FC = () => {
           </div>
 
           {/* Reset Filters button */}
-          <div className="flex items-end justify-end">
+          <div className="flex items-end justify-end sm:col-span-2 md:col-span-5">
             <button
               onClick={resetFilters}
               className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors"

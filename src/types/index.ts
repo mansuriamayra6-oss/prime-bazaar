@@ -39,7 +39,35 @@ export interface Product {
   id: string;
   title: string;
   brand: string;
-  category: 'ethnic' | 'western' | 'streetwear' | 'footwear' | 'accessories' | 'beauty';
+  category: 
+    | 'ethnic' 
+    | 'western' 
+    | 'streetwear' 
+    | 'fashion' 
+    | 'mens-fashion' 
+    | 'womens-fashion' 
+    | 'kids-fashion' 
+    | 'footwear' 
+    | 'accessories' 
+    | 'jewellery' 
+    | 'beauty' 
+    | 'health' 
+    | 'home-kitchen' 
+    | 'furniture' 
+    | 'electronics' 
+    | 'mobile-accessories' 
+    | 'computers' 
+    | 'toys-games' 
+    | 'baby-products' 
+    | 'sports-outdoor' 
+    | 'automotive' 
+    | 'office-supplies' 
+    | 'pet-supplies' 
+    | 'garden-products' 
+    | 'diy-tools' 
+    | 'handmade' 
+    | 'travel'
+    | (string & {});
   subcategory?: string;
   sku?: string;
   barcode?: string;

@@ -126,11 +126,11 @@ export const AuthModal: React.FC = () => {
 
         {/* Logo and Header */}
         <div className="text-center mb-5">
-          <div className="inline-block px-3 py-2 rounded-2xl bg-white border border-zinc-200/90 shadow-sm mx-auto mb-2">
+          <div className="inline-block px-4 py-2.5 rounded-2xl bg-white border border-zinc-200/90 shadow-sm mx-auto mb-2">
             <img
               src="/assets/aistudio/Prime_Bazaar_Shopping_Logo_0c82d149.png"
               alt="Prime Bazaar"
-              className="h-10 w-auto object-contain"
+              className="h-14 sm:h-16 w-auto object-contain"
             />
           </div>
           <h2 className="text-xl font-bold text-zinc-900 dark:text-white font-display">
