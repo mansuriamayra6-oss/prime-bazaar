@@ -38,6 +38,7 @@ model User {
   orders         Order[]
   productReviews ProductReview[]
   notifications  Notification[]
+  priceAlerts    PriceAlert[]
   auditLogs      AuditLog[]
 
   @@map("users")
@@ -241,9 +242,10 @@ model Product {
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
-  variants ProductVariant[]
-  images   ProductImage[]
-  reviews  ProductReview[]
+  variants    ProductVariant[]
+  images      ProductImage[]
+  reviews     ProductReview[]
+  priceAlerts PriceAlert[]
 
   @@map("products")
   @@index([sellerId])
@@ -650,12 +652,46 @@ model AuditLog {
   @@map("audit_logs")
 }
 
+enum PriceAlertStatus {
+  ACTIVE
+  TRIGGERED
+  PAUSED
+  CANCELLED
+}
+
+model PriceAlert {
+  id              String           @id @default(uuid())
+  userId          String
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId       String
+  product         Product          @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productTitle    String
+  initialPrice    Decimal          @db.Decimal(12, 2)
+  targetPrice     Decimal?         @db.Decimal(12, 2)
+  currentPrice    Decimal          @db.Decimal(12, 2)
+  lowestPriceSeen Decimal          @db.Decimal(12, 2)
+  notifyOnAnyDrop Boolean          @default(true)
+  status          PriceAlertStatus @default(ACTIVE)
+  lastCheckedAt   DateTime?
+  triggeredAt     DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@unique([userId, productId])
+  @@map("price_alerts")
+  @@index([userId])
+  @@index([productId])
+  @@index([status])
+}
+
 model Notification {
   id        String   @id @default(uuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String   @default("GENERAL") // e.g. "PRICE_DROP", "ORDER_UPDATE"
   title     String
   message   String
+  metadata  Json?
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
 

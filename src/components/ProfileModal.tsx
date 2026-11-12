@@ -32,7 +32,11 @@ import {
   Smartphone,
   Key,
   Lock,
-  Plus
+  Plus,
+  Bell,
+  TrendingDown,
+  RefreshCw,
+  Zap
 } from 'lucide-react';
 
 export const ProfileModal: React.FC = () => {
@@ -66,6 +70,15 @@ export const ProfileModal: React.FC = () => {
     chatWithSeller,
     setIsLiveShoppingOpen,
     earnCoins,
+    priceAlerts,
+    priceDropNotifications,
+    unreadPriceDropCount,
+    priceWorkerStatus,
+    hasPriceAlert,
+    togglePriceAlert,
+    runPriceDropWorkerCheck,
+    markPriceDropRead,
+    markAllPriceDropsRead,
     notify
   } = useMarketplace();
 
@@ -351,9 +364,129 @@ export const ProfileModal: React.FC = () => {
               </div>
             )}
 
-            {/* Tab 3: Wishlist */}
+            {/* Tab 3: Wishlist & Price-Drop Alerts */}
             {activeTab === 'wishlist' && (
-              <div className="space-y-3">
+              <div className="space-y-4">
+                {/* Background Price-Drop Worker Status & Notifications Panel */}
+                <div className="p-3.5 rounded-2xl bg-gradient-to-br from-amber-50 to-rose-50/60 dark:from-amber-950/30 dark:to-rose-950/20 border border-amber-200 dark:border-amber-800/70 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+                        <TrendingDown className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <h4 className="text-xs font-bold text-zinc-900 dark:text-white">
+                            Wishlist Price-Drop Monitor
+                          </h4>
+                          <span className="inline-flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                            Worker Active (15s)
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-zinc-500">
+                          {priceAlerts.filter(a => a.status === 'ACTIVE').length} active alerts · {priceWorkerStatus?.totalChecksRun ?? 1} sweeps checked
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => runPriceDropWorkerCheck()}
+                        className="px-2.5 py-1.5 rounded-xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-[11px] font-semibold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 flex items-center gap-1 transition-colors"
+                        title="Trigger background worker price check now"
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                        <span>Check Now</span>
+                      </button>
+
+                      {wishlistedProducts.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const target = wishlistedProducts.find(p => hasPriceAlert(p.id)) || wishlistedProducts[0];
+                            if (!hasPriceAlert(target.id)) {
+                              await togglePriceAlert(target);
+                            }
+                            await runPriceDropWorkerCheck(target.id, 15);
+                          }}
+                          className="px-2.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-bold flex items-center gap-1 shadow-xs transition-all active:scale-95"
+                          title="Simulate seller dropping price by 15% and trigger background worker alert"
+                        >
+                          <Zap className="w-3 h-3" />
+                          <span>Test 15% Drop</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Triggered Price-Drop Notifications Feed */}
+                  {priceDropNotifications.length > 0 && (
+                    <div className="space-y-2 pt-2 border-t border-amber-200/70 dark:border-amber-800/50">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="font-bold text-amber-900 dark:text-amber-300 flex items-center gap-1">
+                          <Bell className="w-3 h-3 fill-current" />
+                          <span>Price-Drop Alerts Triggered ({unreadPriceDropCount} unread)</span>
+                        </span>
+                        {unreadPriceDropCount > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => markAllPriceDropsRead()}
+                            className="text-[10px] font-semibold text-amber-700 dark:text-amber-400 hover:underline"
+                          >
+                            Mark all read
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1">
+                        {priceDropNotifications.slice(0, 5).map(notif => (
+                          <div
+                            key={notif.id}
+                            onClick={() => markPriceDropRead(notif.id)}
+                            className={`p-2 rounded-xl border text-xs flex items-center justify-between gap-2 cursor-pointer transition-all ${
+                              notif.isRead
+                                ? 'bg-white/60 dark:bg-zinc-900/40 border-zinc-200 dark:border-zinc-800 opacity-75'
+                                : 'bg-white dark:bg-zinc-900 border-amber-300 dark:border-amber-700 shadow-xs'
+                            }`}
+                          >
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5">
+                                {!notif.isRead && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0"></span>}
+                                <span className="font-bold text-zinc-900 dark:text-white truncate text-[11px]">
+                                  {notif.productTitle}
+                                </span>
+                              </div>
+                              <div className="text-[10px] text-zinc-500 font-mono flex items-center gap-1.5 mt-0.5">
+                                <span className="line-through">{formatPrice(notif.oldPrice)}</span>
+                                <span className="font-bold text-emerald-600 dark:text-emerald-400">{formatPrice(notif.newPrice)}</span>
+                                <span className="px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-bold">
+                                  -{notif.dropPercent}%
+                                </span>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={e => {
+                                e.stopPropagation();
+                                const prod = products.find(p => p.id === notif.productId);
+                                if (prod) {
+                                  setSelectedProduct(prod);
+                                  setIsProfileOpen(false);
+                                }
+                              }}
+                              className="px-2 py-1 rounded-lg bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 text-[10px] font-bold shrink-0"
+                            >
+                              Shop
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 {wishlistedProducts.length === 0 ? (
                   <div className="text-center py-10 px-4 bg-zinc-50 dark:bg-zinc-800/30 rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800">
                     <div className="w-12 h-12 rounded-full bg-rose-50 dark:bg-rose-950/60 text-rose-500 flex items-center justify-center mx-auto mb-3">
@@ -361,7 +494,7 @@ export const ProfileModal: React.FC = () => {
                     </div>
                     <h4 className="text-sm font-bold text-zinc-900 dark:text-white">Your Wishlist is Empty</h4>
                     <p className="text-xs text-zinc-500 max-w-xs mx-auto mt-1 mb-4">
-                      Tap the heart icon on any product card in the catalog to save your favorite styles to your profile.
+                      Tap the heart icon on any product card in the catalog to save your favorite styles and enable price-drop alerts.
                     </p>
                     <button
                       onClick={() => setIsProfileOpen(false)}
@@ -380,70 +513,86 @@ export const ProfileModal: React.FC = () => {
                       </span>
                     </div>
 
-                    <div className="space-y-2.5 max-h-[360px] overflow-y-auto pr-1">
-                      {wishlistedProducts.map(item => (
-                        <div 
-                          key={item.id} 
-                          className="p-3 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800/80 flex items-center gap-3.5 hover:border-zinc-300 dark:hover:border-zinc-700 transition-all cursor-pointer group"
-                          onClick={() => {
-                            setSelectedProduct(item);
-                            setIsProfileOpen(false);
-                          }}
-                        >
-                          <img 
-                            src={item.images[0]} 
-                            alt={item.title} 
-                            className="w-16 h-20 rounded-xl object-cover shrink-0 border border-zinc-200 dark:border-zinc-700 group-hover:scale-105 transition-transform" 
-                          />
-                          <div className="flex-1 min-w-0">
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 block truncate">
-                              {item.brand}
-                            </span>
-                            <h4 className="text-xs font-semibold text-zinc-900 dark:text-white truncate">
-                              {item.title}
-                            </h4>
-                            <div className="flex items-baseline gap-2 mt-1">
-                              <span className="text-sm font-bold text-zinc-900 dark:text-white font-mono">
-                                {formatPrice(item.price)}
+                    <div className="space-y-2.5 max-h-[300px] overflow-y-auto pr-1">
+                      {wishlistedProducts.map(item => {
+                        const alertActive = hasPriceAlert(item.id);
+                        return (
+                          <div 
+                            key={item.id} 
+                            className="p-3 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800/80 flex items-center gap-3.5 hover:border-zinc-300 dark:hover:border-zinc-700 transition-all cursor-pointer group"
+                            onClick={() => {
+                              setSelectedProduct(item);
+                              setIsProfileOpen(false);
+                            }}
+                          >
+                            <img 
+                              src={item.images[0]} 
+                              alt={item.title} 
+                              className="w-16 h-20 rounded-xl object-cover shrink-0 border border-zinc-200 dark:border-zinc-700 group-hover:scale-105 transition-transform" 
+                            />
+                            <div className="flex-1 min-w-0">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 block truncate">
+                                {item.brand}
                               </span>
-                              {item.originalPrice > item.price && (
-                                <span className="text-[11px] text-zinc-400 line-through font-mono">
-                                  {formatPrice(item.originalPrice)}
+                              <h4 className="text-xs font-semibold text-zinc-900 dark:text-white truncate">
+                                {item.title}
+                              </h4>
+                              <div className="flex items-baseline gap-2 mt-1">
+                                <span className="text-sm font-bold text-zinc-900 dark:text-white font-mono">
+                                  {formatPrice(item.price)}
                                 </span>
-                              )}
-                              {item.discountPercent > 0 && (
-                                <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 font-mono">
-                                  {item.discountPercent}% OFF
-                                </span>
-                              )}
+                                {item.originalPrice > item.price && (
+                                  <span className="text-[11px] text-zinc-400 line-through font-mono">
+                                    {formatPrice(item.originalPrice)}
+                                  </span>
+                                )}
+                                {item.discountPercent > 0 && (
+                                  <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 font-mono">
+                                    {item.discountPercent}% OFF
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="flex flex-col sm:flex-row items-center gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
+                              <button
+                                type="button"
+                                onClick={() => togglePriceAlert(item)}
+                                className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold flex items-center gap-1 transition-all border ${
+                                  alertActive
+                                    ? 'bg-amber-50 border-amber-300 text-amber-700 dark:bg-amber-950/60 dark:border-amber-700 dark:text-amber-300'
+                                    : 'bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:border-amber-400'
+                                }`}
+                                title={alertActive ? 'Price-drop monitor active (Click to disable)' : 'Notify me when price drops'}
+                              >
+                                <Bell className={`w-3.5 h-3.5 ${alertActive ? 'fill-amber-500 text-amber-500' : ''}`} />
+                                <span className="hidden md:inline">{alertActive ? 'Alert On' : 'Alert'}</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const size = item.sizes[0]?.size || 'Free Size';
+                                  const color = item.colors[0]?.name || 'Standard';
+                                  addToCart(item, size, color, 1);
+                                }}
+                                className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1 transition-all active:scale-95 shadow-xs"
+                                title="Move to Shopping Bag"
+                              >
+                                <ShoppingBag className="w-3.5 h-3.5" />
+                                <span className="hidden sm:inline">Add to Bag</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => toggleWishlist(item.id, item.title)}
+                                className="p-2 rounded-xl text-zinc-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                                title="Remove from Wishlist"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
                             </div>
                           </div>
-
-                          <div className="flex flex-col sm:flex-row items-center gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const size = item.sizes[0]?.size || 'Free Size';
-                                const color = item.colors[0]?.name || 'Standard';
-                                addToCart(item, size, color, 1);
-                              }}
-                              className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1 transition-all active:scale-95 shadow-xs"
-                              title="Move to Shopping Bag"
-                            >
-                              <ShoppingBag className="w-3.5 h-3.5" />
-                              <span className="hidden sm:inline">Add to Bag</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => toggleWishlist(item.id, item.title)}
-                              className="p-2 rounded-xl text-zinc-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
-                              title="Remove from Wishlist"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 )}

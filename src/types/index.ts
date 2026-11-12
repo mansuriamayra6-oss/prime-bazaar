@@ -219,6 +219,11 @@ export interface Seller {
   joinedDate: string;
   bannerImage?: string;
   storeLogo?: string;
+  cashfreeBeneficiaryId?: string;
+  cashfreeStatus?: 'active' | 'pending' | 'unlinked' | 'verified';
+  cashfreeVpa?: string;
+  cashfreeAutoPayout?: boolean;
+  cashfreeMode?: 'banktransfer' | 'upi';
 }
 
 export interface SellerReturnRequest {
@@ -251,6 +256,9 @@ export interface SellerPayout {
   requestedAt: string;
   status: 'pending' | 'approved' | 'processed' | 'rejected';
   bankRefNumber?: string;
+  cashfreeTransferId?: string;
+  cashfreeUtr?: string;
+  cashfreeMode?: 'UPI' | 'NEFT' | 'IMPS';
 }
 
 export interface SellerCoupon {
@@ -373,3 +381,45 @@ export interface LaunchCriterion {
   verificationEvidence: string;
 }
 
+export interface PriceAlert {
+  id: string;
+  userId: string;
+  productId: string;
+  productTitle: string;
+  productImage?: string;
+  initialPrice: number;
+  targetPrice?: number;
+  currentPrice: number;
+  lowestPriceSeen: number;
+  notifyOnAnyDrop: boolean;
+  status: 'ACTIVE' | 'TRIGGERED' | 'PAUSED' | 'CANCELLED';
+  lastCheckedAt?: string;
+  triggeredAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PriceDropNotification {
+  id: string;
+  alertId: string;
+  userId: string;
+  productId: string;
+  productTitle: string;
+  productImage?: string;
+  oldPrice: number;
+  newPrice: number;
+  dropAmount: number;
+  dropPercent: number;
+  message: string;
+  isRead: boolean;
+  createdAt: string;
+}
+
+export interface PriceWorkerStatus {
+  isRunning: boolean;
+  intervalMs: number;
+  lastRunAt: string | null;
+  totalChecksRun: number;
+  alertsTriggeredCount: number;
+  activeAlertsCount: number;
+}

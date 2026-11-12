@@ -300,5 +300,51 @@ export const api = {
       getAuditLogs: async () => apiRequest('/api/v1/admin/audit-logs'),
     },
   },
-};
 
+  // Wishlist Price-Drop Alerts & Background Worker
+  priceAlerts: {
+    getAll: async (userId: string) =>
+      apiRequest(`/api/price-alerts?userId=${encodeURIComponent(userId)}`),
+    subscribe: async (payload: {
+      userId: string;
+      productId: string;
+      productTitle: string;
+      productImage?: string;
+      currentPrice: number;
+      targetPrice?: number;
+      notifyOnAnyDrop?: boolean;
+    }) =>
+      apiRequest('/api/price-alerts', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    unsubscribe: async (productId: string, userId: string) =>
+      apiRequest(`/api/price-alerts/${encodeURIComponent(productId)}?userId=${encodeURIComponent(userId)}`, {
+        method: 'DELETE',
+      }),
+    syncProducts: async (products: Array<{ id: string; title: string; price: number; originalPrice?: number; image?: string }>) =>
+      apiRequest('/api/price-alerts/sync-products', {
+        method: 'POST',
+        body: JSON.stringify({ products }),
+      }),
+    updateProductPrice: async (productId: string, newPrice: number, title?: string, image?: string) =>
+      apiRequest(`/api/price-alerts/products/${encodeURIComponent(productId)}/price`, {
+        method: 'PATCH',
+        body: JSON.stringify({ newPrice, title, image }),
+      }),
+    runWorker: async (simulateDropProductId?: string, dropPercent: number = 15) =>
+      apiRequest('/api/price-alerts/worker/run', {
+        method: 'POST',
+        body: JSON.stringify({ simulateDropProductId, dropPercent }),
+      }),
+    markRead: async (notificationId: string) =>
+      apiRequest(`/api/price-alerts/notifications/${encodeURIComponent(notificationId)}/read`, {
+        method: 'POST',
+      }),
+    markAllRead: async (userId: string) =>
+      apiRequest('/api/price-alerts/notifications/read-all', {
+        method: 'POST',
+        body: JSON.stringify({ userId }),
+      }),
+  },
+};

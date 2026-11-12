@@ -706,7 +706,12 @@ export const INITIAL_SELLERS: Seller[] = [
     commissionRate: 12,
     verified: true,
     status: 'active',
-    joinedDate: 'Jan 2024'
+    joinedDate: 'Jan 2024',
+    cashfreeBeneficiaryId: 'CF_BENEF_VARANASI_9041',
+    cashfreeStatus: 'verified',
+    cashfreeVpa: 'weaverscraft@okhdfcbank',
+    cashfreeAutoPayout: true,
+    cashfreeMode: 'banktransfer'
   },
   {
     id: 'seller-2',
@@ -745,7 +750,12 @@ export const INITIAL_SELLERS: Seller[] = [
     commissionRate: 12,
     verified: true,
     status: 'active',
-    joinedDate: 'Mar 2024'
+    joinedDate: 'Mar 2024',
+    cashfreeBeneficiaryId: 'CF_BENEF_METRO_1489',
+    cashfreeStatus: 'verified',
+    cashfreeVpa: 'metropolis@icici',
+    cashfreeAutoPayout: true,
+    cashfreeMode: 'banktransfer'
   },
   {
     id: 'seller-3',
@@ -861,7 +871,10 @@ export const INITIAL_SELLER_PAYOUTS: SellerPayout[] = [
     bankName: 'HDFC Bank',
     requestedAt: '25 Oct 2026, 06:10 PM',
     status: 'processed',
-    bankRefNumber: 'HDFC-NEFT-20261025-8819'
+    bankRefNumber: 'HDFC-NEFT-20261025-8819',
+    cashfreeTransferId: 'CF_TR_20261025_98124',
+    cashfreeUtr: 'UTR2026102598124HDFC',
+    cashfreeMode: 'NEFT'
   },
   {
     id: 'pay-202',
@@ -875,7 +888,9 @@ export const INITIAL_SELLER_PAYOUTS: SellerPayout[] = [
     accountNumber: '•••• 9041',
     bankName: 'HDFC Bank',
     requestedAt: '29 Oct 2026, 02:40 PM',
-    status: 'pending'
+    status: 'pending',
+    cashfreeTransferId: 'CF_TR_20261029_11029',
+    cashfreeMode: 'IMPS'
   }
 ];
 

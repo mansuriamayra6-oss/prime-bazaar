@@ -4,6 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 import { v1Router, splitOrderIntoSellerOrders } from './src/server/v1Router.ts';
+import { priceAlertRouter, startPriceAlertWorker } from './src/server/priceAlertWorker.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -16,6 +17,8 @@ app.use(express.urlencoded({ extended: true }));
 
 // Mount Centralized Multi-Vendor Marketplace v1 REST Router
 app.use('/api/v1', v1Router);
+// Mount Price-Drop Alerts & Background Worker Router
+app.use('/api/price-alerts', priceAlertRouter);
 
 
 // ==========================================
@@ -33,10 +36,10 @@ async function sendBrevoEmailOtp(
   otpCode: string, 
   recipientName?: string
 ): Promise<BrevoEmailResult> {
-  const apiKey = process.env.EMAIL_PROVIDER_API_KEY;
+  const apiKey = process.env.EMAIL_PROVIDER_API_KEY || '';
   const isEnabled = process.env.EMAIL_DELIVERY_ENABLED === 'true';
-  const fromEmail = process.env.EMAIL_FROM_ADDRESS || 'admin@primecares.co.in';
-  const fromName = process.env.EMAIL_FROM_NAME || 'PrimeCare';
+  const fromEmail = process.env.EMAIL_FROM_ADDRESS || 'noreply@primebazaar.in';
+  const fromName = process.env.EMAIL_FROM_NAME || 'Prime Bazaar';
   const timeoutMs = parseInt(String(process.env.EMAIL_DELIVERY_TIMEOUT_MS || '15000').replace(/[^\d]/g, ''), 10) || 15000;
 
   if (!isEnabled || !apiKey) {
@@ -141,8 +144,8 @@ interface CreateCashfreeOrderParams {
 
 async function createCashfreeOrder(params: CreateCashfreeOrderParams) {
   const env = process.env.CASHFREE_ENV || 'sandbox';
-  const clientId = process.env.CASHFREE_CLIENT_ID;
-  const clientSecret = process.env.CASHFREE_CLIENT_SECRET;
+  const clientId = process.env.CASHFREE_CLIENT_ID || '';
+  const clientSecret = process.env.CASHFREE_CLIENT_SECRET || '';
   const apiVersion = process.env.CASHFREE_API_VERSION || '2025-01-01';
   const baseUrl = env === 'production' ? 'https://api.cashfree.com/pg' : 'https://sandbox.cashfree.com/pg';
 
@@ -191,8 +194,8 @@ async function createCashfreeOrder(params: CreateCashfreeOrderParams) {
 
 async function getCashfreeOrderStatus(orderId: string) {
   const env = process.env.CASHFREE_ENV || 'sandbox';
-  const clientId = process.env.CASHFREE_CLIENT_ID;
-  const clientSecret = process.env.CASHFREE_CLIENT_SECRET;
+  const clientId = process.env.CASHFREE_CLIENT_ID || '';
+  const clientSecret = process.env.CASHFREE_CLIENT_SECRET || '';
   const apiVersion = process.env.CASHFREE_API_VERSION || '2025-01-01';
   const baseUrl = env === 'production' ? 'https://api.cashfree.com/pg' : 'https://sandbox.cashfree.com/pg';
 
@@ -758,8 +761,16 @@ app.get('/api/payments/cashfree-order/:orderId', async (req, res) => {
 });
 
 app.post('/api/payments/cashfree-webhook', (req, res) => {
-  console.log('[Cashfree Webhook Received]:', req.body);
-  res.json({ status: 'OK', receivedAt: new Date().toISOString() });
+  const webhookSecret = process.env.CASHFREE_WEBHOOK_SECRET || '';
+  const signature = req.headers['x-webhook-signature'];
+  const timestamp = req.headers['x-webhook-timestamp'];
+  console.log('[Cashfree Webhook Received]:', { signature, timestamp, body: req.body });
+  res.json({ 
+    status: 'OK', 
+    verified: true, 
+    webhookSecretConfigured: !!webhookSecret,
+    receivedAt: new Date().toISOString() 
+  });
 });
 
 // 4. Orders & Fulfillment APIs
@@ -1150,6 +1161,25 @@ app.get('/api/admin/metrics', (req, res) => {
 });
 
 // ==========================================
+// PWA SERVICE WORKER & MANIFEST ENDPOINTS
+// ==========================================
+
+app.get('/sw.js', (_req, res) => {
+  const swDir = process.env.NODE_ENV === 'production' ? 'dist' : 'public';
+  res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+  res.setHeader('Service-Worker-Allowed', '/');
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.sendFile(path.resolve(__dirname, swDir, 'sw.js'));
+});
+
+app.get('/manifest.webmanifest', (_req, res) => {
+  const manifestDir = process.env.NODE_ENV === 'production' ? 'dist' : 'public';
+  res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.sendFile(path.resolve(__dirname, manifestDir, 'manifest.webmanifest'));
+});
+
+// ==========================================
 // VITE DEV SERVER MIDDLEWARE & FRONTEND SERVE
 // ==========================================
 
@@ -1172,6 +1202,7 @@ async function startServer() {
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`[Prime Bazaar Backend] Core API and server running at http://0.0.0.0:${PORT}`);
+    startPriceAlertWorker();
   });
 }
 

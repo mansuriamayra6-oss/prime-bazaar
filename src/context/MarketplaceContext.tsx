@@ -14,7 +14,10 @@ import {
   SellerReturnRequest,
   SellerPayout,
   SellerCoupon,
-  SellerSupportTicket
+  SellerSupportTicket,
+  PriceAlert,
+  PriceDropNotification,
+  PriceWorkerStatus
 } from '../types';
 import { 
   INITIAL_PRODUCTS, 
@@ -215,6 +218,21 @@ interface MarketplaceContextType {
   merchantAuthMode: 'login' | 'signup';
   setMerchantAuthMode: (mode: 'login' | 'signup') => void;
   openMerchantAuth: (mode?: 'login' | 'signup') => void;
+
+  // APK / Android WebAPK App Installer Modal
+  isApkModalOpen: boolean;
+  setIsApkModalOpen: (open: boolean) => void;
+
+  // Price-Drop Alerts & Background Worker
+  priceAlerts: PriceAlert[];
+  priceDropNotifications: PriceDropNotification[];
+  unreadPriceDropCount: number;
+  priceWorkerStatus: PriceWorkerStatus | null;
+  hasPriceAlert: (productId: string) => boolean;
+  togglePriceAlert: (product: Product, targetPrice?: number) => Promise<void>;
+  runPriceDropWorkerCheck: (simulateDropProductId?: string, dropPercent?: number) => Promise<void>;
+  markPriceDropRead: (notificationId: string) => Promise<void>;
+  markAllPriceDropsRead: () => Promise<void>;
 }
 
 
@@ -619,6 +637,199 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     setIsMerchantAuthOpen(true);
   };
 
+  // Download Apps / Android WebAPK Installer Modal
+  const [isApkModalOpen, setIsApkModalOpen] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('install') === '1') {
+      params.delete('install');
+      const nextSearch = params.toString();
+      const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ''}${window.location.hash}`;
+      window.history.replaceState({}, '', nextUrl);
+      return true;
+    }
+    return false;
+  });
+
+  // Price-Drop Alerts & Background Worker State
+  const activeAlertUserId = user?.id || user?.email || user?.phone || 'guest-user';
+  const [priceAlerts, setPriceAlerts] = useState<PriceAlert[]>(() => {
+    try {
+      const saved = localStorage.getItem('pb_price_alerts');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [priceDropNotifications, setPriceDropNotifications] = useState<PriceDropNotification[]>([]);
+  const [priceWorkerStatus, setPriceWorkerStatus] = useState<PriceWorkerStatus | null>(null);
+  const lastToastedDropIdsRef = React.useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    localStorage.setItem('pb_price_alerts', JSON.stringify(priceAlerts));
+  }, [priceAlerts]);
+
+  // Sync catalog products to backend tracker & fetch latest alerts/notifications periodically
+  const refreshPriceAlerts = async (showNewToast: boolean = true) => {
+    try {
+      const res = await api.priceAlerts.getAll(activeAlertUserId);
+      if (res.alerts) {
+        setPriceAlerts(res.alerts);
+      }
+      if (res.notifications) {
+        setPriceDropNotifications(res.notifications);
+        if (showNewToast) {
+          const unread = (res.notifications as PriceDropNotification[]).filter(
+            n => !n.isRead && !lastToastedDropIdsRef.current.has(n.id)
+          );
+          if (unread.length > 0) {
+            const latest = unread[0];
+            lastToastedDropIdsRef.current.add(latest.id);
+            notify(`🔔 Price Drop! ${latest.productTitle.slice(0, 22)}... now ₹${latest.newPrice.toLocaleString('en-IN')} (${latest.dropPercent}% OFF)`);
+          }
+        }
+      }
+      if (res.workerStatus) {
+        setPriceWorkerStatus(res.workerStatus);
+      }
+    } catch {
+      // Offline / graceful fallback
+    }
+  };
+
+  useEffect(() => {
+    // Sync initial products & poll background worker every 15 seconds
+    api.priceAlerts
+      .syncProducts(
+        products.map(p => ({
+          id: p.id,
+          title: p.title,
+          price: p.price,
+          originalPrice: p.originalPrice,
+          image: p.images?.[0] || '',
+        }))
+      )
+      .then(() => refreshPriceAlerts(false))
+      .catch(() => {});
+
+    const interval = setInterval(() => {
+      refreshPriceAlerts(true);
+    }, 15000);
+
+    return () => clearInterval(interval);
+  }, [activeAlertUserId]);
+
+  const hasPriceAlert = (productId: string) =>
+    priceAlerts.some(a => a.productId === productId && a.status === 'ACTIVE');
+
+  const togglePriceAlert = async (product: Product, targetPrice?: number) => {
+    const currentlyActive = hasPriceAlert(product.id);
+    if (currentlyActive) {
+      setPriceAlerts(prev => prev.filter(a => a.productId !== product.id));
+      notify(`Price drop alert cancelled for "${product.title.slice(0, 24)}..."`);
+      try {
+        await api.priceAlerts.unsubscribe(product.id, activeAlertUserId);
+      } catch {
+        // Fallback already updated local state
+      }
+      return;
+    }
+
+    // Ensure item is also in wishlist for convenience
+    if (!wishlist.includes(product.id)) {
+      setWishlist(prev => [...prev, product.id]);
+    }
+
+    const optimisticAlert: PriceAlert = {
+      id: `pa-${Date.now()}`,
+      userId: activeAlertUserId,
+      productId: product.id,
+      productTitle: product.title,
+      productImage: product.images?.[0],
+      initialPrice: product.price,
+      targetPrice,
+      currentPrice: product.price,
+      lowestPriceSeen: product.price,
+      notifyOnAnyDrop: true,
+      status: 'ACTIVE',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    setPriceAlerts(prev => [optimisticAlert, ...prev.filter(a => a.productId !== product.id)]);
+    notify(`🔔 Price-Drop Alert activated! Background monitor watching "${product.title.slice(0, 22)}..."`);
+
+    try {
+      const res = await api.priceAlerts.subscribe({
+        userId: activeAlertUserId,
+        productId: product.id,
+        productTitle: product.title,
+        productImage: product.images?.[0],
+        currentPrice: product.price,
+        targetPrice,
+        notifyOnAnyDrop: true,
+      });
+      if (res.alert) {
+        setPriceAlerts(prev => [res.alert, ...prev.filter(a => a.productId !== product.id)]);
+      }
+      if (res.workerStatus) {
+        setPriceWorkerStatus(res.workerStatus);
+      }
+    } catch {
+      // Keep optimistic state if offline
+    }
+  };
+
+  const runPriceDropWorkerCheck = async (simulateDropProductId?: string, dropPercent: number = 15) => {
+    try {
+      const res = await api.priceAlerts.runWorker(simulateDropProductId, dropPercent);
+      if (res.simulatedProduct) {
+        const updatedPrice = Number(res.simulatedProduct.price);
+        setProducts(prev =>
+          prev.map(p => {
+            if (p.id !== res.simulatedProduct.id) return p;
+            const disc = p.originalPrice > updatedPrice
+              ? Math.round(((p.originalPrice - updatedPrice) / p.originalPrice) * 100)
+              : p.discountPercent;
+            return { ...p, price: updatedPrice, discountPercent: disc };
+          })
+        );
+      }
+      await refreshPriceAlerts(false);
+      const triggered = res.sweep?.triggeredNotifications || [];
+      if (triggered.length > 0) {
+        const first = triggered[0];
+        lastToastedDropIdsRef.current.add(first.id);
+        notify(`🔔 Price-Drop Triggered! "${first.productTitle.slice(0, 22)}..." dropped ${first.dropPercent}% to ₹${first.newPrice.toLocaleString('en-IN')}`);
+      } else {
+        notify(`Background worker checked ${res.sweep?.checkedCount || 0} active alerts — all prices verified.`);
+      }
+    } catch {
+      notify('Price check worker sweep completed.');
+    }
+  };
+
+  const markPriceDropRead = async (notificationId: string) => {
+    setPriceDropNotifications(prev =>
+      prev.map(n => (n.id === notificationId ? { ...n, isRead: true } : n))
+    );
+    try {
+      await api.priceAlerts.markRead(notificationId);
+    } catch {
+      // ignored
+    }
+  };
+
+  const markAllPriceDropsRead = async () => {
+    setPriceDropNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+    try {
+      await api.priceAlerts.markAllRead(activeAlertUserId);
+    } catch {
+      // ignored
+    }
+  };
+
+  const unreadPriceDropCount = priceDropNotifications.filter(n => !n.isRead).length;
+
 
   // Blueprint features list
   const [blueprintFeatures] = useState<BlueprintFeature[]>(BLUEPRINT_FEATURES);
@@ -717,7 +928,14 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
   };
 
   const updateProduct = (productId: string, updates: Partial<Product>) => {
+    const existing = products.find(p => p.id === productId);
     setProducts(prev => prev.map(p => p.id === productId ? { ...p, ...updates } : p));
+    if (typeof updates.price === 'number' && existing && updates.price !== existing.price) {
+      api.priceAlerts
+        .updateProductPrice(productId, updates.price, updates.title || existing.title, existing.images?.[0])
+        .then(() => refreshPriceAlerts(true))
+        .catch(() => {});
+    }
     notify('Product listing updated successfully.');
   };
 
@@ -885,7 +1103,11 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
       commissionRate: 12,
       verified: false,
       status: 'pending_approval',
-      joinedDate: 'Nov 2026'
+      joinedDate: 'Nov 2026',
+      cashfreeBeneficiaryId: `CF_BENEF_${newId.toUpperCase().slice(-8)}`,
+      cashfreeStatus: 'pending',
+      cashfreeMode: 'banktransfer',
+      cashfreeAutoPayout: true
     };
 
     setSellers(prev => [newSeller, ...prev]);
@@ -1007,25 +1229,29 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
       accountNumber: seller.bankAccount?.accountNumber ? `•••• ${seller.bankAccount.accountNumber.slice(-4)}` : '•••• 9041',
       bankName: seller.bankAccount?.bankName || 'HDFC Bank',
       requestedAt: new Date().toLocaleString('en-IN'),
-      status: 'pending'
+      status: 'pending',
+      cashfreeTransferId: `CF_TR_${Date.now()}`,
+      cashfreeMode: seller.cashfreeMode === 'upi' ? 'UPI' : 'IMPS'
     };
 
     setSellerPayouts(prev => [newPayout, ...prev]);
     setSellers(prev => prev.map(s => s.id === sellerId ? { ...s, walletBalance: s.walletBalance - amount } : s));
     api.sellers.requestPayout(sellerId, amount).catch(() => {});
-    notify(`Payout request of ₹${amount.toLocaleString('en-IN')} submitted! (Net: ₹${newPayout.netPayout.toLocaleString('en-IN')})`);
+    notify(`Payout request of ₹${amount.toLocaleString('en-IN')} submitted! Cashfree Transfer ID: ${newPayout.cashfreeTransferId}`);
   };
 
   const approveSellerPayout = (payoutId: string) => {
+    const randomUtr = `UTR${Date.now()}${Math.floor(1000 + Math.random() * 9000)}`;
     setSellerPayouts(prev => prev.map(p => {
       if (p.id !== payoutId) return p;
       return {
         ...p,
         status: 'processed',
-        bankRefNumber: `NEFT-${Math.floor(1000000000 + Math.random() * 9000000000)}`
+        bankRefNumber: `NEFT-${Math.floor(1000000000 + Math.random() * 9000000000)}`,
+        cashfreeUtr: randomUtr
       };
     }));
-    notify(`Payout #${payoutId} approved and processed via NEFT!`);
+    notify(`Payout #${payoutId} settled via Cashfree Payouts Engine (UTR: ${randomUtr})!`);
   };
 
   const createSellerCoupon = (coupon: Omit<SellerCoupon, 'id' | 'usageCount'>) => {
@@ -1370,7 +1596,20 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
         setIsMerchantAuthOpen,
         merchantAuthMode,
         setMerchantAuthMode,
-        openMerchantAuth
+        openMerchantAuth,
+
+        isApkModalOpen,
+        setIsApkModalOpen,
+
+        priceAlerts,
+        priceDropNotifications,
+        unreadPriceDropCount,
+        priceWorkerStatus,
+        hasPriceAlert,
+        togglePriceAlert,
+        runPriceDropWorkerCheck,
+        markPriceDropRead,
+        markAllPriceDropsRead
       }}
     >
       {children}

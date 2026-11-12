@@ -24,6 +24,8 @@ import { LaunchChecklistModal } from './components/LaunchChecklistModal';
 import { MerchantPartnerModal } from './components/seller/MerchantPartnerModal';
 import { SellerDashboard } from './components/seller/SellerDashboard';
 import { AdminDashboard } from './components/admin/AdminDashboard';
+import { AndroidInstallSheet } from './components/android/AndroidInstallSheet';
+import { OfflineIndicator } from './components/OfflineIndicator';
 import { Footer } from './components/Footer';
 
 import { 
@@ -58,6 +60,9 @@ const AppContent: React.FC = () => {
     openTryOn,
     setIsProfileOpen,
     setIsAuthOpen,
+    isApkModalOpen,
+    setIsApkModalOpen,
+    notify,
     user,
     wishlist,
     products,
@@ -212,6 +217,12 @@ const AppContent: React.FC = () => {
       <BuyerSellerChatModal />
       <LaunchChecklistModal />
       <MerchantPartnerModal />
+      <AndroidInstallSheet
+        isOpen={isApkModalOpen}
+        onClose={() => setIsApkModalOpen(false)}
+        onNotify={notify}
+      />
+      <OfflineIndicator />
 
 
       {/* Native Mobile Bottom App Navigation Bar (Phone viewport only, auto-hides on PC/Tablet) */}

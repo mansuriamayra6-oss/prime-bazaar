@@ -1,5 +1,6 @@
 import React from 'react';
 import { useMarketplace } from '../context/MarketplaceContext';
+import { usePWAInstall } from '../hooks/usePWAInstall';
 import { 
   ShoppingBag, 
   Heart, 
@@ -19,7 +20,9 @@ import {
   CheckCircle2,
   Globe,
   Database,
-  Building2
+  Building2,
+  Smartphone,
+  Bell
 } from 'lucide-react';
 
 export const Header: React.FC = () => {
@@ -47,6 +50,9 @@ export const Header: React.FC = () => {
     setIsLaunchChecklistOpen,
     openSellerStore,
     openMerchantAuth,
+    setIsApkModalOpen,
+    priceAlerts,
+    unreadPriceDropCount,
     user,
     searchQuery,
     setSearchQuery,
@@ -57,6 +63,7 @@ export const Header: React.FC = () => {
   } = useMarketplace();
 
 
+  const { isInstallable, isInstalled } = usePWAInstall();
   const totalCartItems = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   return (
@@ -173,6 +180,44 @@ export const Header: React.FC = () => {
 
         {/* Zone 3: Bag, Wishlist, Profile, Portals */}
         <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+
+          {/* Download Apps Tab Icon (always visible across phone, tablet, PC) */}
+          <button
+            onClick={() => setIsApkModalOpen(true)}
+            title={
+              isInstalled
+                ? 'Prime Bazaar App Installed'
+                : isInstallable
+                ? '1-Tap Download & Install Prime Bazaar App'
+                : 'Download Apps — Install Prime Bazaar App'
+            }
+            aria-label="Download Apps"
+            className="relative flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs font-bold transition-all active:scale-95 shrink-0"
+          >
+            <Smartphone className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <span className="hidden sm:inline">{isInstalled ? 'App Active' : 'Download Apps'}</span>
+            <span className="sm:hidden text-[11px]">{isInstalled ? 'App' : 'Apps'}</span>
+            {!isInstalled && isInstallable && (
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" aria-hidden="true" />
+            )}
+          </button>
+
+          {/* Price-Drop Alerts Bell */}
+          <button
+            onClick={() => openWishlist()}
+            title={`Price-Drop Alerts (${unreadPriceDropCount} new, ${priceAlerts.filter(a => a.status === 'ACTIVE').length} watching)`}
+            aria-label="Price-Drop Notifications"
+            className="relative p-2 text-zinc-600 dark:text-zinc-300 hover:text-amber-600 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors shrink-0"
+          >
+            <Bell className={`w-4 h-4 ${unreadPriceDropCount > 0 ? 'text-amber-500 fill-amber-500 animate-bounce' : priceAlerts.length > 0 ? 'text-amber-500' : ''}`} />
+            {unreadPriceDropCount > 0 ? (
+              <span className="absolute top-1 right-1 w-4 h-4 rounded-full bg-amber-500 text-white text-[10px] font-bold flex items-center justify-center animate-scale-up">
+                {unreadPriceDropCount}
+              </span>
+            ) : priceAlerts.some(a => a.status === 'ACTIVE') ? (
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-emerald-500"></span>
+            ) : null}
+          </button>
 
           {/* Wishlist count (visible on tablet and PC; docked in bottom bar on phone) */}
           <button

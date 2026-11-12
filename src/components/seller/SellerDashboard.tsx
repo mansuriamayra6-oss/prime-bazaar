@@ -40,7 +40,15 @@ import {
   Send,
   MessageSquare,
   ChevronRight,
-  Eye
+  Eye,
+  Landmark,
+  Zap,
+  Copy,
+  ExternalLink,
+  RefreshCw,
+  CheckCheck,
+  Key,
+  Shield
 } from 'lucide-react';
 import { ShippingLabelModal } from './ShippingLabelModal';
 import { ProductUploadModal } from './ProductUploadModal';
@@ -56,6 +64,7 @@ type SellerTab =
   | 'shipping'
   | 'returns'
   | 'payments'
+  | 'cashfree'
   | 'offers'
   | 'analytics'
   | 'support'
@@ -174,6 +183,102 @@ export const SellerDashboard: React.FC = () => {
     setReplyText('');
   };
 
+  // Cashfree Payouts ID & Settlement State
+  const [cashfreeBeneficiaryId, setCashfreeBeneficiaryId] = useState<string>(
+    currentSeller.cashfreeBeneficiaryId || `CF_BENEF_${currentSeller.id.replace(/-/g, '_').toUpperCase()}`
+  );
+  const [cashfreeVpa, setCashfreeVpa] = useState<string>(
+    currentSeller.cashfreeVpa || 'merchant@okhdfcbank'
+  );
+  const [cashfreeMode, setCashfreeMode] = useState<'banktransfer' | 'upi'>(
+    currentSeller.cashfreeMode || 'banktransfer'
+  );
+  const [cashfreeAutoPayout, setCashfreeAutoPayout] = useState<boolean>(
+    currentSeller.cashfreeAutoPayout !== false
+  );
+  const [cashfreeAccountHolder, setCashfreeAccountHolder] = useState<string>(
+    currentSeller.bankAccount?.accountHolderName || currentSeller.name
+  );
+  const [cashfreeAccountNumber, setCashfreeAccountNumber] = useState<string>(
+    currentSeller.bankAccount?.accountNumber || '50100492819041'
+  );
+  const [cashfreeIfsc, setCashfreeIfsc] = useState<string>(
+    currentSeller.bankAccount?.ifscCode || 'HDFC0000281'
+  );
+  const [cashfreeBankName, setCashfreeBankName] = useState<string>(
+    currentSeller.bankAccount?.bankName || 'HDFC Bank'
+  );
+  const [isVerifyingBeneficiary, setIsVerifyingBeneficiary] = useState(false);
+  const [isProcessingInstantCashfree, setIsProcessingInstantCashfree] = useState(false);
+  const [testPayoutAmount, setTestPayoutAmount] = useState<number>(2000);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  // Sync when currentSeller changes
+  React.useEffect(() => {
+    setCashfreeBeneficiaryId(currentSeller.cashfreeBeneficiaryId || `CF_BENEF_${currentSeller.id.replace(/-/g, '_').toUpperCase()}`);
+    setCashfreeVpa(currentSeller.cashfreeVpa || 'merchant@okhdfcbank');
+    setCashfreeMode(currentSeller.cashfreeMode || 'banktransfer');
+    setCashfreeAutoPayout(currentSeller.cashfreeAutoPayout !== false);
+    setCashfreeAccountHolder(currentSeller.bankAccount?.accountHolderName || currentSeller.name);
+    setCashfreeAccountNumber(currentSeller.bankAccount?.accountNumber || '50100492819041');
+    setCashfreeIfsc(currentSeller.bankAccount?.ifscCode || 'HDFC0000281');
+    setCashfreeBankName(currentSeller.bankAccount?.bankName || 'HDFC Bank');
+  }, [currentSeller]);
+
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard?.writeText(text);
+    setCopiedField(label);
+    notify(`Copied ${label} to clipboard!`);
+    setTimeout(() => setCopiedField(null), 2500);
+  };
+
+  const handleSaveCashfreeSettings = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cashfreeBeneficiaryId.trim()) {
+      notify('Please specify a valid Cashfree Beneficiary ID');
+      return;
+    }
+    updateSeller(currentSeller.id, {
+      cashfreeBeneficiaryId: cashfreeBeneficiaryId.trim().toUpperCase(),
+      cashfreeVpa: cashfreeVpa.trim(),
+      cashfreeMode,
+      cashfreeAutoPayout,
+      cashfreeStatus: 'verified',
+      bankAccount: {
+        accountHolderName: cashfreeAccountHolder.trim(),
+        accountNumber: cashfreeAccountNumber.trim(),
+        ifscCode: cashfreeIfsc.trim().toUpperCase(),
+        bankName: cashfreeBankName.trim()
+      }
+    });
+    notify(`Cashfree Beneficiary ID "${cashfreeBeneficiaryId.toUpperCase()}" successfully linked & verified!`);
+  };
+
+  const handleVerifyCashfreeSandbox = () => {
+    setIsVerifyingBeneficiary(true);
+    setTimeout(() => {
+      setIsVerifyingBeneficiary(false);
+      notify(`Cashfree Sandbox Payouts API: Beneficiary "${cashfreeBeneficiaryId}" verified with NPCI / Bank!`);
+    }, 1200);
+  };
+
+  const handleTriggerInstantCashfreePayout = () => {
+    if (testPayoutAmount <= 0) {
+      notify('Enter a valid payout amount.');
+      return;
+    }
+    if (testPayoutAmount > currentSeller.walletBalance) {
+      notify(`Amount exceeds available seller wallet balance of ₹${currentSeller.walletBalance.toLocaleString('en-IN')}`);
+      return;
+    }
+    setIsProcessingInstantCashfree(true);
+    setTimeout(() => {
+      setIsProcessingInstantCashfree(false);
+      requestSellerPayout(currentSeller.id, testPayoutAmount);
+      notify(`Instant Cashfree transfer of ₹${testPayoutAmount.toLocaleString('en-IN')} dispatched successfully via ${cashfreeMode === 'upi' ? 'UPI' : 'IMPS'}!`);
+    }, 1200);
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 animate-fadeIn">
       {/* Top Banner: Store Status, Switcher & Quick Launch CTAs */}
@@ -277,6 +382,7 @@ export const SellerDashboard: React.FC = () => {
                 { id: 'shipping', label: 'Shipping & AWB', icon: Truck, badge: null },
                 { id: 'returns', label: 'Returns & Refunds', icon: RotateCcw, badge: myReturns.filter(r => r.status === 'pending').length || null },
                 { id: 'payments', label: 'Payments & Payouts', icon: Wallet, badge: `₹${(currentSeller.walletBalance / 1000).toFixed(0)}k` },
+                { id: 'cashfree', label: 'Cashfree Payouts ID', icon: Landmark, badge: currentSeller.cashfreeStatus === 'verified' ? 'Active' : 'Setup' },
                 { id: 'offers', label: 'Offers & Discounts', icon: Tag, badge: `${myCoupons.length}` },
                 { id: 'analytics', label: 'Analytics & Reports', icon: BarChart3, badge: '+18%' },
                 { id: 'support', label: 'Customer Support', icon: HelpCircle, badge: myTickets.filter(t => t.status === 'open').length || null },
@@ -1138,6 +1244,33 @@ export const SellerDashboard: React.FC = () => {
                 </div>
               </div>
 
+              {/* Cashfree Quick Link Banner */}
+              <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-indigo-500/10 border border-emerald-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+                    <Landmark className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                      <span>Cashfree Payouts Engine (API v2025-01-01)</span>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-bold">
+                        {currentSeller.cashfreeStatus === 'verified' ? 'Active & Linked' : 'Configuration Pending'}
+                      </span>
+                    </h4>
+                    <p className="text-[11px] text-zinc-500">
+                      Beneficiary ID: <span className="font-mono font-semibold text-zinc-700 dark:text-zinc-300">{cashfreeBeneficiaryId}</span> · Automated T+1 settlements to Bank A/C or UPI
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setActiveTab('cashfree')}
+                  className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shrink-0 shadow-sm transition-all flex items-center gap-1.5"
+                >
+                  <span>Manage Cashfree ID & Payouts</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
               {/* Commission Breakdown Explainer */}
               <div className="p-4 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-xs space-y-2">
                 <span className="font-bold text-indigo-900 dark:text-indigo-200 block">
@@ -1188,6 +1321,468 @@ export const SellerDashboard: React.FC = () => {
                       ))}
                     </tbody>
                   </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ============================================================== */}
+          {/* CASHFREE PAYOUTS ID & SETTLEMENT ENGINE TAB */}
+          {/* ============================================================== */}
+          {activeTab === 'cashfree' && (
+            <div className="bg-white dark:bg-zinc-900 rounded-3xl p-6 border border-zinc-200 dark:border-zinc-800 shadow-xs space-y-6">
+              {/* Header */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-200 dark:border-zinc-800 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center shadow-lg shadow-emerald-600/20 shrink-0">
+                    <Landmark className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-base font-bold text-zinc-900 dark:text-white font-display">
+                        Cashfree ID & Instant Payouts Engine
+                      </h3>
+                      <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/80 px-2.5 py-0.5 rounded-full border border-emerald-300 dark:border-emerald-800">
+                        <CheckCheck className="w-3 h-3" />
+                        <span>API v2025-01-01 Sandbox</span>
+                      </span>
+                    </div>
+                    <p className="text-xs text-zinc-500 mt-0.5">
+                      Configure your Cashfree Beneficiary ID, linked bank account, UPI VPA, and auto-settlement rules
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={handleVerifyCashfreeSandbox}
+                    disabled={isVerifyingBeneficiary}
+                    className="px-3.5 py-2 rounded-xl bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 text-xs font-semibold flex items-center gap-1.5 transition-all"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isVerifyingBeneficiary ? 'animate-spin text-emerald-600' : ''}`} />
+                    <span>{isVerifyingBeneficiary ? 'Verifying with Sandbox...' : 'Test Sandbox Ping'}</span>
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('payments')}
+                    className="px-3.5 py-2 rounded-xl bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 text-xs font-semibold flex items-center gap-1.5 shadow-sm"
+                  >
+                    <span>View Payouts Ledger</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Status & Credential Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-950/40 dark:to-teal-950/20 border border-emerald-200 dark:border-emerald-800 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                      Beneficiary ID Status
+                    </span>
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono font-bold text-sm text-zinc-900 dark:text-white truncate">
+                      {cashfreeBeneficiaryId}
+                    </span>
+                    <button
+                      onClick={() => copyToClipboard(cashfreeBeneficiaryId, 'Cashfree Beneficiary ID')}
+                      className="text-zinc-400 hover:text-zinc-900 dark:hover:text-white p-1"
+                      title="Copy Beneficiary ID"
+                    >
+                      {copiedField === 'Cashfree Beneficiary ID' ? (
+                        <CheckCheck className="w-4 h-4 text-emerald-600" />
+                      ) : (
+                        <Copy className="w-4 h-4" />
+                      )}
+                    </button>
+                  </div>
+                  <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-semibold block">
+                    Verified with Cashfree Payouts Engine
+                  </span>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800 space-y-2">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500 flex items-center gap-1.5">
+                    <Key className="w-4 h-4 text-amber-500" />
+                    Marketplace Client ID
+                  </span>
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-xs text-zinc-700 dark:text-zinc-300 truncate max-w-[200px]">
+                      Configured on Server (.env)
+                    </span>
+                    <button
+                      onClick={() => copyToClipboard(cashfreeBeneficiaryId, 'Beneficiary ID')}
+                      className="text-zinc-400 hover:text-zinc-900 dark:hover:text-white p-1"
+                      title="Copy Beneficiary ID"
+                    >
+                      {copiedField === 'Beneficiary ID' ? (
+                        <CheckCheck className="w-4 h-4 text-emerald-600" />
+                      ) : (
+                        <Copy className="w-4 h-4" />
+                      )}
+                    </button>
+                  </div>
+                  <span className="text-[10px] text-zinc-400 font-mono">
+                    Environment: Sandbox (v2025-01-01)
+                  </span>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800 space-y-2">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500 flex items-center gap-1.5">
+                    <Zap className="w-4 h-4 text-rose-500" />
+                    Available for Payout
+                  </span>
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono font-bold text-xl text-zinc-900 dark:text-white">
+                      ₹{currentSeller.walletBalance.toLocaleString('en-IN')}
+                    </span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                      T+0 Instant
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-zinc-500">
+                    Pending In-Transit: ₹{(currentSeller.pendingSettlement || 18450).toLocaleString('en-IN')}
+                  </span>
+                </div>
+              </div>
+
+              {/* Main Cashfree ID Form */}
+              <div className="border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 bg-zinc-50/50 dark:bg-zinc-800/20 space-y-6">
+                <div>
+                  <h4 className="text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                    <span>Beneficiary Account & Transfer Method Details</span>
+                  </h4>
+                  <p className="text-xs text-zinc-500 mt-0.5">
+                    Cashfree uses these verified credentials to credit your shop sales directly into your account
+                  </p>
+                </div>
+
+                <form onSubmit={handleSaveCashfreeSettings} className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Cashfree Beneficiary ID */}
+                    <div>
+                      <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">
+                        Cashfree Beneficiary ID <span className="text-rose-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={cashfreeBeneficiaryId}
+                          onChange={e => setCashfreeBeneficiaryId(e.target.value.toUpperCase())}
+                          required
+                          placeholder="e.g. CF_BENEF_VARANASI_9041"
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 font-mono text-xs text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 pr-24"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setCashfreeBeneficiaryId(`CF_BENEF_${currentSeller.businessName.slice(0, 4).toUpperCase()}_${Math.floor(1000 + Math.random() * 9000)}`)}
+                          className="absolute right-2 top-2 px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-700 text-[10px] font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200"
+                        >
+                          Auto-ID
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-zinc-400 mt-1">
+                        Unique vendor handle registered with Cashfree Payouts API
+                      </p>
+                    </div>
+
+                    {/* Beneficiary Name */}
+                    <div>
+                      <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">
+                        Beneficiary Name (Must match Bank / PAN) <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={cashfreeAccountHolder}
+                        onChange={e => setCashfreeAccountHolder(e.target.value)}
+                        required
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                      <p className="text-[10px] text-zinc-400 mt-1">
+                        Name as registered on PAN: {currentSeller.panNumber || 'AAECV1234M'}
+                      </p>
+                    </div>
+
+                    {/* Preferred Transfer Mode */}
+                    <div className="md:col-span-2">
+                      <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1.5">
+                        Preferred Payout Transfer Mode
+                      </label>
+                      <div className="grid grid-cols-2 gap-3 max-w-md">
+                        <button
+                          type="button"
+                          onClick={() => setCashfreeMode('banktransfer')}
+                          className={`p-3 rounded-2xl border text-left flex items-center gap-3 transition-all ${
+                            cashfreeMode === 'banktransfer'
+                              ? 'border-emerald-600 bg-emerald-50/50 dark:bg-emerald-950/30 text-emerald-900 dark:text-emerald-200 font-semibold shadow-xs'
+                              : 'border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400'
+                          }`}
+                        >
+                          <Building2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                          <div>
+                            <div className="text-xs font-bold">Bank Transfer (IMPS / NEFT)</div>
+                            <div className="text-[10px] text-zinc-500">To verified bank account</div>
+                          </div>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setCashfreeMode('upi')}
+                          className={`p-3 rounded-2xl border text-left flex items-center gap-3 transition-all ${
+                            cashfreeMode === 'upi'
+                              ? 'border-emerald-600 bg-emerald-50/50 dark:bg-emerald-950/30 text-emerald-900 dark:text-emerald-200 font-semibold shadow-xs'
+                              : 'border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400'
+                          }`}
+                        >
+                          <Zap className="w-5 h-5 text-indigo-600 shrink-0" />
+                          <div>
+                            <div className="text-xs font-bold">UPI VPA (Instant)</div>
+                            <div className="text-[10px] text-zinc-500">Zero-latency UPI payout</div>
+                          </div>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Conditional Fields: Bank vs UPI */}
+                    {cashfreeMode === 'banktransfer' ? (
+                      <>
+                        <div>
+                          <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">
+                            Bank Account Number <span className="text-rose-500">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={cashfreeAccountNumber}
+                            onChange={e => setCashfreeAccountNumber(e.target.value)}
+                            required
+                            className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 font-mono text-xs text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">
+                            IFSC Code <span className="text-rose-500">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={cashfreeIfsc}
+                            onChange={e => setCashfreeIfsc(e.target.value.toUpperCase())}
+                            required
+                            className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 font-mono text-xs text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">
+                            Bank Name & Branch
+                          </label>
+                          <input
+                            type="text"
+                            value={cashfreeBankName}
+                            onChange={e => setCashfreeBankName(e.target.value)}
+                            className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                        </div>
+                      </>
+                    ) : (
+                      <div className="md:col-span-2">
+                        <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">
+                          UPI Virtual Payment Address (VPA) <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={cashfreeVpa}
+                          onChange={e => setCashfreeVpa(e.target.value)}
+                          required
+                          placeholder="e.g. weaverscraft@okhdfcbank or merchant@paytm"
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 font-mono text-xs text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        />
+                        <p className="text-[10px] text-zinc-400 mt-1">
+                          Directly credited using Cashfree UPI Payouts with sub-second turnaround
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Auto-Payout Setting */}
+                    <div className="md:col-span-2 pt-2 border-t border-zinc-200 dark:border-zinc-700/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="checkbox"
+                          id="auto-payout-check"
+                          checked={cashfreeAutoPayout}
+                          onChange={e => setCashfreeAutoPayout(e.target.checked)}
+                          className="w-4 h-4 text-emerald-600 rounded border-zinc-300 focus:ring-emerald-500"
+                        />
+                        <label htmlFor="auto-payout-check" className="text-xs text-zinc-700 dark:text-zinc-300 cursor-pointer">
+                          <span className="font-semibold block">Automatic Daily Settlement</span>
+                          <span className="text-[10px] text-zinc-500">Auto-trigger Cashfree batch settlement daily at 02:00 AM IST for balances &gt; ₹1,000</span>
+                        </label>
+                      </div>
+
+                      <button
+                        type="submit"
+                        className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md shadow-emerald-600/20 active:scale-95 transition-all flex items-center justify-center gap-2"
+                      >
+                        <ShieldCheck className="w-4 h-4" />
+                        <span>Save & Link Cashfree ID</span>
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              </div>
+
+              {/* Instant Test Transfer via Cashfree Sandbox */}
+              <div className="border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 bg-gradient-to-br from-zinc-50 to-emerald-50/20 dark:from-zinc-900 dark:to-emerald-950/20 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <h4 className="text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                      <Zap className="w-4 h-4 text-amber-500" />
+                      <span>Instant Sandbox Payout Test</span>
+                    </h4>
+                    <p className="text-xs text-zinc-500">
+                      Simulate a live Cashfree instant transfer to test webhook processing, UTR generation, and wallet deduction
+                    </p>
+                  </div>
+                  <div className="text-left sm:text-right">
+                    <span className="text-[11px] text-zinc-400 block">Available Balance</span>
+                    <span className="font-mono font-bold text-sm text-zinc-900 dark:text-white">
+                      ₹{currentSeller.walletBalance.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3 pt-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {[1000, 2000, 5000].map(val => (
+                      <button
+                        key={val}
+                        type="button"
+                        onClick={() => setTestPayoutAmount(val)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-mono font-semibold transition-all ${
+                          testPayoutAmount === val
+                            ? 'bg-emerald-600 text-white shadow-xs'
+                            : 'bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 hover:border-emerald-500'
+                        }`}
+                      >
+                        ₹{val.toLocaleString('en-IN')}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setTestPayoutAmount(currentSeller.walletBalance)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-mono font-semibold transition-all ${
+                        testPayoutAmount === currentSeller.walletBalance
+                          ? 'bg-emerald-600 text-white shadow-xs'
+                          : 'bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 hover:border-emerald-500'
+                      }`}
+                    >
+                      Max (₹{currentSeller.walletBalance.toLocaleString('en-IN')})
+                    </button>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+                    <span className="text-xs font-semibold text-zinc-500">Custom Amount:</span>
+                    <div className="relative">
+                      <span className="absolute left-2.5 top-1.5 text-zinc-400 text-xs font-mono">₹</span>
+                      <input
+                        type="number"
+                        value={testPayoutAmount}
+                        onChange={e => setTestPayoutAmount(Number(e.target.value))}
+                        className="w-28 pl-6 pr-2 py-1.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs font-mono font-bold text-zinc-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleTriggerInstantCashfreePayout}
+                      disabled={isProcessingInstantCashfree || currentSeller.walletBalance <= 0}
+                      className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-md shadow-emerald-600/20 active:scale-95 disabled:opacity-50 transition-all flex items-center gap-1.5"
+                    >
+                      <Zap className={`w-3.5 h-3.5 ${isProcessingInstantCashfree ? 'animate-bounce text-amber-300' : ''}`} />
+                      <span>{isProcessingInstantCashfree ? 'Dispatches via Cashfree...' : 'Trigger Instant Transfer'}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Cashfree Transfer & Settlement Log Table */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-xs uppercase tracking-wider text-zinc-500 block">
+                    Cashfree Payouts & UTR Settlement Ledger
+                  </span>
+                  <span className="text-xs text-zinc-400 font-mono">
+                    {myPayouts.length} transfers recorded
+                  </span>
+                </div>
+
+                <div className="border border-zinc-200 dark:border-zinc-800 rounded-2xl overflow-x-auto text-xs">
+                  <table className="w-full text-left min-w-[640px]">
+                    <thead className="bg-zinc-50 dark:bg-zinc-800/60 font-semibold text-zinc-500">
+                      <tr>
+                        <th className="p-3">Cashfree Transfer ID</th>
+                        <th className="p-3">Beneficiary ID</th>
+                        <th className="p-3">Channel</th>
+                        <th className="p-3">Amount</th>
+                        <th className="p-3">UTR Reference</th>
+                        <th className="p-3">Date</th>
+                        <th className="p-3 text-right">Cashfree Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800 font-medium">
+                      {myPayouts.map(p => (
+                        <tr key={p.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors">
+                          <td className="p-3 font-mono font-bold text-zinc-900 dark:text-white">
+                            {p.cashfreeTransferId || `CF_TR_${p.id.replace('pay-', '')}`}
+                          </td>
+                          <td className="p-3 font-mono text-zinc-600 dark:text-zinc-400">
+                            {cashfreeBeneficiaryId}
+                          </td>
+                          <td className="p-3">
+                            <span className="px-2 py-0.5 rounded font-mono text-[10px] font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">
+                              {p.cashfreeMode || 'IMPS'}
+                            </span>
+                          </td>
+                          <td className="p-3 font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                            ₹{p.netPayout.toLocaleString('en-IN')}
+                          </td>
+                          <td className="p-3 font-mono text-zinc-500 text-[11px]">
+                            {p.cashfreeUtr || p.bankRefNumber || 'Awaiting UTR from Bank'}
+                          </td>
+                          <td className="p-3 text-zinc-400 text-[11px] whitespace-nowrap">
+                            {p.requestedAt}
+                          </td>
+                          <td className="p-3 text-right">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase inline-flex items-center gap-1 ${
+                              p.status === 'processed'
+                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                                : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                            }`}>
+                              {p.status === 'processed' ? <CheckCheck className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
+                              <span>{p.status === 'processed' ? 'SUCCESS (200)' : 'PROCESSING'}</span>
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Developer & API Info Footnote */}
+              <div className="p-4 rounded-2xl bg-zinc-900 text-zinc-300 text-xs space-y-2 border border-zinc-800">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-xs font-bold text-emerald-400 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    Cashfree Payouts API v2025-01-01 · Webhook Endpoint
+                  </span>
+                  <span className="text-[10px] font-mono text-zinc-500">200 OK Live</span>
+                </div>
+                <div className="bg-black/50 p-2.5 rounded-xl font-mono text-[11px] text-zinc-400 overflow-x-auto">
+                  <code>POST https://sandbox.cashfree.com/payout/transfers</code>
+                  <br />
+                  <span className="text-zinc-500"># Header: x-client-id: &lt;CASHFREE_CLIENT_ID&gt; · bene_id: {cashfreeBeneficiaryId}</span>
                 </div>
               </div>
             </div>

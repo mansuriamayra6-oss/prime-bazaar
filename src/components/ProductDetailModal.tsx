@@ -39,6 +39,8 @@ export const ProductDetailModal: React.FC = () => {
     isCompared,
     openSellerStore,
     chatWithSeller,
+    hasPriceAlert,
+    togglePriceAlert,
     notify 
   } = useMarketplace();
 
@@ -50,13 +52,13 @@ export const ProductDetailModal: React.FC = () => {
   const [shared, setShared] = useState(false);
   const [viewMode, setViewMode] = useState<'image' | 'video' | '360'>('image');
   const [rotation360, setRotation360] = useState(0);
-  const [priceDropAlert, setPriceDropAlert] = useState(false);
 
   if (!selectedProduct) return null;
 
   const product = selectedProduct;
   const wishlisted = isWishlisted(product.id);
   const compared = isCompared(product.id);
+  const priceDropAlert = hasPriceAlert(product.id);
 
   const currentColor = selectedColor || product.colors[0]?.name || '';
   const currentSizeObj = product.sizes.find(s => s.size === selectedSize) || product.sizes.find(s => s.available);
@@ -89,12 +91,7 @@ export const ProductDetailModal: React.FC = () => {
   };
 
   const handleTogglePriceDrop = () => {
-    setPriceDropAlert(!priceDropAlert);
-    if (!priceDropAlert) {
-      notify('🔔 Subscribed! We will alert you the moment price drops on this item.');
-    } else {
-      notify('Price drop alert cancelled.');
-    }
+    togglePriceAlert(product);
   };
 
   return (
