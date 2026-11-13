@@ -31,10 +31,12 @@ export const AuthModal: React.FC = () => {
     }
 
     setLoading(true);
+    setOtpCode('');
     try {
       const res = await api.auth.sendOtp(
         method === 'phone' ? `+91 ${phone}` : undefined,
-        method === 'email' ? email : undefined
+        method === 'email' ? email : undefined,
+        fullName.trim() || undefined
       );
       setOtpSent(true);
       setServerNotice(res.message || null);
@@ -282,13 +284,19 @@ export const AuthModal: React.FC = () => {
                   </span>
                 </div>
                 {serverNotice && (
-                  <p className="text-[10px] text-zinc-500 italic max-w-xs mx-auto pt-0.5 line-clamp-2">
+                  <p className="text-[10px] text-zinc-500 italic max-w-xs mx-auto pt-0.5">
                     {serverNotice}
                   </p>
                 )}
-                <span className="text-[11px] text-emerald-600 font-mono font-semibold block pt-0.5">
-                  Test code: {otpCode || '7784'}
-                </span>
+                {method === 'email' ? (
+                  <span className="text-[11px] text-emerald-600 font-medium block pt-0.5">
+                    Check your inbox (and spam folder) for the 6-digit Brevo OTP.
+                  </span>
+                ) : (
+                  <span className="text-[11px] text-emerald-600 font-mono font-semibold block pt-0.5">
+                    SMS Demo code: {otpCode || '7784'}
+                  </span>
+                )}
               </div>
 
               <div>

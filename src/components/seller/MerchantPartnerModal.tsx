@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useMarketplace } from '../../context/MarketplaceContext';
+import { api } from '../../services/api';
 import { SellerRegistrationModal } from './SellerRegistrationModal';
 import { 
   X, 
@@ -19,7 +20,9 @@ import {
   ChevronRight,
   TrendingUp,
   Radio,
-  FileCheck2
+  FileCheck2,
+  Loader2,
+  AlertCircle
 } from 'lucide-react';
 
 export const MerchantPartnerModal: React.FC = () => {
@@ -42,6 +45,10 @@ export const MerchantPartnerModal: React.FC = () => {
   const [otpCode, setOtpCode] = useState('');
   const [loginMethod, setLoginMethod] = useState<'otp' | 'password'>('otp');
   const [isRegisterWizardOpen, setIsRegisterWizardOpen] = useState(false);
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
+  const [otpNotice, setOtpNotice] = useState<string | null>(null);
+  const [otpError, setOtpError] = useState<string | null>(null);
 
   // Sync tab with external open trigger
   React.useEffect(() => {
@@ -59,27 +66,71 @@ export const MerchantPartnerModal: React.FC = () => {
     notify(`Logged in as verified merchant: ${seller.businessName} (${seller.storeName || seller.businessName})`);
   };
 
-  const handleSendMerchantOtp = (e: React.FormEvent) => {
+  const handleSendMerchantOtp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!phoneOrEmail.trim()) {
+    const target = phoneOrEmail.trim();
+    if (!target) {
       notify('Please enter your registered Merchant Mobile Number or Email.');
       return;
     }
-    setOtpSent(true);
-    setOtpCode('789012'); // Standard demo Brevo OTP bypass
-    notify(`Brevo Verification OTP sent to ${phoneOrEmail}! Code: 789012`);
+
+    const isEmail = target.includes('@');
+    setIsSendingOtp(true);
+    setOtpError(null);
+    setOtpNotice(null);
+    setOtpCode('');
+
+    try {
+      const res = await api.auth.sendOtp(isEmail ? undefined : target, isEmail ? target : undefined);
+      setOtpSent(true);
+      if (res.deliveryFailed && res.codeHint) {
+        setOtpError(`${res.deliveryNotice || res.message} (Fallback code: ${res.codeHint})`);
+      } else if (res.channel === 'sms' && res.codeHint) {
+        setOtpCode(res.codeHint);
+        setOtpNotice(`SMS verification code sent to ${target} (Code: ${res.codeHint})`);
+      } else {
+        setOtpNotice(res.message || `6-digit verification OTP sent to ${target} via Brevo`);
+      }
+      notify(res.message || `Verification OTP sent to ${target}`);
+    } catch (err: any) {
+      const msg = err.message || 'Failed to send verification OTP.';
+      setOtpError(msg);
+      notify(msg);
+    } finally {
+      setIsSendingOtp(false);
+    }
   };
 
-  const handleMerchantLogin = (e: React.FormEvent) => {
+  const handleMerchantLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (loginMethod === 'otp' && otpCode !== '789012' && otpCode.length < 4) {
-      notify('Please enter the 6-digit verification code.');
-      return;
+    const target = phoneOrEmail.trim();
+    if (loginMethod === 'otp') {
+      if (!target || otpCode.trim().length < 4) {
+        notify('Please enter your email/phone and the verification code.');
+        return;
+      }
+      const isEmail = target.includes('@');
+      setIsVerifyingOtp(true);
+      setOtpError(null);
+      try {
+        await api.auth.verifyOtp({
+          email: isEmail ? target : undefined,
+          phone: isEmail ? undefined : target,
+          otp: otpCode.trim(),
+        });
+      } catch (err: any) {
+        const msg = err.message || 'Invalid or expired OTP code.';
+        setOtpError(msg);
+        notify(msg);
+        setIsVerifyingOtp(false);
+        return;
+      }
+      setIsVerifyingOtp(false);
     }
-    
+
     // Pick the first active seller or match
-    const matchedSeller = sellers.find(s => 
-      s.phone?.includes(phoneOrEmail) || s.email?.toLowerCase() === phoneOrEmail.toLowerCase()
+    const matchedSeller = sellers.find(s =>
+      s.phone?.includes(target) || s.email?.toLowerCase() === target.toLowerCase()
     ) || sellers[0];
 
     setCurrentSellerId(matchedSeller.id);
@@ -271,21 +322,29 @@ export const MerchantPartnerModal: React.FC = () => {
                         maxLength={6}
                         placeholder="Enter 6-digit OTP"
                         value={otpCode}
-                        onChange={e => setOtpCode(e.target.value)}
+                        onChange={e => setOtpCode(e.target.value.replace(/\s+/g, ''))}
                         className="flex-1 font-mono tracking-widest text-center text-sm font-bold py-2.5 bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-300 dark:border-zinc-700 rounded-xl text-zinc-900 dark:text-white focus:outline-none focus:border-emerald-500"
                       />
                       <button
                         type="button"
                         onClick={handleSendMerchantOtp}
-                        className="px-4 py-2.5 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 text-xs font-bold rounded-xl transition-colors shrink-0"
+                        disabled={isSendingOtp}
+                        className="px-4 py-2.5 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 disabled:opacity-50 text-zinc-800 dark:text-zinc-200 text-xs font-bold rounded-xl transition-colors shrink-0 flex items-center gap-1.5"
                       >
-                        {otpSent ? 'Resend OTP' : 'Send OTP'}
+                        {isSendingOtp && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                        <span>{isSendingOtp ? 'Sending...' : otpSent ? 'Resend OTP' : 'Send OTP'}</span>
                       </button>
                     </div>
-                    {otpSent && (
+                    {otpError && (
+                      <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1">
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                        <span>{otpError}</span>
+                      </p>
+                    )}
+                    {otpSent && otpNotice && !otpError && (
                       <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span>OTP dispatched via Brevo SMS/Email gateway (Bypass: 789012)</span>
+                        <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                        <span>{otpNotice}</span>
                       </p>
                     )}
                   </div>
@@ -309,9 +368,11 @@ export const MerchantPartnerModal: React.FC = () => {
 
                 <button
                   type="submit"
-                  className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/25 transition-all active:scale-[0.99]"
+                  disabled={isVerifyingOtp}
+                  className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/25 transition-all active:scale-[0.99]"
                 >
-                  <span>Sign In to Merchant Studio</span>
+                  {isVerifyingOtp && <Loader2 className="w-4 h-4 animate-spin" />}
+                  <span>{isVerifyingOtp ? 'Verifying OTP...' : 'Sign In to Merchant Studio'}</span>
                   <ArrowRight className="w-4 h-4" />
                 </button>
               </form>

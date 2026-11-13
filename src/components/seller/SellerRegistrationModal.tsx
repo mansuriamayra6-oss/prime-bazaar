@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useMarketplace } from '../../context/MarketplaceContext';
+import { api } from '../../services/api';
 import { 
   X, 
   CheckCircle2, 
@@ -13,7 +14,9 @@ import {
   Phone,
   Mail,
   FileText,
-  Sparkles
+  Sparkles,
+  Loader2,
+  AlertCircle
 } from 'lucide-react';
 
 interface SellerRegistrationModalProps {
@@ -28,10 +31,15 @@ export const SellerRegistrationModal: React.FC<SellerRegistrationModalProps> = (
 
   // Step 1: Account & Verification
   const [phone, setPhone] = useState('+91 98450 12849');
-  const [email, setEmail] = useState('crafts.artisan@gmail.com');
+  const [email, setEmail] = useState('');
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState('');
   const [isOtpVerified, setIsOtpVerified] = useState(false);
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
+  const [otpNotice, setOtpNotice] = useState<string | null>(null);
+  const [otpError, setOtpError] = useState<string | null>(null);
+  const [fallbackHint, setFallbackHint] = useState<string | null>(null);
 
   // Step 2: Business Info
   const [sellerName, setSellerName] = useState('Raghavendra Sharma');
@@ -56,19 +64,70 @@ export const SellerRegistrationModal: React.FC<SellerRegistrationModalProps> = (
   // Step 4: Submission result
   const [registeredSellerId, setRegisteredSellerId] = useState<string>('');
 
-  const handleSendOtp = () => {
-    setOtpSent(true);
-    setOtp('7784');
-    notify('OTP sent! Use verification code 7784 to confirm.');
+  const handleSendOtp = async () => {
+    const cleanEmail = email.trim();
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      const msg = 'Please enter a valid Business Email Address to receive your Brevo OTP.';
+      setOtpError(msg);
+      notify(msg);
+      return;
+    }
+
+    setIsSendingOtp(true);
+    setOtpError(null);
+    setOtpNotice(null);
+    setFallbackHint(null);
+    setOtp('');
+    setIsOtpVerified(false);
+
+    try {
+      const res = await api.auth.sendOtp(phone.trim() || undefined, cleanEmail, sellerName);
+      setOtpSent(true);
+      if (res.deliveryFailed && res.codeHint) {
+        setOtpError(res.deliveryNotice || res.message || 'Brevo SMTP delivery failed.');
+        setFallbackHint(res.codeHint);
+        notify('Brevo email delivery encountered an error. See details below.');
+      } else {
+        setOtpNotice(res.message || `6-digit OTP sent via Brevo to ${cleanEmail}`);
+        notify(`Verification OTP sent to ${cleanEmail} via Brevo!`);
+      }
+    } catch (err: any) {
+      const msg = err.message || 'Failed to send verification OTP.';
+      setOtpError(msg);
+      notify(msg);
+    } finally {
+      setIsSendingOtp(false);
+    }
   };
 
-  const handleVerifyOtp = () => {
-    if (otp === '7784' || otp.length === 4) {
+  const handleVerifyOtp = async () => {
+    const cleanOtp = otp.trim();
+    if (cleanOtp.length < 4) {
+      const msg = 'Please enter the 6-digit verification OTP sent to your email.';
+      setOtpError(msg);
+      notify(msg);
+      return;
+    }
+
+    setIsVerifyingOtp(true);
+    setOtpError(null);
+
+    try {
+      await api.auth.verifyOtp({
+        email: email.trim(),
+        phone: phone.trim() || undefined,
+        otp: cleanOtp,
+        name: sellerName,
+      });
       setIsOtpVerified(true);
-      notify('Mobile & Email verified successfully!');
+      notify('Email verified via Brevo OTP!');
       setStep(2);
-    } else {
-      notify('Please enter valid 4-digit OTP (hint: 7784)');
+    } catch (err: any) {
+      const msg = err.message || 'Invalid or expired OTP code.';
+      setOtpError(msg);
+      notify(msg);
+    } finally {
+      setIsVerifyingOtp(false);
     }
   };
 
@@ -190,76 +249,93 @@ export const SellerRegistrationModal: React.FC<SellerRegistrationModalProps> = (
               <div className="space-y-3 pt-2">
                 <div>
                   <label className="block font-semibold mb-1 text-zinc-800 dark:text-zinc-200">
-                    Mobile Phone Number (for dispatch notifications)
+                    Business Email Address (Brevo Verification OTP)
                   </label>
                   <div className="flex items-center gap-2">
                     <div className="relative flex-1">
-                      <Phone className="w-4 h-4 text-zinc-400 absolute left-3 top-3 pointer-events-none" />
+                      <Mail className="w-4 h-4 text-zinc-400 absolute left-3 top-3 pointer-events-none" />
                       <input
-                        type="text"
-                        value={phone}
-                        onChange={e => setPhone(e.target.value)}
-                        placeholder="+91 98765 43210"
+                        type="email"
+                        value={email}
+                        onChange={e => {
+                          setEmail(e.target.value);
+                          setIsOtpVerified(false);
+                        }}
+                        placeholder="you@example.com"
                         className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white"
                       />
                     </div>
-                    {!otpSent ? (
-                      <button
-                        type="button"
-                        onClick={handleSendOtp}
-                        className="px-4 py-2.5 rounded-xl bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 font-semibold hover:opacity-90 shrink-0"
-                      >
-                        Send OTP
-                      </button>
-                    ) : (
-                      <span className="text-emerald-600 text-[11px] font-bold shrink-0">
-                        OTP Sent ✓
-                      </span>
-                    )}
+                    <button
+                      type="button"
+                      onClick={handleSendOtp}
+                      disabled={isSendingOtp}
+                      className="px-4 py-2.5 rounded-xl bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 font-semibold hover:opacity-90 disabled:opacity-50 shrink-0 flex items-center gap-1.5"
+                    >
+                      {isSendingOtp && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                      <span>{isSendingOtp ? 'Sending...' : otpSent ? 'Resend OTP' : 'Send OTP'}</span>
+                    </button>
                   </div>
                 </div>
 
                 <div>
                   <label className="block font-semibold mb-1 text-zinc-800 dark:text-zinc-200">
-                    Business Email Address
+                    Mobile Phone Number (for dispatch notifications)
                   </label>
                   <div className="relative">
-                    <Mail className="w-4 h-4 text-zinc-400 absolute left-3 top-3 pointer-events-none" />
+                    <Phone className="w-4 h-4 text-zinc-400 absolute left-3 top-3 pointer-events-none" />
                     <input
-                      type="email"
-                      value={email}
-                      onChange={e => setEmail(e.target.value)}
-                      placeholder="seller@craftstore.com"
+                      type="text"
+                      value={phone}
+                      onChange={e => setPhone(e.target.value)}
+                      placeholder="+91 98765 43210"
                       className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white"
                     />
                   </div>
                 </div>
 
+                {otpError && (
+                  <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200 flex items-start gap-2 text-[11px]">
+                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+                    <div className="space-y-1">
+                      <p className="font-semibold">{otpError}</p>
+                      {fallbackHint && (
+                        <p className="font-mono text-xs">
+                          Fallback verification code: <strong>{fallbackHint}</strong>
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {otpSent && (
                   <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 space-y-2">
                     <label className="block font-semibold text-rose-900 dark:text-rose-200">
-                      Enter 4-Digit Verification OTP (Received on Phone & Brevo Email)
+                      Enter 6-Digit Verification OTP (Sent to {email} via Brevo)
                     </label>
                     <div className="flex items-center gap-2">
                       <input
                         type="text"
                         maxLength={6}
                         value={otp}
-                        onChange={e => setOtp(e.target.value)}
-                        placeholder="7784"
-                        className="w-32 text-center text-lg font-mono font-bold tracking-widest py-2 rounded-xl border border-rose-300 dark:border-rose-700 bg-white dark:bg-zinc-900"
+                        onChange={e => setOtp(e.target.value.replace(/\s+/g, ''))}
+                        placeholder="••••••"
+                        className="w-36 text-center text-lg font-mono font-bold tracking-widest py-2 rounded-xl border border-rose-300 dark:border-rose-700 bg-white dark:bg-zinc-900"
                       />
                       <button
                         type="button"
                         onClick={handleVerifyOtp}
-                        className="px-5 py-2.5 rounded-xl bg-rose-600 text-white font-semibold hover:bg-rose-500 shadow-sm"
+                        disabled={isVerifyingOtp || otp.trim().length < 4}
+                        className="px-5 py-2.5 rounded-xl bg-rose-600 text-white font-semibold hover:bg-rose-500 disabled:opacity-50 shadow-sm flex items-center gap-1.5"
                       >
-                        Verify & Continue
+                        {isVerifyingOtp && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                        <span>{isVerifyingOtp ? 'Verifying...' : 'Verify & Continue'}</span>
                       </button>
                     </div>
-                    <span className="text-[10px] text-zinc-500 block">
-                      Code automatically filled: 7784 (Valid for 5 mins)
-                    </span>
+                    {otpNotice && (
+                      <span className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium block">
+                        {otpNotice} — Check your inbox or spam folder (Valid for 5 mins).
+                      </span>
+                    )}
                   </div>
                 )}
               </div>
@@ -267,11 +343,15 @@ export const SellerRegistrationModal: React.FC<SellerRegistrationModalProps> = (
               <div className="flex justify-end pt-4 border-t border-zinc-200 dark:border-zinc-800">
                 <button
                   type="button"
+                  disabled={!isOtpVerified && (!otpSent || otp.trim().length < 4 || isVerifyingOtp)}
                   onClick={() => {
-                    setIsOtpVerified(true);
-                    setStep(2);
+                    if (isOtpVerified) {
+                      setStep(2);
+                    } else {
+                      handleVerifyOtp();
+                    }
                   }}
-                  className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-semibold flex items-center gap-1.5 shadow-sm"
+                  className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 disabled:opacity-40 text-white font-semibold flex items-center gap-1.5 shadow-sm"
                 >
                   <span>Proceed to Business Details</span>
                   <ArrowRight className="w-4 h-4" />

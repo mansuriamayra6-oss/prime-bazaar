@@ -56,10 +56,10 @@ async function apiRequest<T = any>(
 export const api = {
   // Authentication
   auth: {
-    sendOtp: async (phone?: string, email?: string) => {
+    sendOtp: async (phone?: string, email?: string, recipientName?: string) => {
       return apiRequest('/api/auth/send-otp', {
         method: 'POST',
-        body: JSON.stringify({ phone, email }),
+        body: JSON.stringify({ phone, email, recipientName }),
       });
     },
 

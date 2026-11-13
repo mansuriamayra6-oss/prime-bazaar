@@ -3,6 +3,7 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
+import nodemailer from 'nodemailer';
 import { v1Router, splitOrderIntoSellerOrders } from './src/server/v1Router.ts';
 import { priceAlertRouter, startPriceAlertWorker } from './src/server/priceAlertWorker.ts';
 
@@ -28,15 +29,20 @@ app.use('/api/price-alerts', priceAlertRouter);
 interface BrevoEmailResult {
   success: boolean;
   messageId?: string;
+  transport?: 'smtp' | 'api';
   error?: string;
 }
 
 async function sendBrevoEmailOtp(
-  toEmail: string, 
-  otpCode: string, 
+  toEmail: string,
+  otpCode: string,
   recipientName?: string
 ): Promise<BrevoEmailResult> {
   const apiKey = (process.env.EMAIL_PROVIDER_API_KEY || process.env.BREVO_API_KEY || '').trim();
+  const smtpHost = (process.env.SMTP_HOST || '').trim();
+  const smtpPort = parseInt(String(process.env.SMTP_PORT || '587').replace(/[^\d]/g, ''), 10) || 587;
+  const smtpUser = (process.env.SMTP_USER || '').trim();
+  const smtpPass = (process.env.SMTP_PASS || '').trim();
   const isEnabled = process.env.EMAIL_DELIVERY_ENABLED !== 'false';
   const fromEmail = (
     process.env.EMAIL_FROM_ADDRESS ||
@@ -47,6 +53,7 @@ async function sendBrevoEmailOtp(
   const fromName = (
     process.env.EMAIL_FROM_NAME ||
     process.env.BREVO_SENDER_NAME ||
+    process.env.SMTP_FROM_NAME ||
     'Prime Bazaar'
   ).trim();
   const timeoutMs = parseInt(String(process.env.EMAIL_DELIVERY_TIMEOUT_MS || '15000').replace(/[^\d]/g, ''), 10) || 15000;
@@ -56,11 +63,12 @@ async function sendBrevoEmailOtp(
     return { success: false, error: 'Email delivery is disabled (EMAIL_DELIVERY_ENABLED=false).' };
   }
 
-  if (!apiKey) {
-    console.log('[Brevo Email] Missing EMAIL_PROVIDER_API_KEY / BREVO_API_KEY in environment.');
+  const hasSmtp = Boolean(smtpHost && smtpUser && smtpPass);
+  if (!hasSmtp && !apiKey) {
+    console.log('[Brevo Email] Missing Brevo SMTP credentials (SMTP_HOST/SMTP_USER/SMTP_PASS) and BREVO_API_KEY.');
     return {
       success: false,
-      error: 'Missing EMAIL_PROVIDER_API_KEY (or BREVO_API_KEY) in environment secrets.',
+      error: 'Missing Brevo SMTP or API credentials in environment secrets.',
     };
   }
 
@@ -93,16 +101,16 @@ async function sendBrevoEmailOtp(
           <div class="tagline">Shop Smarter. Live Better.</div>
         </div>
         <div class="body">
-          <div class="badge">SECURE LOGIN VERIFICATION</div>
-          <div class="greeting">Hello ${recipientName || 'Shopper'},</div>
-          <div class="text">Use the one-time verification code below to securely sign in to your Prime Bazaar account:</div>
+          <div class="badge">SECURE VERIFICATION OTP</div>
+          <div class="greeting">Hello ${recipientName || 'Partner'},</div>
+          <div class="text">Use the one-time verification code below to verify your Prime Bazaar account:</div>
           <div class="otp-box">
             <div class="otp-code">${otpCode}</div>
           </div>
           <div class="expiry-note">Valid for <strong>5 minutes</strong>. Never share this code with anyone.</div>
         </div>
         <div class="footer">
-          Delivered securely via ${fromName} Transactional Gateway (${fromEmail})<br>
+          Delivered securely via ${fromName} (${fromEmail})<br>
           If you did not request this OTP, you can safely ignore this email.
         </div>
       </div>
@@ -110,39 +118,78 @@ async function sendBrevoEmailOtp(
     </html>
   `;
 
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  // 1. Primary path: Brevo SMTP Relay via nodemailer when SMTP_* secrets are configured
+  if (hasSmtp) {
+    try {
+      const transporter = nodemailer.createTransport({
+        host: smtpHost,
+        port: smtpPort,
+        secure: smtpPort === 465,
+        auth: {
+          user: smtpUser,
+          pass: smtpPass,
+        },
+        connectionTimeout: timeoutMs,
+        greetingTimeout: timeoutMs,
+        socketTimeout: timeoutMs,
+      });
 
-    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
-      method: 'POST',
-      headers: {
-        'api-key': apiKey,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-      body: JSON.stringify({
-        sender: { name: fromName, email: fromEmail },
-        to: [{ email: toEmail, name: recipientName || 'Prime Bazaar Shopper' }],
-        subject: `Prime Bazaar - Your Login Verification Code: ${otpCode}`,
-        htmlContent,
-      }),
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
+      const info = await transporter.sendMail({
+        from: `"${fromName}" <${fromEmail}>`,
+        to: recipientName ? `"${recipientName}" <${toEmail}>` : toEmail,
+        subject: `Prime Bazaar - Your Verification Code: ${otpCode}`,
+        text: `Hello ${recipientName || 'Partner'}, your Prime Bazaar verification OTP is ${otpCode}. It is valid for 5 minutes.`,
+        html: htmlContent,
+      });
 
-    const data = await response.json();
-    if (!response.ok) {
-      console.warn('[Brevo Email Notice]:', data);
-      return { success: false, error: data.message || `Brevo status ${response.status}` };
+      console.log('[Brevo SMTP Success]: Message ID', info.messageId, 'Accepted:', info.accepted);
+      return { success: true, messageId: info.messageId, transport: 'smtp' };
+    } catch (smtpErr: any) {
+      console.warn('[Brevo SMTP Exception]:', smtpErr.message);
+      if (!apiKey) {
+        return { success: false, transport: 'smtp', error: smtpErr.message };
+      }
     }
-
-    console.log('[Brevo Email Success]: Message ID', data.messageId);
-    return { success: true, messageId: data.messageId };
-  } catch (err: any) {
-    console.warn('[Brevo Email Exception]:', err.message);
-    return { success: false, error: err.message };
   }
+
+  // 2. Fallback / API path: Brevo Transactional Email HTTP API v3
+  if (apiKey) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+      const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+          'api-key': apiKey,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          sender: { name: fromName, email: fromEmail },
+          to: [{ email: toEmail, name: recipientName || 'Prime Bazaar User' }],
+          subject: `Prime Bazaar - Your Verification Code: ${otpCode}`,
+          htmlContent,
+        }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      const data = await response.json();
+      if (!response.ok) {
+        console.warn('[Brevo API Notice]:', data);
+        return { success: false, transport: 'api', error: data.message || `Brevo status ${response.status}` };
+      }
+
+      console.log('[Brevo API Success]: Message ID', data.messageId);
+      return { success: true, messageId: data.messageId, transport: 'api' };
+    } catch (err: any) {
+      console.warn('[Brevo API Exception]:', err.message);
+      return { success: false, transport: 'api', error: err.message };
+    }
+  }
+
+  return { success: false, error: 'Unable to dispatch email via Brevo.' };
 }
 
 // ==========================================
@@ -296,7 +343,7 @@ interface DBPaymentIntent {
 // Seed Store
 const users: Map<string, DBUser> = new Map();
 const userTokens: Map<string, string> = new Map(); // token -> userId
-const otpStore: Map<string, { code: string; expiresAt: number }> = new Map();
+const otpStore: Map<string, { code: string; expiresAt: number; channel: 'email' | 'sms'; deliveryFailed?: boolean }> = new Map();
 const orders: Map<string, DBOrder> = new Map();
 const paymentIntents: Map<string, DBPaymentIntent> = new Map();
 
@@ -437,13 +484,21 @@ const getAuthenticatedUser = (req: express.Request): DBUser | null => {
 
 // 1. Healthcheck & System Contract
 app.get('/api/health', (req, res) => {
+  const hasSmtp = Boolean(
+    (process.env.SMTP_HOST || '').trim() &&
+    (process.env.SMTP_USER || '').trim() &&
+    (process.env.SMTP_PASS || '').trim()
+  );
+  const hasApiKey = Boolean((process.env.EMAIL_PROVIDER_API_KEY || process.env.BREVO_API_KEY || '').trim());
+
   res.json({
     status: 'ONLINE',
     service: 'Prime Bazaar Core Marketplace Engine',
     version: '2.4.0',
     platform: 'Android & Web Full-Stack',
     environment: process.env.NODE_ENV || 'development',
-    brevoConfigured: Boolean((process.env.EMAIL_PROVIDER_API_KEY || process.env.BREVO_API_KEY || '').trim()),
+    brevoConfigured: hasSmtp || hasApiKey,
+    brevoTransport: hasSmtp ? 'smtp' : hasApiKey ? 'api' : 'none',
     brevoSender:
       process.env.EMAIL_FROM_ADDRESS ||
       process.env.BREVO_SENDER_EMAIL ||
@@ -456,23 +511,41 @@ app.get('/api/health', (req, res) => {
 
 // 2. Authentication APIs
 app.post('/api/auth/send-otp', async (req, res) => {
-  const { phone, email } = req.body;
-  const target = (email || phone || '').trim();
+  const { phone, email, recipientName } = req.body;
+  const cleanEmail = typeof email === 'string' && email.includes('@') ? email.trim() : '';
+  const cleanPhone = typeof phone === 'string' ? phone.trim() : '';
+  const target = cleanEmail || cleanPhone;
+
   if (!target) {
     return res.status(400).json({ error: 'Please provide a valid phone number or email address' });
   }
 
-  const isEmail = target.includes('@');
-  // Generate 6-digit code for email logins, or 4-digit code for phone logins
-  const code = isEmail 
-    ? Math.floor(100000 + Math.random() * 900000).toString() 
+  const isEmail = Boolean(cleanEmail);
+  // Generate 6-digit code for email OTPs (sent via Brevo), or 4-digit code for SMS-only mode
+  const code = isEmail
+    ? Math.floor(100000 + Math.random() * 900000).toString()
     : '7784';
 
-  otpStore.set(target, { code, expiresAt: Date.now() + 5 * 60 * 1000 });
+  const expiresAt = Date.now() + 5 * 60 * 1000;
 
   let brevoResult: BrevoEmailResult | null = null;
   if (isEmail) {
-    brevoResult = await sendBrevoEmailOtp(target, code);
+    brevoResult = await sendBrevoEmailOtp(cleanEmail, code, recipientName);
+  }
+
+  const deliveryFailed = isEmail ? !brevoResult?.success : false;
+  const otpRecord = {
+    code,
+    expiresAt,
+    channel: isEmail ? ('email' as const) : ('sms' as const),
+    deliveryFailed,
+  };
+
+  if (cleanEmail) {
+    otpStore.set(cleanEmail.toLowerCase(), otpRecord);
+  }
+  if (cleanPhone) {
+    otpStore.set(cleanPhone, otpRecord);
   }
 
   if (isEmail) {
@@ -481,17 +554,18 @@ app.post('/api/auth/send-otp', async (req, res) => {
         success: true,
         channel: 'email',
         provider: 'brevo',
-        message: `Verification code sent to ${target} via Brevo Gateway`,
+        transport: brevoResult.transport || 'smtp',
+        message: `6-digit verification OTP sent to ${cleanEmail} via Brevo ${brevoResult.transport === 'smtp' ? 'SMTP' : 'Gateway'}`,
         messageId: brevoResult.messageId,
         expiresInSeconds: 300,
       });
     } else {
-      // Return status with codeHint so testing is never blocked even if Brevo has IP whitelisting enabled
       return res.json({
         success: true,
         channel: 'email',
         provider: 'brevo',
-        message: `Verification code generated for ${target}.${brevoResult?.error ? ` (Brevo notice: ${brevoResult.error})` : ''}`,
+        deliveryFailed: true,
+        message: `Brevo email delivery failed for ${cleanEmail}${brevoResult?.error ? `: ${brevoResult.error}` : ''}`,
         codeHint: code,
         deliveryNotice: brevoResult?.error,
         expiresInSeconds: 300,
@@ -502,7 +576,7 @@ app.post('/api/auth/send-otp', async (req, res) => {
   res.json({
     success: true,
     channel: 'sms',
-    message: `Verification code sent to ${target}`,
+    message: `SMS verification code sent to ${cleanPhone}`,
     codeHint: '7784',
     expiresInSeconds: 300,
   });
@@ -510,17 +584,34 @@ app.post('/api/auth/send-otp', async (req, res) => {
 
 app.post('/api/auth/verify-otp', (req, res) => {
   const { phone, email, otp, name } = req.body;
-  const target = (email || phone || '').trim();
-  const entry = otpStore.get(target);
+  const cleanEmail = typeof email === 'string' && email.includes('@') ? email.trim().toLowerCase() : '';
+  const cleanPhone = typeof phone === 'string' ? phone.trim() : '';
+  const entry = (cleanEmail ? otpStore.get(cleanEmail) : undefined) || (cleanPhone ? otpStore.get(cleanPhone) : undefined);
 
   const cleanOtp = (otp || '').trim();
-  const isValid = entry && (entry.code === cleanOtp || cleanOtp === '7784');
+  const isNotExpired = Boolean(entry && Date.now() <= entry.expiresAt);
+  const isValid = Boolean(
+    entry &&
+    isNotExpired &&
+    (entry.channel === 'email'
+      ? entry.code === cleanOtp
+      : entry.code === cleanOtp || cleanOtp === '7784')
+  );
 
   if (!isValid) {
-    return res.status(400).json({ 
-      error: `Invalid or expired OTP code.${entry ? ` Expected code: ${entry.code} (or bypass code 7784)` : ' Please request a code first.'}` 
+    const expired = entry && !isNotExpired;
+    return res.status(400).json({
+      error: !entry
+        ? 'Please request a verification OTP first.'
+        : expired
+          ? 'OTP has expired. Please request a new code.'
+          : 'Invalid OTP code. Please check your email inbox and enter the 6-digit code.',
     });
   }
+
+  // Clear used OTP
+  if (cleanEmail) otpStore.delete(cleanEmail);
+  if (cleanPhone) otpStore.delete(cleanPhone);
 
   // Find or create user
   let user: DBUser | undefined;
