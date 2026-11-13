@@ -84,10 +84,10 @@ export const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ sellerId, onCl
   };
 
   return (
-    <div className="fixed inset-0 z-60 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white dark:bg-zinc-900 rounded-3xl max-w-2xl w-full shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden my-8 animate-fadeIn text-xs">
+    <div className="fixed inset-0 z-60 bg-black/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+      <div className="bg-white dark:bg-zinc-900 rounded-3xl max-w-2xl w-full max-h-[90vh] shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden flex flex-col animate-fadeIn text-xs">
         {/* Header */}
-        <div className="p-5 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50 dark:bg-zinc-800/50">
+        <div className="shrink-0 p-5 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50 dark:bg-zinc-800/50">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-md shadow-emerald-600/20">
               <FileSpreadsheet className="w-5 h-5" />
@@ -109,7 +109,7 @@ export const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ sellerId, onCl
           </button>
         </div>
 
-        <div className="p-6 space-y-6">
+        <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-6">
           {/* Step 1: Download Template */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
             <div>
@@ -177,7 +177,7 @@ export const BulkUploadModal: React.FC<BulkUploadModalProps> = ({ sellerId, onCl
         </div>
 
         {/* Footer Actions */}
-        <div className="p-4 sm:p-5 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50 dark:bg-zinc-800/50">
+        <div className="shrink-0 p-4 sm:p-5 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50 dark:bg-zinc-800/50">
           <button
             type="button"
             onClick={onClose}

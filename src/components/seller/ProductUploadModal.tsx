@@ -161,13 +161,13 @@ export const ProductUploadModal: React.FC<ProductUploadModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-60 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+    <div className="fixed inset-0 z-60 bg-black/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
       <form
         onSubmit={handleSubmit}
-        className="bg-white dark:bg-zinc-900 rounded-3xl max-w-3xl w-full shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden my-8 animate-fadeIn text-xs"
+        className="bg-white dark:bg-zinc-900 rounded-3xl max-w-3xl w-full max-h-[92vh] shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden flex flex-col animate-fadeIn text-xs"
       >
         {/* Header */}
-        <div className="p-5 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50 dark:bg-zinc-800/50">
+        <div className="shrink-0 p-5 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50 dark:bg-zinc-800/50">
           <div>
             <h3 className="text-base font-bold text-zinc-900 dark:text-white font-display">
               {existingProduct ? 'Edit Product Listing' : 'Upload New Product to Prime Bazaar'}
@@ -185,7 +185,7 @@ export const ProductUploadModal: React.FC<ProductUploadModalProps> = ({
           </button>
         </div>
 
-        <div className="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
+        <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-6">
           {/* Section 1: Basic Info */}
           <div className="space-y-3">
             <span className="font-bold text-zinc-900 dark:text-white text-xs uppercase tracking-wider block border-b pb-1 border-zinc-200 dark:border-zinc-800">
@@ -567,7 +567,7 @@ export const ProductUploadModal: React.FC<ProductUploadModalProps> = ({
         </div>
 
         {/* Footer Actions */}
-        <div className="p-4 sm:p-5 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50 dark:bg-zinc-800/50">
+        <div className="shrink-0 p-4 sm:p-5 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50 dark:bg-zinc-800/50">
           <button
             type="button"
             onClick={onClose}

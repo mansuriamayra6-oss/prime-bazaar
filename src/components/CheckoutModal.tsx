@@ -197,21 +197,37 @@ export const CheckoutModal: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 animate-fadeIn">
+    <div
+      className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 animate-fadeIn"
+      onClick={() => {
+        setIsCheckoutOpen(false);
+        setStep('address');
+      }}
+    >
       <div 
-        className="relative w-full max-w-2xl bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden shadow-2xl border border-zinc-200 dark:border-zinc-800 p-6 sm:p-8"
+        className="relative w-full max-w-2xl max-h-[92vh] bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden shadow-2xl border border-zinc-200 dark:border-zinc-800 flex flex-col"
         onClick={e => e.stopPropagation()}
       >
-        {/* Close Button */}
-        <button
-          onClick={() => {
-            setIsCheckoutOpen(false);
-            setStep('address');
-          }}
-          className="absolute top-4 right-4 p-2 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors"
-        >
-          <X className="w-5 h-5" />
-        </button>
+        {/* Pinned Top Header */}
+        <div className="shrink-0 flex items-center justify-between px-6 sm:px-8 py-4 border-b border-zinc-200 dark:border-zinc-800">
+          <h2 className="text-base font-bold text-zinc-900 dark:text-white font-display">
+            Secure Checkout
+          </h2>
+          <button
+            type="button"
+            onClick={() => {
+              setIsCheckoutOpen(false);
+              setStep('address');
+            }}
+            className="p-2 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors"
+            title="Close checkout"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Scrollable Body */}
+        <div className="flex-1 min-h-0 overflow-y-auto p-6 sm:p-8">
 
         {/* Stepper Progress */}
         {step !== 'success' && (
@@ -869,6 +885,22 @@ export const CheckoutModal: React.FC = () => {
             </div>
           </div>
         )}
+        </div>
+
+        {/* Sticky Bottom Footer with Close */}
+        <div className="shrink-0 flex items-center justify-end px-6 sm:px-8 py-3 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/95">
+          <button
+            type="button"
+            onClick={() => {
+              setIsCheckoutOpen(false);
+              setStep('address');
+            }}
+            className="px-4 py-2 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-100 font-bold text-xs flex items-center gap-1.5 transition-all"
+          >
+            <X className="w-3.5 h-3.5" />
+            <span>Close</span>
+          </button>
+        </div>
       </div>
     </div>
   );

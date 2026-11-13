@@ -95,21 +95,38 @@ export const ProductDetailModal: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 md:p-6 animate-fadeIn">
-      <div 
-        className="relative w-full max-w-5xl bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden shadow-2xl border border-zinc-200 dark:border-zinc-800 my-8"
+    <div
+      className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 md:p-6 animate-fadeIn"
+      onClick={() => setSelectedProduct(null)}
+    >
+      <div
+        className="relative w-full max-w-5xl max-h-[92vh] bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden shadow-2xl border border-zinc-200 dark:border-zinc-800 flex flex-col"
         onClick={e => e.stopPropagation()}
       >
-        {/* Close Button */}
-        <button
-          onClick={() => setSelectedProduct(null)}
-          className="absolute top-4 right-4 z-20 w-10 h-10 rounded-full bg-white/90 dark:bg-zinc-800/90 text-zinc-700 dark:text-zinc-200 flex items-center justify-center hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors shadow-sm"
-          title="Close product detail"
-        >
-          <X className="w-5 h-5" />
-        </button>
+        {/* Sticky Top Header with Close Button */}
+        <div className="shrink-0 flex items-center justify-between gap-3 px-4 sm:px-6 py-3 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+          <div className="min-w-0">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-rose-600 block">
+              {product.brand}
+            </span>
+            <h3 className="text-sm font-bold text-zinc-900 dark:text-white truncate font-display">
+              {product.title}
+            </h3>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSelectedProduct(null)}
+            className="shrink-0 w-9 h-9 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 flex items-center justify-center hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+            title="Close product detail"
+            aria-label="Close product detail"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 max-h-[85vh] overflow-y-auto">
+        {/* Unified Scrollable Body (scrolls cleanly top to bottom) */}
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <div className="grid grid-cols-1 lg:grid-cols-12">
           {/* Left Column: Image Gallery, 360 View, & Video (6 cols) */}
           <div className="lg:col-span-6 p-4 sm:p-6 bg-zinc-50 dark:bg-zinc-950/50 flex flex-col gap-4">
             {/* View Mode Switcher Pills */}
@@ -603,9 +620,40 @@ export const ProductDetailModal: React.FC = () => {
                   <p className="text-zinc-600 dark:text-zinc-300 leading-relaxed">{rev.comment}</p>
                 </div>
               ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Sticky Bottom Footer with Quick Add & Close Button */}
+          <div className="shrink-0 flex items-center justify-between gap-3 px-4 sm:px-6 py-3 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/95">
+            <div className="flex items-baseline gap-2">
+              <span className="text-base sm:text-lg font-extrabold text-zinc-900 dark:text-white font-mono">
+                {formatPrice(product.price)}
+              </span>
+              <span className="text-xs text-zinc-400 line-through font-mono hidden sm:inline">
+                {formatPrice(product.originalPrice)}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleAddToCart}
+                className="px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 dark:bg-white dark:hover:bg-zinc-100 text-white dark:text-zinc-900 font-bold text-xs flex items-center gap-1.5 transition-all active:scale-95"
+              >
+                <ShoppingBag className="w-3.5 h-3.5" />
+                <span>Add to Bag</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedProduct(null)}
+                className="px-4 py-2 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-100 font-bold text-xs flex items-center gap-1.5 transition-all active:scale-95"
+              >
+                <X className="w-3.5 h-3.5" />
+                <span>Close</span>
+              </button>
             </div>
           </div>
-        )}
       </div>
     </div>
   );

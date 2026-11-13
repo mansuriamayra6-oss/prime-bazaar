@@ -111,10 +111,10 @@ export const SellerRegistrationModal: React.FC<SellerRegistrationModalProps> = (
   };
 
   return (
-    <div className="fixed inset-0 z-60 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white dark:bg-zinc-900 rounded-3xl max-w-2xl w-full shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden my-8 animate-fadeIn">
+    <div className="fixed inset-0 z-60 bg-black/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+      <div className="bg-white dark:bg-zinc-900 rounded-3xl max-w-2xl w-full max-h-[92vh] shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden flex flex-col animate-fadeIn">
         {/* Header */}
-        <div className="p-5 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50 dark:bg-zinc-800/50">
+        <div className="shrink-0 p-5 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50 dark:bg-zinc-800/50">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-rose-600 text-white flex items-center justify-center shadow-md shadow-rose-600/20">
               <Store className="w-5 h-5" />
@@ -137,7 +137,7 @@ export const SellerRegistrationModal: React.FC<SellerRegistrationModalProps> = (
         </div>
 
         {/* 5-Step Stepper Ribbon */}
-        <div className="px-6 py-3 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+        <div className="shrink-0 px-6 py-3 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
           <div className="flex items-center justify-between">
             {[
               { num: 1, label: 'Account' },
@@ -174,7 +174,7 @@ export const SellerRegistrationModal: React.FC<SellerRegistrationModalProps> = (
         </div>
 
         {/* Content Body */}
-        <div className="p-6 text-xs text-zinc-700 dark:text-zinc-300">
+        <div className="flex-1 min-h-0 overflow-y-auto p-6 text-xs text-zinc-700 dark:text-zinc-300">
           {/* STEP 1: Account Verification */}
           {step === 1 && (
             <div className="space-y-4">
@@ -597,6 +597,18 @@ export const SellerRegistrationModal: React.FC<SellerRegistrationModalProps> = (
               </div>
             </div>
           )}
+        </div>
+
+        {/* Sticky Bottom Footer with Close */}
+        <div className="shrink-0 flex items-center justify-end px-6 py-3 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/50">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-100 font-bold text-xs flex items-center gap-1.5 transition-all"
+          >
+            <X className="w-3.5 h-3.5" />
+            <span>Close</span>
+          </button>
         </div>
       </div>
     </div>

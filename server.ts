@@ -36,15 +36,32 @@ async function sendBrevoEmailOtp(
   otpCode: string, 
   recipientName?: string
 ): Promise<BrevoEmailResult> {
-  const apiKey = process.env.EMAIL_PROVIDER_API_KEY || '';
-  const isEnabled = process.env.EMAIL_DELIVERY_ENABLED === 'true';
-  const fromEmail = process.env.EMAIL_FROM_ADDRESS || 'noreply@primebazaar.in';
-  const fromName = process.env.EMAIL_FROM_NAME || 'Prime Bazaar';
+  const apiKey = (process.env.EMAIL_PROVIDER_API_KEY || process.env.BREVO_API_KEY || '').trim();
+  const isEnabled = process.env.EMAIL_DELIVERY_ENABLED !== 'false';
+  const fromEmail = (
+    process.env.EMAIL_FROM_ADDRESS ||
+    process.env.BREVO_SENDER_EMAIL ||
+    process.env.SMTP_FROM_EMAIL ||
+    'noreply@primebazaar.in'
+  ).trim();
+  const fromName = (
+    process.env.EMAIL_FROM_NAME ||
+    process.env.BREVO_SENDER_NAME ||
+    'Prime Bazaar'
+  ).trim();
   const timeoutMs = parseInt(String(process.env.EMAIL_DELIVERY_TIMEOUT_MS || '15000').replace(/[^\d]/g, ''), 10) || 15000;
 
-  if (!isEnabled || !apiKey) {
-    console.log('[Brevo Email] Email delivery disabled or API key missing.');
-    return { success: false, error: 'Brevo email delivery is disabled or key not configured' };
+  if (!isEnabled) {
+    console.log('[Brevo Email] Email delivery disabled via EMAIL_DELIVERY_ENABLED=false.');
+    return { success: false, error: 'Email delivery is disabled (EMAIL_DELIVERY_ENABLED=false).' };
+  }
+
+  if (!apiKey) {
+    console.log('[Brevo Email] Missing EMAIL_PROVIDER_API_KEY / BREVO_API_KEY in environment.');
+    return {
+      success: false,
+      error: 'Missing EMAIL_PROVIDER_API_KEY (or BREVO_API_KEY) in environment secrets.',
+    };
   }
 
   const htmlContent = `
@@ -426,6 +443,12 @@ app.get('/api/health', (req, res) => {
     version: '2.4.0',
     platform: 'Android & Web Full-Stack',
     environment: process.env.NODE_ENV || 'development',
+    brevoConfigured: Boolean((process.env.EMAIL_PROVIDER_API_KEY || process.env.BREVO_API_KEY || '').trim()),
+    brevoSender:
+      process.env.EMAIL_FROM_ADDRESS ||
+      process.env.BREVO_SENDER_EMAIL ||
+      process.env.SMTP_FROM_EMAIL ||
+      null,
     uptimeSeconds: Math.floor(process.uptime()),
     timestamp: new Date().toISOString(),
   });
@@ -448,7 +471,7 @@ app.post('/api/auth/send-otp', async (req, res) => {
   otpStore.set(target, { code, expiresAt: Date.now() + 5 * 60 * 1000 });
 
   let brevoResult: BrevoEmailResult | null = null;
-  if (isEmail && process.env.EMAIL_DELIVERY_ENABLED === 'true') {
+  if (isEmail) {
     brevoResult = await sendBrevoEmailOtp(target, code);
   }
 
@@ -458,7 +481,7 @@ app.post('/api/auth/send-otp', async (req, res) => {
         success: true,
         channel: 'email',
         provider: 'brevo',
-        message: `Verification code sent to ${target} via PrimeCare Brevo Gateway`,
+        message: `Verification code sent to ${target} via Brevo Gateway`,
         messageId: brevoResult.messageId,
         expiresInSeconds: 300,
       });

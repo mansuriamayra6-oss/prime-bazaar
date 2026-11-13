@@ -30,13 +30,16 @@ export const OrdersModal: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 animate-fadeIn">
+    <div
+      className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 animate-fadeIn"
+      onClick={() => setIsOrdersOpen(false)}
+    >
       <div 
-        className="relative w-full max-w-3xl bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden shadow-2xl border border-zinc-200 dark:border-zinc-800 p-6 sm:p-8 max-h-[90vh] overflow-y-auto"
+        className="relative w-full max-w-3xl max-h-[90vh] bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden shadow-2xl border border-zinc-200 dark:border-zinc-800 flex flex-col"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-zinc-200 dark:border-zinc-800">
+        <div className="shrink-0 flex items-center justify-between px-6 sm:px-8 py-4 border-b border-zinc-200 dark:border-zinc-800">
           <div className="flex items-center gap-2.5">
             <Package className="w-5 h-5 text-rose-600" />
             <h2 className="text-lg font-bold text-zinc-900 dark:text-white font-display">
@@ -52,7 +55,7 @@ export const OrdersModal: React.FC = () => {
         </div>
 
         {/* Orders List */}
-        <div className="mt-6 space-y-6">
+        <div className="flex-1 min-h-0 overflow-y-auto p-6 sm:p-8 space-y-6">
           {orders.length > 0 ? (
             orders.map(order => (
               <div
@@ -318,6 +321,18 @@ export const OrdersModal: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* Sticky Bottom Footer with Close */}
+        <div className="shrink-0 flex items-center justify-end px-6 sm:px-8 py-3 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/95">
+          <button
+            type="button"
+            onClick={() => setIsOrdersOpen(false)}
+            className="px-4 py-2 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-100 font-bold text-xs flex items-center gap-1.5 transition-all"
+          >
+            <X className="w-3.5 h-3.5" />
+            <span>Close</span>
+          </button>
+        </div>
       </div>
     </div>
   );

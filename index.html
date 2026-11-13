@@ -2,6 +2,45 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      (function () {
+        var isExt = function (s, m) {
+          var src = String(s || '');
+          var msg = String(m || '');
+          return (
+            src.indexOf('chrome-extension://') !== -1 ||
+            src.indexOf('moz-extension://') !== -1 ||
+            src.indexOf('safari-extension://') !== -1 ||
+            msg.indexOf('chrome-extension://') !== -1 ||
+            msg.indexOf('Failed to connect to MetaMask') !== -1 ||
+            msg.indexOf('nkbihfbeogaeaoehlefnkodbefgpgknn') !== -1
+          );
+        };
+        window.addEventListener(
+          'error',
+          function (e) {
+            if (isExt(e.filename || (e.error && e.error.stack), e.message)) {
+              e.preventDefault();
+              e.stopImmediatePropagation();
+            }
+          },
+          true
+        );
+        window.addEventListener(
+          'unhandledrejection',
+          function (e) {
+            var r = e.reason;
+            var msg = typeof r === 'string' ? r : (r && r.message) || String(r || '');
+            var stack = (r && r.stack) || '';
+            if (isExt(stack, msg + ' ' + stack)) {
+              e.preventDefault();
+              e.stopImmediatePropagation();
+            }
+          },
+          true
+        );
+      })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>Prime Bazaar | Social Fashion Marketplace</title>
     <meta name="description" content="High-discovery multi-vendor fashion and social commerce marketplace inspired by Myntra and Meesho, featuring video reels shopping, AI visual search, seller studio, and super admin console." />

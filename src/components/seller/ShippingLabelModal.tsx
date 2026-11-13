@@ -23,10 +23,10 @@ export const ShippingLabelModal: React.FC<ShippingLabelModalProps> = ({ order, s
   });
 
   return (
-    <div className="fixed inset-0 z-60 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white dark:bg-zinc-900 rounded-3xl max-w-2xl w-full shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden my-8 animate-fadeIn">
+    <div className="fixed inset-0 z-60 bg-black/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+      <div className="bg-white dark:bg-zinc-900 rounded-3xl max-w-2xl w-full max-h-[90vh] shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden flex flex-col animate-fadeIn">
         {/* Modal Top Actions */}
-        <div className="p-4 sm:p-5 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50 dark:bg-zinc-800/50">
+        <div className="shrink-0 p-4 sm:p-5 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50 dark:bg-zinc-800/50">
           <div>
             <h3 className="text-base font-bold text-zinc-900 dark:text-white font-display">
               Air Waybill (AWB) & GST Tax Invoice
@@ -53,7 +53,7 @@ export const ShippingLabelModal: React.FC<ShippingLabelModalProps> = ({ order, s
         </div>
 
         {/* Printable Physical Shipping Label Card */}
-        <div className="p-6 text-zinc-900 dark:text-zinc-100 space-y-6">
+        <div className="flex-1 min-h-0 overflow-y-auto p-6 text-zinc-900 dark:text-zinc-100 space-y-6">
           <div className="border-2 border-zinc-900 dark:border-zinc-300 rounded-2xl p-6 bg-white text-zinc-900 shadow-xs text-xs space-y-5">
             {/* Header row with Prime Bazaar Logo and Courier */}
             <div className="flex items-center justify-between border-b-2 border-zinc-900 pb-4">
@@ -197,6 +197,18 @@ export const ShippingLabelModal: React.FC<ShippingLabelModalProps> = ({ order, s
               Tax Invoice #{invoiceNumber} generated on {orderDate}. Goods once sold are subject to Prime Bazaar 7-Day Replacement Policy. Prime Bazaar Marketplace Pvt Ltd.
             </div>
           </div>
+        </div>
+
+        {/* Sticky Bottom Footer */}
+        <div className="shrink-0 flex items-center justify-end gap-2 px-5 py-3 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/50">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-100 font-bold text-xs flex items-center gap-1.5 transition-all"
+          >
+            <X className="w-3.5 h-3.5" />
+            <span>Close</span>
+          </button>
         </div>
       </div>
     </div>
