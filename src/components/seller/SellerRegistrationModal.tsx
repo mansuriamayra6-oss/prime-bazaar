@@ -16,7 +16,9 @@ import {
   FileText,
   Sparkles,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  Copy,
+  Check
 } from 'lucide-react';
 
 interface SellerRegistrationModalProps {
@@ -39,7 +41,8 @@ export const SellerRegistrationModal: React.FC<SellerRegistrationModalProps> = (
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
   const [otpNotice, setOtpNotice] = useState<string | null>(null);
   const [otpError, setOtpError] = useState<string | null>(null);
-  const [fallbackHint, setFallbackHint] = useState<string | null>(null);
+  const [unauthorizedIp, setUnauthorizedIp] = useState<string | null>(null);
+  const [copiedIp, setCopiedIp] = useState(false);
 
   // Step 2: Business Info
   const [sellerName, setSellerName] = useState('Raghavendra Sharma');
@@ -64,6 +67,18 @@ export const SellerRegistrationModal: React.FC<SellerRegistrationModalProps> = (
   // Step 4: Submission result
   const [registeredSellerId, setRegisteredSellerId] = useState<string>('');
 
+  const handleCopyIp = async () => {
+    if (!unauthorizedIp) return;
+    try {
+      await navigator.clipboard.writeText(unauthorizedIp);
+      setCopiedIp(true);
+      notify(`Copied server IP ${unauthorizedIp} to clipboard`);
+      setTimeout(() => setCopiedIp(false), 2000);
+    } catch {
+      notify(`Server IP: ${unauthorizedIp}`);
+    }
+  };
+
   const handleSendOtp = async () => {
     const cleanEmail = email.trim();
     if (!cleanEmail || !cleanEmail.includes('@')) {
@@ -76,18 +91,20 @@ export const SellerRegistrationModal: React.FC<SellerRegistrationModalProps> = (
     setIsSendingOtp(true);
     setOtpError(null);
     setOtpNotice(null);
-    setFallbackHint(null);
+    setUnauthorizedIp(null);
+    setOtpSent(false);
     setOtp('');
     setIsOtpVerified(false);
 
     try {
       const res = await api.auth.sendOtp(phone.trim() || undefined, cleanEmail, sellerName);
-      setOtpSent(true);
-      if (res.deliveryFailed && res.codeHint) {
-        setOtpError(res.deliveryNotice || res.message || 'Brevo SMTP delivery failed.');
-        setFallbackHint(res.codeHint);
-        notify('Brevo email delivery encountered an error. See details below.');
+      if (res.deliveryFailed || !res.success) {
+        setOtpSent(false);
+        setUnauthorizedIp(res.outboundIp || null);
+        setOtpError(res.message || res.deliveryNotice || 'Brevo SMTP delivery failed.');
+        notify('Brevo rejected the SMTP connection. See IP authorization steps below.');
       } else {
+        setOtpSent(true);
         setOtpNotice(res.message || `6-digit OTP sent via Brevo to ${cleanEmail}`);
         notify(`Verification OTP sent to ${cleanEmail} via Brevo!`);
       }
@@ -294,14 +311,29 @@ export const SellerRegistrationModal: React.FC<SellerRegistrationModalProps> = (
                 </div>
 
                 {otpError && (
-                  <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200 flex items-start gap-2 text-[11px]">
+                  <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200 flex items-start gap-2.5 text-[11px]">
                     <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
-                    <div className="space-y-1">
+                    <div className="space-y-1.5 flex-1">
                       <p className="font-semibold">{otpError}</p>
-                      {fallbackHint && (
-                        <p className="font-mono text-xs">
-                          Fallback verification code: <strong>{fallbackHint}</strong>
-                        </p>
+                      {unauthorizedIp && (
+                        <div className="p-2.5 rounded-lg bg-white/80 dark:bg-zinc-900/70 border border-amber-200 dark:border-amber-800/70 space-y-1.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-mono text-xs font-bold text-zinc-900 dark:text-white">
+                              Server Outbound IP: {unauthorizedIp}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={handleCopyIp}
+                              className="px-2 py-1 rounded-md bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/60 dark:hover:bg-amber-900 text-amber-900 dark:text-amber-200 font-semibold flex items-center gap-1 text-[10px]"
+                            >
+                              {copiedIp ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                              <span>{copiedIp ? 'Copied' : 'Copy IP'}</span>
+                            </button>
+                          </div>
+                          <p className="text-[10px] text-zinc-600 dark:text-zinc-300 leading-relaxed">
+                            In <strong>Brevo → Settings → Security → Authorized IPs</strong>, either click <strong>Deactivate</strong> on IP blocking (recommended for cloud apps) or click <strong>Authorize IP address</strong> and add <code className="font-mono">{unauthorizedIp}</code>, then click <strong>Send OTP</strong> again.
+                          </p>
+                        </div>
                       )}
                     </div>
                   </div>

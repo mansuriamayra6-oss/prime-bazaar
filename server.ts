@@ -30,7 +30,32 @@ interface BrevoEmailResult {
   success: boolean;
   messageId?: string;
   transport?: 'smtp' | 'api';
+  outboundIp?: string | null;
+  isUnauthorizedIp?: boolean;
   error?: string;
+}
+
+let cachedOutboundIp: { ip: string; fetchedAt: number } | null = null;
+async function getOutboundIp(): Promise<string | null> {
+  if (cachedOutboundIp && Date.now() - cachedOutboundIp.fetchedAt < 2 * 60 * 1000) {
+    return cachedOutboundIp.ip;
+  }
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 2500);
+    const resp = await fetch('https://api.ipify.org', { signal: controller.signal });
+    clearTimeout(timer);
+    if (resp.ok) {
+      const ip = (await resp.text()).trim();
+      if (ip) {
+        cachedOutboundIp = { ip, fetchedAt: Date.now() };
+        return ip;
+      }
+    }
+  } catch {
+    // ignore IP lookup timeout
+  }
+  return cachedOutboundIp?.ip || null;
 }
 
 async function sendBrevoEmailOtp(
@@ -55,7 +80,7 @@ async function sendBrevoEmailOtp(
     process.env.BREVO_SENDER_NAME ||
     process.env.SMTP_FROM_NAME ||
     'Prime Bazaar'
-  ).trim();
+  ).replace(/"/g, '').trim();
   const timeoutMs = parseInt(String(process.env.EMAIL_DELIVERY_TIMEOUT_MS || '15000').replace(/[^\d]/g, ''), 10) || 15000;
 
   if (!isEnabled) {
@@ -145,9 +170,18 @@ async function sendBrevoEmailOtp(
       console.log('[Brevo SMTP Success]: Message ID', info.messageId, 'Accepted:', info.accepted);
       return { success: true, messageId: info.messageId, transport: 'smtp' };
     } catch (smtpErr: any) {
-      console.warn('[Brevo SMTP Exception]:', smtpErr.message);
+      const msg = String(smtpErr?.message || 'SMTP connection failed');
+      const isUnauthorizedIp = /525|unauthorized ip/i.test(msg);
+      const outboundIp = isUnauthorizedIp ? await getOutboundIp() : null;
+      console.warn('[Brevo SMTP Exception]:', msg, outboundIp ? `(Outbound IP: ${outboundIp})` : '');
       if (!apiKey) {
-        return { success: false, transport: 'smtp', error: smtpErr.message };
+        return {
+          success: false,
+          transport: 'smtp',
+          outboundIp,
+          isUnauthorizedIp,
+          error: msg,
+        };
       }
     }
   }
@@ -531,47 +565,53 @@ app.post('/api/auth/send-otp', async (req, res) => {
   let brevoResult: BrevoEmailResult | null = null;
   if (isEmail) {
     brevoResult = await sendBrevoEmailOtp(cleanEmail, code, recipientName);
-  }
+    if (!brevoResult.success) {
+      const ipText = brevoResult.outboundIp ? ` (${brevoResult.outboundIp})` : '';
+      const message = brevoResult.isUnauthorizedIp
+        ? `Brevo blocked this server's IP${ipText}: ${brevoResult.error}. Add ${brevoResult.outboundIp || 'this server IP'} or Deactivate Authorized IPs in Brevo → Settings → Security → Authorized IPs.`
+        : `Brevo email delivery failed for ${cleanEmail}: ${brevoResult.error}`;
 
-  const deliveryFailed = isEmail ? !brevoResult?.success : false;
-  const otpRecord = {
-    code,
-    expiresAt,
-    channel: isEmail ? ('email' as const) : ('sms' as const),
-    deliveryFailed,
-  };
-
-  if (cleanEmail) {
-    otpStore.set(cleanEmail.toLowerCase(), otpRecord);
-  }
-  if (cleanPhone) {
-    otpStore.set(cleanPhone, otpRecord);
-  }
-
-  if (isEmail) {
-    if (brevoResult?.success) {
       return res.json({
-        success: true,
-        channel: 'email',
-        provider: 'brevo',
-        transport: brevoResult.transport || 'smtp',
-        message: `6-digit verification OTP sent to ${cleanEmail} via Brevo ${brevoResult.transport === 'smtp' ? 'SMTP' : 'Gateway'}`,
-        messageId: brevoResult.messageId,
-        expiresInSeconds: 300,
-      });
-    } else {
-      return res.json({
-        success: true,
+        success: false,
         channel: 'email',
         provider: 'brevo',
         deliveryFailed: true,
-        message: `Brevo email delivery failed for ${cleanEmail}${brevoResult?.error ? `: ${brevoResult.error}` : ''}`,
-        codeHint: code,
-        deliveryNotice: brevoResult?.error,
-        expiresInSeconds: 300,
+        isUnauthorizedIp: Boolean(brevoResult.isUnauthorizedIp),
+        outboundIp: brevoResult.outboundIp || null,
+        message,
+        deliveryNotice: brevoResult.error,
       });
     }
+
+    const otpRecord = {
+      code,
+      expiresAt,
+      channel: 'email' as const,
+      deliveryFailed: false,
+    };
+    otpStore.set(cleanEmail.toLowerCase(), otpRecord);
+    if (cleanPhone) {
+      otpStore.set(cleanPhone, otpRecord);
+    }
+
+    return res.json({
+      success: true,
+      channel: 'email',
+      provider: 'brevo',
+      transport: brevoResult.transport || 'smtp',
+      message: `6-digit verification OTP sent to ${cleanEmail} via Brevo ${brevoResult.transport === 'smtp' ? 'SMTP' : 'Gateway'}`,
+      messageId: brevoResult.messageId,
+      expiresInSeconds: 300,
+    });
   }
+
+  const smsRecord = {
+    code,
+    expiresAt,
+    channel: 'sms' as const,
+    deliveryFailed: false,
+  };
+  otpStore.set(cleanPhone, smsRecord);
 
   res.json({
     success: true,

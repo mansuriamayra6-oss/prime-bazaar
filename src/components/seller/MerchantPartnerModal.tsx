@@ -82,16 +82,20 @@ export const MerchantPartnerModal: React.FC = () => {
 
     try {
       const res = await api.auth.sendOtp(isEmail ? undefined : target, isEmail ? target : undefined);
-      setOtpSent(true);
-      if (res.deliveryFailed && res.codeHint) {
-        setOtpError(`${res.deliveryNotice || res.message} (Fallback code: ${res.codeHint})`);
-      } else if (res.channel === 'sms' && res.codeHint) {
-        setOtpCode(res.codeHint);
-        setOtpNotice(`SMS verification code sent to ${target} (Code: ${res.codeHint})`);
+      if (res.deliveryFailed || !res.success) {
+        setOtpSent(false);
+        setOtpError(res.message || res.deliveryNotice || 'Brevo SMTP delivery failed.');
+        notify('Brevo rejected the SMTP connection. Check Authorized IPs in Brevo.');
       } else {
-        setOtpNotice(res.message || `6-digit verification OTP sent to ${target} via Brevo`);
+        setOtpSent(true);
+        if (res.channel === 'sms' && res.codeHint) {
+          setOtpCode(res.codeHint);
+          setOtpNotice(`SMS verification code sent to ${target} (Code: ${res.codeHint})`);
+        } else {
+          setOtpNotice(res.message || `6-digit verification OTP sent to ${target} via Brevo`);
+        }
+        notify(res.message || `Verification OTP sent to ${target}`);
       }
-      notify(res.message || `Verification OTP sent to ${target}`);
     } catch (err: any) {
       const msg = err.message || 'Failed to send verification OTP.';
       setOtpError(msg);

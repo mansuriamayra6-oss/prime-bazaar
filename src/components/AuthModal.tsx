@@ -32,18 +32,25 @@ export const AuthModal: React.FC = () => {
 
     setLoading(true);
     setOtpCode('');
+    setServerNotice(null);
     try {
       const res = await api.auth.sendOtp(
         method === 'phone' ? `+91 ${phone}` : undefined,
         method === 'email' ? email : undefined,
         fullName.trim() || undefined
       );
-      setOtpSent(true);
-      setServerNotice(res.message || null);
-      if (res.codeHint) {
-        setOtpCode(res.codeHint);
+      if (res.deliveryFailed || !res.success) {
+        setOtpSent(false);
+        setServerNotice(res.message || null);
+        notify(res.message || 'Failed to send verification email via Brevo.');
+      } else {
+        setOtpSent(true);
+        setServerNotice(res.message || null);
+        if (res.codeHint) {
+          setOtpCode(res.codeHint);
+        }
+        notify(res.message || 'Verification code dispatched!');
       }
-      notify(res.message || 'Verification code dispatched!');
     } catch (err: any) {
       notify(err.message || 'Failed to send verification code.');
     } finally {
@@ -258,6 +265,12 @@ export const AuthModal: React.FC = () => {
                     onChange={e => setEmail(e.target.value)}
                     className="w-full p-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs focus:outline-none focus:border-emerald-600"
                   />
+                </div>
+              )}
+
+              {serverNotice && !otpSent && (
+                <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-[11px] text-amber-900 dark:text-amber-200">
+                  {serverNotice}
                 </div>
               )}
 
