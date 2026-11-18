@@ -42,14 +42,97 @@
       })();
     </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <title>Prime Bazaar | Social Fashion Marketplace</title>
+    <title>Prime Bazaar - Social Commerce & Fashion Marketplace</title>
     <meta name="description" content="High-discovery multi-vendor fashion and social commerce marketplace inspired by Myntra and Meesho, featuring video reels shopping, AI visual search, seller studio, and super admin console." />
-    <meta property="og:title" content="Prime Bazaar | Social Fashion Marketplace" />
-    <meta property="og:description" content="High-discovery multi-vendor fashion and social commerce marketplace inspired by Myntra and Meesho." />
-    <meta property="og:type" content="website" />
-    <link rel="icon" type="image/png" sizes="192x192" href="/pwa-192x192.png" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <link rel="canonical" href="https://ais-pre-xopmewiinssufqcnfq6igl-117363860663.europe-west3.run.app/" />
+
+    <!-- Search Engine Favicons (Google Search 48x48px+ multiple standard & root .ico) -->
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="shortcut icon" href="/favicon.ico" />
+    <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png" />
+    <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96.png" />
+    <link rel="icon" type="image/png" sizes="144x144" href="/favicon-144x144.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192x192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" crossorigin="use-credentials" />
+
+    <!-- OpenGraph & Social Share Cards -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Prime Bazaar" />
+    <meta property="og:title" content="Prime Bazaar - Social Commerce & Fashion Marketplace" />
+    <meta property="og:description" content="High-discovery multi-vendor fashion and social commerce marketplace inspired by Myntra and Meesho, featuring video reels shopping, AI visual search, seller studio, and super admin console." />
+    <meta property="og:url" content="https://ais-pre-xopmewiinssufqcnfq6igl-117363860663.europe-west3.run.app/" />
+    <meta property="og:image" content="https://ais-pre-xopmewiinssufqcnfq6igl-117363860663.europe-west3.run.app/pwa-512x512.png" />
+    <meta property="og:image:secure_url" content="https://ais-pre-xopmewiinssufqcnfq6igl-117363860663.europe-west3.run.app/pwa-512x512.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="512" />
+    <meta property="og:image:height" content="512" />
+    <meta property="og:image:alt" content="Prime Bazaar Logo" />
+
+    <!-- Twitter / X Cards -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Prime Bazaar - Social Commerce & Fashion Marketplace" />
+    <meta name="twitter:description" content="High-discovery multi-vendor fashion and social commerce marketplace inspired by Myntra and Meesho, featuring video reels shopping, AI visual search, seller studio, and super admin console." />
+    <meta name="twitter:image" content="https://ais-pre-xopmewiinssufqcnfq6igl-117363860663.europe-west3.run.app/pwa-512x512.png" />
+
+    <!-- Google Search Organization Logo & Site Name Structured Data -->
+    <script id="pb-schema-ld" type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Organization",
+            "name": "Prime Bazaar",
+            "alternateName": "PrimeBazaar",
+            "url": "https://ais-pre-xopmewiinssufqcnfq6igl-117363860663.europe-west3.run.app/",
+            "logo": {
+              "@type": "ImageObject",
+              "url": "https://ais-pre-xopmewiinssufqcnfq6igl-117363860663.europe-west3.run.app/pwa-512x512.png",
+              "width": 512,
+              "height": 512
+            },
+            "image": "https://ais-pre-xopmewiinssufqcnfq6igl-117363860663.europe-west3.run.app/pwa-512x512.png"
+          },
+          {
+            "@type": "WebSite",
+            "name": "Prime Bazaar",
+            "alternateName": "PrimeBazaar",
+            "url": "https://ais-pre-xopmewiinssufqcnfq6igl-117363860663.europe-west3.run.app/"
+          }
+        ]
+      }
+    </script>
+    <script>
+      (function () {
+        try {
+          var origin = window.location.origin;
+          if (!origin || origin === 'null') return;
+          var canonical = document.querySelector('link[rel="canonical"]');
+          if (canonical) canonical.setAttribute('href', origin + window.location.pathname);
+          var ogUrl = document.querySelector('meta[property="og:url"]');
+          if (ogUrl) ogUrl.setAttribute('content', origin + window.location.pathname);
+          var logoUrl = origin + '/pwa-512x512.png';
+          ['meta[property="og:image"]', 'meta[property="og:image:secure_url"]', 'meta[name="twitter:image"]'].forEach(function (sel) {
+            var el = document.querySelector(sel);
+            if (el) el.setAttribute('content', logoUrl);
+          });
+          var ld = document.getElementById('pb-schema-ld');
+          if (ld && ld.textContent) {
+            var data = JSON.parse(ld.textContent);
+            if (Array.isArray(data['@graph'])) {
+              data['@graph'].forEach(function (node) {
+                node.url = origin + '/';
+                if (node.logo && typeof node.logo === 'object') node.logo.url = logoUrl;
+                if (node.image) node.image = logoUrl;
+              });
+              ld.textContent = JSON.stringify(data);
+            }
+          }
+        } catch (e) {}
+      })();
+    </script>
+
     <meta name="theme-color" content="#047857" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />

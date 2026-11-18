@@ -35,6 +35,7 @@ import { api } from '../services/api';
 
 export type SupportedLanguage = 'en' | 'hi' | 'mr' | 'ta';
 export type SupportedCurrency = 'INR' | 'USD' | 'EUR';
+export type CheckoutPaymentMethod = 'cashfree' | 'upi' | 'card' | 'netbanking' | 'cod';
 
 interface MarketplaceContextType {
   products: Product[];
@@ -45,6 +46,13 @@ interface MarketplaceContextType {
   bulkUploadProducts: (sellerId: string, products: Partial<Product>[]) => void;
   cart: CartItem[];
   addToCart: (product: Product, size: string, color: string, quantity?: number) => void;
+  buyProductNow: (
+    product: Product,
+    size: string,
+    color: string,
+    paymentMethod?: CheckoutPaymentMethod,
+    quantity?: number
+  ) => void;
   updateCartQuantity: (cartItemId: string, quantity: number) => void;
   removeFromCart: (cartItemId: string) => void;
   clearCart: () => void;
@@ -56,7 +64,7 @@ interface MarketplaceContextType {
   orders: Order[];
   placeOrder: (details: {
     address: Address;
-    paymentMethod: 'cod' | 'upi' | 'card' | 'netbanking' | 'cashfree';
+    paymentMethod: CheckoutPaymentMethod;
     couponCode?: string;
     coinsUsed: number;
   }) => Order;
@@ -124,6 +132,10 @@ interface MarketplaceContextType {
   setActiveReelIndex: (idx: number) => void;
   isCheckoutOpen: boolean;
   setIsCheckoutOpen: (open: boolean) => void;
+  preferredPaymentMethod: CheckoutPaymentMethod;
+  setPreferredPaymentMethod: (method: CheckoutPaymentMethod) => void;
+  skipAddressOnCheckoutOpen: boolean;
+  setSkipAddressOnCheckoutOpen: (skip: boolean) => void;
   isOrdersOpen: boolean;
   setIsOrdersOpen: (open: boolean) => void;
   isVisualSearchOpen: boolean;
@@ -582,6 +594,8 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const [isReelsOpen, setIsReelsOpen] = useState(false);
   const [activeReelIndex, setActiveReelIndex] = useState(0);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [preferredPaymentMethod, setPreferredPaymentMethod] = useState<CheckoutPaymentMethod>('cashfree');
+  const [skipAddressOnCheckoutOpen, setSkipAddressOnCheckoutOpen] = useState(false);
   const [isOrdersOpen, setIsOrdersOpen] = useState(false);
   const [isVisualSearchOpen, setIsVisualSearchOpen] = useState(false);
   const [isRewardsOpen, setIsRewardsOpen] = useState(false);
@@ -1004,6 +1018,36 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
       ];
     });
     notify(`Added ${product.title.slice(0, 24)}... to bag!`);
+  };
+
+  const buyProductNow = (
+    product: Product,
+    size: string,
+    color: string,
+    paymentMethod: CheckoutPaymentMethod = 'cashfree',
+    quantity: number = 1
+  ) => {
+    const cartItemId = `${product.id}-${size}-${color}`;
+    setCart(prev => {
+      const existing = prev.find(item => item.id === cartItemId);
+      if (existing) return prev;
+      return [
+        ...prev,
+        {
+          id: cartItemId,
+          productId: product.id,
+          selectedColor: color,
+          selectedSize: size,
+          quantity,
+          product
+        }
+      ];
+    });
+    setPreferredPaymentMethod(paymentMethod);
+    setSkipAddressOnCheckoutOpen(addresses.length > 0);
+    setSelectedProduct(null);
+    setIsCartOpen(false);
+    setIsCheckoutOpen(true);
   };
 
   const updateCartQuantity = (cartItemId: string, quantity: number) => {
@@ -1465,6 +1509,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
         bulkUploadProducts,
         cart,
         addToCart,
+        buyProductNow,
         updateCartQuantity,
         removeFromCart,
         clearCart,
@@ -1519,6 +1564,10 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
         setActiveReelIndex,
         isCheckoutOpen,
         setIsCheckoutOpen,
+        preferredPaymentMethod,
+        setPreferredPaymentMethod,
+        skipAddressOnCheckoutOpen,
+        setSkipAddressOnCheckoutOpen,
         isOrdersOpen,
         setIsOrdersOpen,
         isVisualSearchOpen,

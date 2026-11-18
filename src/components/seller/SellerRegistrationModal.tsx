@@ -18,7 +18,8 @@ import {
   Loader2,
   AlertCircle,
   Copy,
-  Check
+  Check,
+  User
 } from 'lucide-react';
 
 interface SellerRegistrationModalProps {
@@ -45,7 +46,7 @@ export const SellerRegistrationModal: React.FC<SellerRegistrationModalProps> = (
   const [copiedIp, setCopiedIp] = useState(false);
 
   // Step 2: Business Info
-  const [sellerName, setSellerName] = useState('Raghavendra Sharma');
+  const [sellerName, setSellerName] = useState('');
   const [storeName, setStoreName] = useState('Jaipur Craft Emporium');
   const [businessType, setBusinessType] = useState<'Proprietorship' | 'Partnership' | 'Private Limited' | 'Individual Artisan'>('Proprietorship');
   const [street, setStreet] = useState('B-14, Johari Bazaar, Pink City');
@@ -56,7 +57,7 @@ export const SellerRegistrationModal: React.FC<SellerRegistrationModalProps> = (
   // Step 3: Documents & Bank Account
   const [panNumber, setPanNumber] = useState('AAQCS1920R');
   const [gstNumber, setGstNumber] = useState('08AAQCS1920R1Z4');
-  const [accountHolderName, setAccountHolderName] = useState('Raghavendra Sharma');
+  const [accountHolderName, setAccountHolderName] = useState('');
   const [accountNumber, setAccountNumber] = useState('50100294819032');
   const [ifscCode, setIfscCode] = useState('HDFC0000184');
   const [bankName, setBankName] = useState('HDFC Bank');
@@ -79,8 +80,24 @@ export const SellerRegistrationModal: React.FC<SellerRegistrationModalProps> = (
     }
   };
 
+  const handleSellerNameChange = (value: string) => {
+    setSellerName(prev => {
+      if (!accountHolderName || accountHolderName === prev) {
+        setAccountHolderName(value);
+      }
+      return value;
+    });
+  };
+
   const handleSendOtp = async () => {
+    const cleanName = sellerName.trim();
     const cleanEmail = email.trim();
+    if (!cleanName) {
+      const msg = 'Please enter your Seller Full Name before requesting an OTP.';
+      setOtpError(msg);
+      notify(msg);
+      return;
+    }
     if (!cleanEmail || !cleanEmail.includes('@')) {
       const msg = 'Please enter a valid Business Email Address to receive your Brevo OTP.';
       setOtpError(msg);
@@ -97,7 +114,7 @@ export const SellerRegistrationModal: React.FC<SellerRegistrationModalProps> = (
     setIsOtpVerified(false);
 
     try {
-      const res = await api.auth.sendOtp(phone.trim() || undefined, cleanEmail, sellerName);
+      const res = await api.auth.sendOtp(phone.trim() || undefined, cleanEmail, cleanName);
       if (res.deliveryFailed || !res.success) {
         setOtpSent(false);
         setUnauthorizedIp(res.outboundIp || null);
@@ -266,6 +283,22 @@ export const SellerRegistrationModal: React.FC<SellerRegistrationModalProps> = (
               <div className="space-y-3 pt-2">
                 <div>
                   <label className="block font-semibold mb-1 text-zinc-800 dark:text-zinc-200">
+                    Seller Full Name (Shown on Verification Email & Account)
+                  </label>
+                  <div className="relative">
+                    <User className="w-4 h-4 text-zinc-400 absolute left-3 top-3 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={sellerName}
+                      onChange={e => handleSellerNameChange(e.target.value)}
+                      placeholder="Enter your full name"
+                      className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-semibold mb-1 text-zinc-800 dark:text-zinc-200">
                     Business Email Address (Brevo Verification OTP)
                   </label>
                   <div className="flex items-center gap-2">
@@ -410,7 +443,8 @@ export const SellerRegistrationModal: React.FC<SellerRegistrationModalProps> = (
                   <input
                     type="text"
                     value={sellerName}
-                    onChange={e => setSellerName(e.target.value)}
+                    onChange={e => handleSellerNameChange(e.target.value)}
+                    placeholder="Enter your full name"
                     className="w-full p-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800"
                   />
                 </div>

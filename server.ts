@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
@@ -97,6 +98,12 @@ async function sendBrevoEmailOtp(
     };
   }
 
+  const safeRecipientName = (recipientName || 'Partner')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+
   const htmlContent = `
     <!DOCTYPE html>
     <html lang="en">
@@ -127,7 +134,7 @@ async function sendBrevoEmailOtp(
         </div>
         <div class="body">
           <div class="badge">SECURE VERIFICATION OTP</div>
-          <div class="greeting">Hello ${recipientName || 'Partner'},</div>
+          <div class="greeting">Hello ${safeRecipientName},</div>
           <div class="text">Use the one-time verification code below to verify your Prime Bazaar account:</div>
           <div class="otp-box">
             <div class="otp-code">${otpCode}</div>
@@ -159,11 +166,12 @@ async function sendBrevoEmailOtp(
         socketTimeout: timeoutMs,
       });
 
+      const headerName = (recipientName || '').replace(/["\r\n]/g, '').trim();
       const info = await transporter.sendMail({
         from: `"${fromName}" <${fromEmail}>`,
-        to: recipientName ? `"${recipientName}" <${toEmail}>` : toEmail,
+        to: headerName ? `"${headerName}" <${toEmail}>` : toEmail,
         subject: `Prime Bazaar - Your Verification Code: ${otpCode}`,
-        text: `Hello ${recipientName || 'Partner'}, your Prime Bazaar verification OTP is ${otpCode}. It is valid for 5 minutes.`,
+        text: `Hello ${headerName || 'Partner'}, your Prime Bazaar verification OTP is ${otpCode}. It is valid for 5 minutes.`,
         html: htmlContent,
       });
 
@@ -230,6 +238,26 @@ async function sendBrevoEmailOtp(
 // CASHFREE PAYMENT GATEWAY SANDBOX SERVICE
 // ==========================================
 
+function getCashfreeConfig() {
+  const rawEnv = (process.env.CASHFREE_ENV || 'sandbox').trim().toLowerCase();
+  const env: 'sandbox' | 'production' =
+    rawEnv === 'production' || rawEnv === 'prod' || rawEnv === 'live' ? 'production' : 'sandbox';
+  const clientId = (process.env.CASHFREE_CLIENT_ID || '').trim();
+  const clientSecret = (process.env.CASHFREE_CLIENT_SECRET || '').trim();
+  const apiVersion = (process.env.CASHFREE_API_VERSION || '2025-01-01').trim();
+  const webhookSecret = (process.env.CASHFREE_WEBHOOK_SECRET || '').trim();
+  const baseUrl = env === 'production' ? 'https://api.cashfree.com/pg' : 'https://sandbox.cashfree.com/pg';
+  return {
+    env,
+    clientId,
+    clientSecret,
+    apiVersion,
+    webhookSecret,
+    baseUrl,
+    configured: Boolean(clientId && clientSecret),
+  };
+}
+
 interface CreateCashfreeOrderParams {
   orderId: string;
   amount: number;
@@ -241,31 +269,38 @@ interface CreateCashfreeOrderParams {
 }
 
 async function createCashfreeOrder(params: CreateCashfreeOrderParams) {
-  const env = process.env.CASHFREE_ENV || 'sandbox';
-  const clientId = process.env.CASHFREE_CLIENT_ID || '';
-  const clientSecret = process.env.CASHFREE_CLIENT_SECRET || '';
-  const apiVersion = process.env.CASHFREE_API_VERSION || '2025-01-01';
-  const baseUrl = env === 'production' ? 'https://api.cashfree.com/pg' : 'https://sandbox.cashfree.com/pg';
+  const { env, clientId, clientSecret, apiVersion, baseUrl } = getCashfreeConfig();
 
   if (!clientId || !clientSecret) {
-    throw new Error('Cashfree credentials missing in environment');
+    throw new Error('Cashfree credentials (CASHFREE_CLIENT_ID / CASHFREE_CLIENT_SECRET) missing in environment secrets.');
   }
 
   const rawPhone = (params.customerPhone || '9876543210').replace(/\D/g, '');
   const formattedPhone = rawPhone.length >= 10 ? rawPhone.slice(-10) : '9876543210';
+  const cleanName = (params.customerName || 'Prime Bazaar Shopper').trim() || 'Prime Bazaar Shopper';
+  const cleanEmail =
+    params.customerEmail && params.customerEmail.includes('@')
+      ? params.customerEmail.trim()
+      : 'shopper@primebazaar.in';
+
+  const fallbackOrigin = (process.env.APP_URL || 'http://localhost:3000').trim().replace(/\/+$/, '');
+  const safeReturnUrl =
+    params.returnUrl && /^https?:\/\//i.test(params.returnUrl.trim())
+      ? params.returnUrl.trim().replace(/\{order_id\}/g, params.orderId)
+      : `${fallbackOrigin}/?cashfree_order_id=${params.orderId}`;
 
   const orderPayload = {
     order_id: params.orderId,
-    order_amount: Number(params.amount.toFixed(2)),
+    order_amount: Math.max(1, Number(params.amount.toFixed(2))),
     order_currency: params.currency || 'INR',
     customer_details: {
-      customer_id: `cust_${params.orderId.substring(0, 16)}`,
-      customer_name: params.customerName || 'Prime Bazaar Shopper',
-      customer_email: params.customerEmail || 'shopper@primebazaar.in',
+      customer_id: `cust_${params.orderId.replace(/[^a-zA-Z0-9_-]/g, '').substring(0, 24)}`,
+      customer_name: cleanName,
+      customer_email: cleanEmail,
       customer_phone: formattedPhone,
     },
     order_meta: {
-      return_url: params.returnUrl || `${process.env.APP_URL || 'http://localhost:3000'}/?order_id=${params.orderId}`,
+      return_url: safeReturnUrl,
     },
     order_note: `Prime Bazaar Retail Order ${params.orderId}`,
   };
@@ -284,24 +319,20 @@ async function createCashfreeOrder(params: CreateCashfreeOrderParams) {
 
   const data = await response.json();
   if (!response.ok) {
-    throw new Error(data.message || `Cashfree Error ${response.status}`);
+    throw new Error(data.message || `Cashfree Error ${response.status} (${env})`);
   }
 
   return data;
 }
 
 async function getCashfreeOrderStatus(orderId: string) {
-  const env = process.env.CASHFREE_ENV || 'sandbox';
-  const clientId = process.env.CASHFREE_CLIENT_ID || '';
-  const clientSecret = process.env.CASHFREE_CLIENT_SECRET || '';
-  const apiVersion = process.env.CASHFREE_API_VERSION || '2025-01-01';
-  const baseUrl = env === 'production' ? 'https://api.cashfree.com/pg' : 'https://sandbox.cashfree.com/pg';
+  const { clientId, clientSecret, apiVersion, baseUrl } = getCashfreeConfig();
 
   if (!clientId || !clientSecret) {
-    throw new Error('Cashfree credentials missing in environment');
+    throw new Error('Cashfree credentials missing in environment secrets.');
   }
 
-  const response = await fetch(`${baseUrl}/orders/${orderId}`, {
+  const response = await fetch(`${baseUrl}/orders/${encodeURIComponent(orderId)}`, {
     method: 'GET',
     headers: {
       'x-client-id': clientId,
@@ -311,7 +342,11 @@ async function getCashfreeOrderStatus(orderId: string) {
     },
   });
 
-  return await response.json();
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || `Cashfree Status Error ${response.status}`);
+  }
+  return data;
 }
 
 // ==========================================
@@ -525,6 +560,8 @@ app.get('/api/health', (req, res) => {
   );
   const hasApiKey = Boolean((process.env.EMAIL_PROVIDER_API_KEY || process.env.BREVO_API_KEY || '').trim());
 
+  const cf = getCashfreeConfig();
+
   res.json({
     status: 'ONLINE',
     service: 'Prime Bazaar Core Marketplace Engine',
@@ -538,6 +575,9 @@ app.get('/api/health', (req, res) => {
       process.env.BREVO_SENDER_EMAIL ||
       process.env.SMTP_FROM_EMAIL ||
       null,
+    cashfreeConfigured: cf.configured,
+    cashfreeEnv: cf.env,
+    cashfreeApiVersion: cf.apiVersion,
     uptimeSeconds: Math.floor(process.uptime()),
     timestamp: new Date().toISOString(),
   });
@@ -562,9 +602,19 @@ app.post('/api/auth/send-otp', async (req, res) => {
 
   const expiresAt = Date.now() + 5 * 60 * 1000;
 
+  let resolvedRecipientName = typeof recipientName === 'string' ? recipientName.trim() : '';
+  if (!resolvedRecipientName && cleanEmail) {
+    for (const u of users.values()) {
+      if (u.email?.toLowerCase() === cleanEmail.toLowerCase()) {
+        resolvedRecipientName = u.name;
+        break;
+      }
+    }
+  }
+
   let brevoResult: BrevoEmailResult | null = null;
   if (isEmail) {
-    brevoResult = await sendBrevoEmailOtp(cleanEmail, code, recipientName);
+    brevoResult = await sendBrevoEmailOtp(cleanEmail, code, resolvedRecipientName || undefined);
     if (!brevoResult.success) {
       const ipText = brevoResult.outboundIp ? ` (${brevoResult.outboundIp})` : '';
       const message = brevoResult.isUnauthorizedIp
@@ -791,13 +841,25 @@ app.post('/api/auth/logout', (req, res) => {
 
 // 3. Payment Processing & Gateway Intent APIs
 app.post('/api/payments/create-intent', async (req, res) => {
-  const { amount, currency = 'INR', customerName, customerPhone, customerEmail } = req.body;
-  const numAmount = Number(amount) || 999;
+  const { amount, currency = 'INR', customerName, customerPhone, customerEmail, returnUrl } = req.body;
+  const numAmount = Math.max(1, Number(amount) || 999);
   const intentId = generateId('pi');
   const merchantUpi = 'primebazaar@icici';
   const gatewayReference = `PB_GW_${crypto.randomBytes(6).toString('hex').toUpperCase()}`;
+  const cf = getCashfreeConfig();
 
-  // Cashfree Sandbox Order Creation
+  const requestOrigin =
+    typeof req.headers.origin === 'string' && /^https?:\/\//i.test(req.headers.origin)
+      ? req.headers.origin.replace(/\/+$/, '')
+      : '';
+  const resolvedReturnUrl =
+    typeof returnUrl === 'string' && /^https?:\/\//i.test(returnUrl)
+      ? returnUrl
+      : requestOrigin
+        ? `${requestOrigin}/?cashfree_order_id={order_id}`
+        : undefined;
+
+  // Cashfree Order Creation
   let cashfreeData: any = null;
   let cashfreeError: string | null = null;
   const cfOrderId = `pb_cf_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
@@ -810,6 +872,7 @@ app.post('/api/payments/create-intent', async (req, res) => {
       customerName,
       customerPhone,
       customerEmail,
+      returnUrl: resolvedReturnUrl,
     });
   } catch (err: any) {
     cashfreeError = err.message;
@@ -830,7 +893,7 @@ app.post('/api/payments/create-intent', async (req, res) => {
     cashfreeOrderId: cfOrderId,
     cashfreeCfOrderId: cashfreeData?.cf_order_id,
     paymentSessionId: cashfreeData?.payment_session_id,
-    cashfreeEnv: process.env.CASHFREE_ENV || 'sandbox',
+    cashfreeEnv: cf.env,
     createdAt: new Date().toISOString(),
   };
 
@@ -845,10 +908,12 @@ app.post('/api/payments/create-intent', async (req, res) => {
     upiIntentUrl,
     gatewayReference,
     cashfree: {
+      configured: cf.configured,
       orderId: cfOrderId,
-      cfOrderId: cashfreeData?.cf_order_id,
-      paymentSessionId: cashfreeData?.payment_session_id,
-      environment: process.env.CASHFREE_ENV || 'sandbox',
+      cfOrderId: cashfreeData?.cf_order_id || null,
+      paymentSessionId: cashfreeData?.payment_session_id || null,
+      environment: cf.env,
+      apiVersion: cf.apiVersion,
       error: cashfreeError,
     },
     expirySeconds: 600,
@@ -856,30 +921,66 @@ app.post('/api/payments/create-intent', async (req, res) => {
 });
 
 app.post('/api/payments/verify', async (req, res) => {
-  const { 
-    intentId, 
-    paymentMethod, 
-    upiRefNumber, 
-    cardNumber, 
-    cardOtp, 
-    amount 
+  const {
+    intentId,
+    cashfreeOrderId,
+    paymentMethod,
+    upiRefNumber,
+    amount,
   } = req.body;
 
-  const transactionId = `PB-TXN-${(paymentMethod || 'PAY').toUpperCase()}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
-  const invoiceNumber = `PB-INV-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`;
-
+  const cf = getCashfreeConfig();
+  const intent = intentId && paymentIntents.has(intentId) ? paymentIntents.get(intentId)! : null;
   let cashfreeOrderState: any = null;
-  if (intentId && paymentIntents.has(intentId)) {
-    const intent = paymentIntents.get(intentId)!;
-    intent.status = 'SUCCESS';
-    if (intent.cashfreeOrderId) {
-      try {
-        cashfreeOrderState = await getCashfreeOrderStatus(intent.cashfreeOrderId);
-      } catch (err: any) {
-        console.warn('[Cashfree Status Sync]:', err.message);
-      }
+
+  if (paymentMethod === 'cashfree') {
+    const resolvedCfOrderId = intent?.cashfreeOrderId || (typeof cashfreeOrderId === 'string' ? cashfreeOrderId.trim() : '');
+    if (!resolvedCfOrderId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Cashfree order reference is missing. Please initialize Cashfree checkout again.',
+      });
+    }
+
+    try {
+      cashfreeOrderState = await getCashfreeOrderStatus(resolvedCfOrderId);
+    } catch (err: any) {
+      return res.status(400).json({
+        success: false,
+        error: `Unable to verify Cashfree order (${resolvedCfOrderId}): ${err.message}`,
+      });
+    }
+
+    if (cashfreeOrderState?.order_status !== 'PAID') {
+      return res.status(400).json({
+        success: false,
+        paymentStatus: cashfreeOrderState?.order_status || 'ACTIVE',
+        error: `Cashfree payment not completed yet (Order status: ${cashfreeOrderState?.order_status || 'ACTIVE'}). Please finish payment in Cashfree Checkout.`,
+        cashfree: {
+          orderId: cashfreeOrderState?.order_id,
+          cfOrderId: cashfreeOrderState?.cf_order_id,
+          orderStatus: cashfreeOrderState?.order_status,
+          amount: cashfreeOrderState?.order_amount,
+        },
+      });
+    }
+  } else if (intent?.cashfreeOrderId) {
+    try {
+      cashfreeOrderState = await getCashfreeOrderStatus(intent.cashfreeOrderId);
+    } catch (err: any) {
+      console.warn('[Cashfree Status Sync]:', err.message);
     }
   }
+
+  if (intent) {
+    intent.status = 'SUCCESS';
+  }
+
+  const transactionId =
+    paymentMethod === 'cashfree' && cashfreeOrderState?.cf_order_id
+      ? `CF-${cashfreeOrderState.cf_order_id}`
+      : `PB-TXN-${(paymentMethod || 'PAY').toUpperCase()}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
+  const invoiceNumber = `PB-INV-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`;
 
   res.json({
     success: true,
@@ -888,19 +989,21 @@ app.post('/api/payments/verify', async (req, res) => {
     invoiceNumber,
     timestamp: new Date().toISOString(),
     paymentMethod,
-    amountVerified: amount,
-    cashfree: cashfreeOrderState ? {
-      orderId: cashfreeOrderState.order_id,
-      cfOrderId: cashfreeOrderState.cf_order_id,
-      orderStatus: cashfreeOrderState.order_status,
-      amount: cashfreeOrderState.order_amount,
-    } : undefined,
+    amountVerified: cashfreeOrderState?.order_amount || amount,
+    cashfree: cashfreeOrderState
+      ? {
+          orderId: cashfreeOrderState.order_id,
+          cfOrderId: cashfreeOrderState.cf_order_id,
+          orderStatus: cashfreeOrderState.order_status,
+          amount: cashfreeOrderState.order_amount,
+        }
+      : undefined,
     gatewayReceipt: {
-      gateway: paymentMethod === 'cashfree' ? 'Cashfree Payments Sandbox' : 'NPCI UPI & Payment Gateway',
+      gateway: paymentMethod === 'cashfree' ? `Cashfree Payments (${cf.env})` : 'NPCI UPI & Payment Gateway',
       authCode: 'AUTH_' + Math.floor(100000 + Math.random() * 900000),
       rrn: upiRefNumber || Math.floor(100000000000 + Math.random() * 900000000000).toString(),
       settlementStatus: 'SUCCESS_AUTHORIZED',
-    }
+    },
   });
 });
 
@@ -908,22 +1011,26 @@ app.post('/api/payments/verify', async (req, res) => {
 app.get('/api/payments/cashfree-order/:orderId', async (req, res) => {
   try {
     const statusData = await getCashfreeOrderStatus(req.params.orderId);
-    res.json({ success: true, data: statusData });
+    res.json({
+      success: true,
+      isPaid: statusData?.order_status === 'PAID',
+      data: statusData,
+    });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(400).json({ success: false, error: err.message });
   }
 });
 
 app.post('/api/payments/cashfree-webhook', (req, res) => {
-  const webhookSecret = process.env.CASHFREE_WEBHOOK_SECRET || '';
+  const { webhookSecret } = getCashfreeConfig();
   const signature = req.headers['x-webhook-signature'];
   const timestamp = req.headers['x-webhook-timestamp'];
-  console.log('[Cashfree Webhook Received]:', { signature, timestamp, body: req.body });
-  res.json({ 
-    status: 'OK', 
-    verified: true, 
+  console.log('[Cashfree Webhook Received]:', { signature, timestamp, orderId: req.body?.data?.order?.order_id });
+  res.json({
+    status: 'OK',
+    verified: true,
     webhookSecretConfigured: !!webhookSecret,
-    receivedAt: new Date().toISOString() 
+    receivedAt: new Date().toISOString(),
   });
 });
 
@@ -1333,6 +1440,71 @@ app.get('/manifest.webmanifest', (_req, res) => {
   res.sendFile(path.resolve(__dirname, manifestDir, 'manifest.webmanifest'));
 });
 
+function getRequestOrigin(req: express.Request): string {
+  const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
+  const forwardedHost = String(req.headers['x-forwarded-host'] || '').split(',')[0].trim();
+  const host = forwardedHost || req.get('host') || '';
+  if (host) {
+    const proto = forwardedProto || (host.includes('localhost') || host.startsWith('127.') ? 'http' : 'https');
+    return `${proto}://${host}`;
+  }
+  return (process.env.APP_URL || 'https://ais-pre-xopmewiinssufqcnfq6igl-117363860663.europe-west3.run.app').replace(/\/+$/, '');
+}
+
+app.get('/favicon.ico', (_req, res) => {
+  const assetDir = process.env.NODE_ENV === 'production' ? 'dist' : 'public';
+  const icoPath = path.resolve(__dirname, assetDir, 'favicon.ico');
+  if (fs.existsSync(icoPath)) {
+    res.setHeader('Content-Type', 'image/x-icon');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    return res.sendFile(icoPath);
+  }
+  return res.status(404).end();
+});
+
+app.get('/robots.txt', (req, res) => {
+  const origin = getRequestOrigin(req);
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.send(
+    [
+      'User-agent: *',
+      'Allow: /',
+      'Allow: /favicon.ico',
+      'Allow: /*.png$',
+      '',
+      'User-agent: Googlebot',
+      'Allow: /',
+      '',
+      'User-agent: Googlebot-Image',
+      'Allow: /',
+      '',
+      `Sitemap: ${origin}/sitemap.xml`,
+    ].join('\n')
+  );
+});
+
+app.get('/sitemap.xml', (req, res) => {
+  const origin = getRequestOrigin(req);
+  const today = new Date().toISOString().split('T')[0];
+  res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+  <url>
+    <loc>${origin}/</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+    <image:image>
+      <image:loc>${origin}/pwa-512x512.png</image:loc>
+      <image:title>Prime Bazaar Logo</image:title>
+    </image:image>
+  </url>
+</urlset>`);
+});
+
 // ==========================================
 // VITE DEV SERVER MIDDLEWARE & FRONTEND SERVE
 // ==========================================
@@ -1348,9 +1520,19 @@ async function startServer() {
   } else {
     // Production static serving
     const distPath = path.resolve(__dirname, 'dist');
-    app.use(express.static(distPath));
+    app.use(express.static(distPath, { index: false }));
     app.get('*', (req, res) => {
-      res.sendFile(path.resolve(distPath, 'index.html'));
+      const indexPath = path.resolve(distPath, 'index.html');
+      try {
+        const origin = getRequestOrigin(req);
+        const html = fs
+          .readFileSync(indexPath, 'utf-8')
+          .replace(/https:\/\/ais-pre-xopmewiinssufqcnfq6igl-117363860663\.europe-west3\.run\.app/g, origin);
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        return res.send(html);
+      } catch {
+        return res.sendFile(indexPath);
+      }
     });
   }
 

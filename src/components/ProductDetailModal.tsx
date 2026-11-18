@@ -22,7 +22,13 @@ import {
   RotateCw,
   Flag,
   Plus,
-  Layers
+  Layers,
+  CreditCard,
+  QrCode,
+  Building2,
+  Banknote,
+  Zap,
+  Lock
 } from 'lucide-react';
 
 export const ProductDetailModal: React.FC = () => {
@@ -30,6 +36,7 @@ export const ProductDetailModal: React.FC = () => {
     selectedProduct, 
     setSelectedProduct, 
     addToCart, 
+    buyProductNow,
     toggleWishlist, 
     isWishlisted, 
     earnCoins,
@@ -47,6 +54,7 @@ export const ProductDetailModal: React.FC = () => {
   const [activeImageIdx, setActiveImageIdx] = useState(0);
   const [selectedColor, setSelectedColor] = useState<string>('');
   const [selectedSize, setSelectedSize] = useState<string>('');
+  const [selectedPayMode, setSelectedPayMode] = useState<'cashfree' | 'upi' | 'card' | 'netbanking' | 'cod'>('cashfree');
   const [pincode, setPincode] = useState('');
   const [pincodeChecked, setPincodeChecked] = useState(false);
   const [shared, setShared] = useState(false);
@@ -59,6 +67,8 @@ export const ProductDetailModal: React.FC = () => {
   const wishlisted = isWishlisted(product.id);
   const compared = isCompared(product.id);
   const priceDropAlert = hasPriceAlert(product.id);
+  const isCodAvailable = product.codAvailable !== false;
+  const effectivePayMode = !isCodAvailable && selectedPayMode === 'cod' ? 'cashfree' : selectedPayMode;
 
   const currentColor = selectedColor || product.colors[0]?.name || '';
   const currentSizeObj = product.sizes.find(s => s.size === selectedSize) || product.sizes.find(s => s.available);
@@ -70,6 +80,14 @@ export const ProductDetailModal: React.FC = () => {
       return;
     }
     addToCart(product, currentSize, currentColor, 1);
+  };
+
+  const handleBuyNow = (overrideMode?: 'cashfree' | 'upi' | 'card' | 'netbanking' | 'cod') => {
+    if (!currentSize) {
+      notify('Please choose a size first.');
+      return;
+    }
+    buyProductNow(product, currentSize, currentColor, overrideMode || effectivePayMode, 1);
   };
 
   const handleShareProduct = () => {
@@ -461,16 +479,131 @@ export const ProductDetailModal: React.FC = () => {
               </div>
             </div>
 
-            {/* CTAs */}
-            <div className="mt-8 pt-4 border-t border-zinc-200 dark:border-zinc-800 space-y-3">
-              <div className="flex items-center gap-2">
+            {/* Payment Gateway & Cash on Delivery Options */}
+            <div className="mt-6 p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-800 space-y-2.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-zinc-900 dark:text-white flex items-center gap-1.5">
+                  <Lock className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Payment Gateway & Delivery Options</span>
+                </span>
+                <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/20">
+                  100% Secure
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {/* Online Payment Gateway Card */}
                 <button
+                  type="button"
+                  onClick={() => setSelectedPayMode(effectivePayMode === 'cod' ? 'cashfree' : effectivePayMode)}
+                  className={`p-3 rounded-xl border text-left transition-all flex items-start gap-2.5 ${
+                    effectivePayMode !== 'cod'
+                      ? 'border-emerald-600 bg-emerald-50/70 dark:bg-emerald-950/30 ring-1 ring-emerald-600'
+                      : 'border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 hover:border-zinc-300'
+                  }`}
+                >
+                  <div className="w-7 h-7 rounded-lg bg-amber-500 text-white flex items-center justify-center font-black text-[10px] shrink-0 mt-0.5">
+                    CF
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-xs font-bold text-zinc-900 dark:text-white block">
+                      Online Payment Gateway
+                    </span>
+                    <span className="text-[10px] text-zinc-500 dark:text-zinc-400 block">
+                      Cashfree · UPI · Cards · NetBanking
+                    </span>
+                  </div>
+                </button>
+
+                {/* Cash on Delivery Card */}
+                <button
+                  type="button"
+                  disabled={!isCodAvailable}
+                  onClick={() => setSelectedPayMode('cod')}
+                  className={`p-3 rounded-xl border text-left transition-all flex items-start gap-2.5 ${
+                    !isCodAvailable
+                      ? 'opacity-50 cursor-not-allowed border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900'
+                      : effectivePayMode === 'cod'
+                        ? 'border-emerald-600 bg-emerald-50/70 dark:bg-emerald-950/30 ring-1 ring-emerald-600'
+                        : 'border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 hover:border-zinc-300'
+                  }`}
+                >
+                  <div className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0 mt-0.5">
+                    <Banknote className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-xs font-bold text-zinc-900 dark:text-white block">
+                      Cash on Delivery (COD)
+                    </span>
+                    <span className="text-[10px] text-zinc-500 dark:text-zinc-400 block">
+                      {isCodAvailable ? 'Pay Cash or UPI at Doorstep' : 'Prepaid Only for this item'}
+                    </span>
+                  </div>
+                </button>
+              </div>
+
+              {/* Sub-mode pills when Online Payment Gateway is selected */}
+              {effectivePayMode !== 'cod' && (
+                <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                  {[
+                    { id: 'cashfree' as const, label: 'Cashfree Checkout', icon: ShieldCheck },
+                    { id: 'upi' as const, label: 'UPI / QR', icon: QrCode },
+                    { id: 'card' as const, label: 'Card', icon: CreditCard },
+                    { id: 'netbanking' as const, label: 'NetBanking', icon: Building2 },
+                  ].map(opt => {
+                    const Icon = opt.icon;
+                    const active = effectivePayMode === opt.id;
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => setSelectedPayMode(opt.id)}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold flex items-center gap-1 border transition-all ${
+                          active
+                            ? 'bg-zinc-900 text-white border-zinc-900 dark:bg-white dark:text-zinc-900 dark:border-white'
+                            : 'bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700 hover:border-zinc-400'
+                        }`}
+                      >
+                        <Icon className="w-3 h-3" />
+                        <span>{opt.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* CTAs */}
+            <div className="mt-6 pt-4 border-t border-zinc-200 dark:border-zinc-800 space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => handleBuyNow()}
+                  className="py-3.5 px-5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/25 transition-all active:scale-[0.98]"
+                >
+                  {effectivePayMode === 'cod' ? <Banknote className="w-4 h-4" /> : <Zap className="w-4 h-4" />}
+                  <span>
+                    {effectivePayMode === 'cod'
+                      ? 'Buy Now (Cash on Delivery)'
+                      : effectivePayMode === 'upi'
+                        ? 'Pay Now via UPI'
+                        : effectivePayMode === 'card'
+                          ? 'Pay Now via Card'
+                          : effectivePayMode === 'netbanking'
+                            ? 'Pay Now via NetBanking'
+                            : 'Pay via Cashfree Gateway'}
+                  </span>
+                </button>
+                <button
+                  type="button"
                   onClick={handleAddToCart}
-                  className="flex-1 py-3.5 px-6 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-semibold text-sm flex items-center justify-center gap-2 shadow-lg shadow-rose-600/25 transition-all active:scale-[0.98]"
+                  className="py-3.5 px-5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-semibold text-sm flex items-center justify-center gap-2 shadow-lg shadow-rose-600/20 transition-all active:scale-[0.98]"
                 >
                   <ShoppingBag className="w-4 h-4" />
                   <span>Add To Bag</span>
                 </button>
+              </div>
+              <div className="flex items-center gap-2">
                 <button
                   onClick={() => openTryOn(product)}
                   className="p-3.5 rounded-xl border border-indigo-300 text-indigo-600 dark:border-indigo-800 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition-colors"
@@ -636,6 +769,14 @@ export const ProductDetailModal: React.FC = () => {
               </span>
             </div>
             <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => handleBuyNow()}
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 transition-all active:scale-95"
+              >
+                {effectivePayMode === 'cod' ? <Banknote className="w-3.5 h-3.5" /> : <Zap className="w-3.5 h-3.5" />}
+                <span>{effectivePayMode === 'cod' ? 'Order COD' : 'Buy Now'}</span>
+              </button>
               <button
                 type="button"
                 onClick={handleAddToCart}

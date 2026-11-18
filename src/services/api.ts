@@ -111,12 +111,17 @@ export const api = {
 
   // Payments & Checkout
   payments: {
+    getHealth: async () => {
+      return apiRequest('/api/health');
+    },
+
     createIntent: async (params: { 
       amount: number; 
       currency?: string; 
       customerName?: string; 
       customerPhone?: string;
       customerEmail?: string;
+      returnUrl?: string;
     }) => {
       return apiRequest('/api/payments/create-intent', {
         method: 'POST',
@@ -126,6 +131,7 @@ export const api = {
 
     verify: async (params: {
       intentId?: string;
+      cashfreeOrderId?: string;
       paymentMethod: string;
       upiRefNumber?: string;
       cardNumber?: string;
@@ -139,7 +145,7 @@ export const api = {
     },
 
     getCashfreeOrderStatus: async (orderId: string) => {
-      return apiRequest(`/api/payments/cashfree-order/${orderId}`);
+      return apiRequest(`/api/payments/cashfree-order/${encodeURIComponent(orderId)}`);
     },
   },
 

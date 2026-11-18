@@ -81,7 +81,14 @@ export const MerchantPartnerModal: React.FC = () => {
     setOtpCode('');
 
     try {
-      const res = await api.auth.sendOtp(isEmail ? undefined : target, isEmail ? target : undefined);
+      const matchedSeller = sellers.find(
+        s => s.phone?.includes(target) || s.email?.toLowerCase() === target.toLowerCase()
+      );
+      const res = await api.auth.sendOtp(
+        isEmail ? undefined : target,
+        isEmail ? target : undefined,
+        matchedSeller?.name || matchedSeller?.businessName
+      );
       if (res.deliveryFailed || !res.success) {
         setOtpSent(false);
         setOtpError(res.message || res.deliveryNotice || 'Brevo SMTP delivery failed.');

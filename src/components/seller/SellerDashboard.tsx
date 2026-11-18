@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useMarketplace } from '../../context/MarketplaceContext';
+import { api } from '../../services/api';
 import { Product, Order, SellerReturnRequest, SellerCoupon, SellerSupportTicket } from '../../types';
 import { 
   Store, 
@@ -209,9 +210,28 @@ export const SellerDashboard: React.FC = () => {
     currentSeller.bankAccount?.bankName || 'HDFC Bank'
   );
   const [isVerifyingBeneficiary, setIsVerifyingBeneficiary] = useState(false);
+  const [cashfreeServerStatus, setCashfreeServerStatus] = useState<{
+    configured: boolean;
+    env: string;
+    apiVersion: string;
+  } | null>(null);
   const [isProcessingInstantCashfree, setIsProcessingInstantCashfree] = useState(false);
   const [testPayoutAmount, setTestPayoutAmount] = useState<number>(2000);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (activeTab !== 'cashfree') return;
+    api.payments
+      .getHealth()
+      .then((h) => {
+        setCashfreeServerStatus({
+          configured: Boolean(h?.cashfreeConfigured),
+          env: h?.cashfreeEnv || 'sandbox',
+          apiVersion: h?.cashfreeApiVersion || '2025-01-01',
+        });
+      })
+      .catch(() => {});
+  }, [activeTab]);
 
   // Sync when currentSeller changes
   React.useEffect(() => {
@@ -254,12 +274,36 @@ export const SellerDashboard: React.FC = () => {
     notify(`Cashfree Beneficiary ID "${cashfreeBeneficiaryId.toUpperCase()}" successfully linked & verified!`);
   };
 
-  const handleVerifyCashfreeSandbox = () => {
+  const handleVerifyCashfreeSandbox = async () => {
     setIsVerifyingBeneficiary(true);
-    setTimeout(() => {
+    try {
+      const health = await api.payments.getHealth();
+      const configured = Boolean(health?.cashfreeConfigured);
+      const env = health?.cashfreeEnv || 'sandbox';
+      const apiVersion = health?.cashfreeApiVersion || '2025-01-01';
+      setCashfreeServerStatus({ configured, env, apiVersion });
+
+      if (!configured) {
+        notify('Cashfree API credentials (CASHFREE_CLIENT_ID / CASHFREE_CLIENT_SECRET) are missing in server secrets.');
+        return;
+      }
+
+      const intentTest = await api.payments.createIntent({
+        amount: 100,
+        currency: 'INR',
+        customerName: currentSeller.businessName,
+      });
+
+      if (intentTest?.cashfree?.paymentSessionId) {
+        notify(`Cashfree ${env.toUpperCase()} Connected! Verified order ${intentTest.cashfree.cfOrderId || intentTest.cashfree.orderId}.`);
+      } else {
+        notify(`Cashfree API Error: ${intentTest?.cashfree?.error || 'Unable to initialize Cashfree order.'}`);
+      }
+    } catch (err: any) {
+      notify(err?.message || 'Unable to reach Cashfree verification backend.');
+    } finally {
       setIsVerifyingBeneficiary(false);
-      notify(`Cashfree Sandbox Payouts API: Beneficiary "${cashfreeBeneficiaryId}" verified with NPCI / Bank!`);
-    }, 1200);
+    }
   };
 
   const handleTriggerInstantCashfreePayout = () => {
@@ -1406,11 +1450,15 @@ export const SellerDashboard: React.FC = () => {
                 <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800 space-y-2">
                   <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500 flex items-center gap-1.5">
                     <Key className="w-4 h-4 text-amber-500" />
-                    Marketplace Client ID
+                    Marketplace Gateway Secrets
                   </span>
                   <div className="flex items-center justify-between">
                     <span className="font-mono text-xs text-zinc-700 dark:text-zinc-300 truncate max-w-[200px]">
-                      Configured on Server (.env)
+                      {cashfreeServerStatus
+                        ? cashfreeServerStatus.configured
+                          ? 'Configured in Server Secrets'
+                          : 'Missing Server Secrets'
+                        : 'Checking Server Secrets...'}
                     </span>
                     <button
                       onClick={() => copyToClipboard(cashfreeBeneficiaryId, 'Beneficiary ID')}
@@ -1425,7 +1473,7 @@ export const SellerDashboard: React.FC = () => {
                     </button>
                   </div>
                   <span className="text-[10px] text-zinc-400 font-mono">
-                    Environment: Sandbox (v2025-01-01)
+                    Environment: {(cashfreeServerStatus?.env || 'sandbox').toUpperCase()} (v{cashfreeServerStatus?.apiVersion || '2025-01-01'})
                   </span>
                 </div>
 

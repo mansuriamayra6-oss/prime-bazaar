@@ -20,8 +20,48 @@ import {
   Printer,
   Smartphone,
   Lock,
-  ArrowRight
+  ArrowRight,
+  AlertCircle,
+  RefreshCw
 } from 'lucide-react';
+
+const PENDING_CF_STORAGE_KEY = 'pb_pending_cashfree_checkout';
+
+function loadCashfreeSdk(): Promise<any> {
+  return new Promise((resolve, reject) => {
+    if (typeof (window as any).Cashfree === 'function') {
+      resolve((window as any).Cashfree);
+      return;
+    }
+    const existing = document.querySelector('script[src*="sdk.cashfree.com/js/v3/cashfree.js"]') as HTMLScriptElement | null;
+    if (existing) {
+      const checkTimer = setInterval(() => {
+        if (typeof (window as any).Cashfree === 'function') {
+          clearInterval(checkTimer);
+          clearTimeout(timeoutTimer);
+          resolve((window as any).Cashfree);
+        }
+      }, 100);
+      const timeoutTimer = setTimeout(() => {
+        clearInterval(checkTimer);
+        reject(new Error('Cashfree JS SDK timed out while loading. Please check network access to sdk.cashfree.com.'));
+      }, 8000);
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://sdk.cashfree.com/js/v3/cashfree.js';
+    script.async = true;
+    script.onload = () => {
+      if (typeof (window as any).Cashfree === 'function') {
+        resolve((window as any).Cashfree);
+      } else {
+        reject(new Error('Cashfree SDK loaded but Cashfree constructor was not initialized.'));
+      }
+    };
+    script.onerror = () => reject(new Error('Failed to load Cashfree Checkout SDK script.'));
+    document.head.appendChild(script);
+  });
+}
 
 export const CheckoutModal: React.FC = () => {
   const {
@@ -36,6 +76,10 @@ export const CheckoutModal: React.FC = () => {
     addAddress,
     placeOrder,
     setIsOrdersOpen,
+    preferredPaymentMethod,
+    skipAddressOnCheckoutOpen,
+    setSkipAddressOnCheckoutOpen,
+    user,
     notify
   } = useMarketplace();
 
@@ -47,6 +91,10 @@ export const CheckoutModal: React.FC = () => {
 
   // Backend Payment Intent
   const [paymentIntent, setPaymentIntent] = useState<any>(null);
+  const [initializingIntent, setInitializingIntent] = useState(false);
+  const [intentError, setIntentError] = useState<string | null>(null);
+  const [cashfreeError, setCashfreeError] = useState<string | null>(null);
+  const [cashfreeLaunching, setCashfreeLaunching] = useState(false);
   const [upiUtr, setUpiUtr] = useState('');
   const [selectedBank, setSelectedBank] = useState('HDFC Bank');
   const [codOtp, setCodOtp] = useState('');
@@ -73,19 +121,119 @@ export const CheckoutModal: React.FC = () => {
   const deliveryFee = cartTotal > 999 ? 0 : 49;
   const finalAmount = Math.max(0, cartTotal - cartDiscount + deliveryFee);
 
+  const initializePaymentIntent = async () => {
+    if (finalAmount <= 0) return null;
+    setInitializingIntent(true);
+    setIntentError(null);
+    setCashfreeError(null);
+    try {
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      const res = await api.payments.createIntent({
+        amount: finalAmount,
+        currency: 'INR',
+        customerName: currentAddress?.fullName || user?.name || 'Prime Bazaar Shopper',
+        customerPhone: currentAddress?.phone || user?.phone || '9876543210',
+        customerEmail: user?.email || 'shopper@primebazaar.in',
+        returnUrl: origin ? `${origin}/?cashfree_order_id={order_id}` : undefined,
+      });
+      setPaymentIntent(res);
+      if (res?.cashfree?.error) {
+        setCashfreeError(res.cashfree.error);
+      }
+      return res;
+    } catch (err: any) {
+      const msg = err?.message || 'Unable to connect to payment gateway backend.';
+      setIntentError(msg);
+      return null;
+    } finally {
+      setInitializingIntent(false);
+    }
+  };
+
+  // Sync preferred payment method and fast-track to Payment step when launched from a product Buy Now CTA
+  useEffect(() => {
+    if (isCheckoutOpen) {
+      setCashfreeError(null);
+      setIntentError(null);
+      if (completedOrder && step === 'success') return;
+      setPaymentMethod(preferredPaymentMethod || 'cashfree');
+      if (skipAddressOnCheckoutOpen && currentAddress) {
+        setStep('payment');
+      } else {
+        setStep('address');
+      }
+    } else {
+      setPaymentIntent(null);
+      setCompletedOrder(null);
+      setCashfreeError(null);
+      setIntentError(null);
+    }
+  }, [isCheckoutOpen, preferredPaymentMethod, skipAddressOnCheckoutOpen]);
+
   // Initialize payment intent on backend when entering payment step
   useEffect(() => {
     if (step === 'payment' && isCheckoutOpen && finalAmount > 0) {
-      api.payments.createIntent({
-        amount: finalAmount,
-        currency: 'INR',
-        customerName: currentAddress?.fullName,
-        customerPhone: currentAddress?.phone,
-      })
-      .then(res => setPaymentIntent(res))
-      .catch(err => console.warn('Payment intent init:', err));
+      initializePaymentIntent();
     }
   }, [step, isCheckoutOpen, finalAmount]);
+
+  // Handle redirect return from Cashfree hosted checkout (?cashfree_order_id=...)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const urlParams = new URLSearchParams(window.location.search);
+    const returnedCfOrderId = urlParams.get('cashfree_order_id') || urlParams.get('order_id');
+    if (!returnedCfOrderId || !returnedCfOrderId.startsWith('pb_cf_')) return;
+
+    urlParams.delete('cashfree_order_id');
+    urlParams.delete('order_id');
+    const cleanQuery = urlParams.toString();
+    const cleanUrl = `${window.location.pathname}${cleanQuery ? `?${cleanQuery}` : ''}${window.location.hash}`;
+    window.history.replaceState({}, document.title, cleanUrl);
+
+    let pendingRaw: string | null = null;
+    try {
+      pendingRaw = sessionStorage.getItem(PENDING_CF_STORAGE_KEY);
+      sessionStorage.removeItem(PENDING_CF_STORAGE_KEY);
+    } catch {
+      // ignore storage errors
+    }
+
+    const pending = pendingRaw ? JSON.parse(pendingRaw) : {};
+    setIsCheckoutOpen(true);
+    setPaymentMethod('cashfree');
+    setLoading(true);
+
+    api.payments
+      .verify({
+        intentId: pending.intentId,
+        cashfreeOrderId: returnedCfOrderId,
+        paymentMethod: 'cashfree',
+        amount: pending.amount || finalAmount || 999,
+      })
+      .then((receipt) => {
+        const order = placeOrder({
+          address: pending.address || currentAddress,
+          paymentMethod: 'cashfree',
+          couponCode: pending.couponCode || activeCoupon?.code,
+          coinsUsed: 0,
+        });
+        setCompletedOrder({
+          ...order,
+          invoiceNumber: receipt.invoiceNumber || order.invoiceNumber,
+        });
+        setStep('success');
+        notify('Cashfree payment verified & order placed successfully!');
+      })
+      .catch((err: any) => {
+        setStep('payment');
+        const msg = err?.message || 'Cashfree payment was not completed.';
+        setCashfreeError(msg);
+        notify(msg);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, []);
 
   if (!isCheckoutOpen) return null;
 
@@ -118,33 +266,82 @@ export const CheckoutModal: React.FC = () => {
     setStep('payment');
   };
 
-  const triggerCashfreeSdkCheckout = () => {
-    if (typeof (window as any).Cashfree !== 'undefined' && paymentIntent?.cashfree?.paymentSessionId) {
-      try {
-        const cfInstance = (window as any).Cashfree({ mode: paymentIntent.cashfree.environment || 'sandbox' });
-        cfInstance.checkout({
-          paymentSessionId: paymentIntent.cashfree.paymentSessionId,
-          redirectTarget: '_modal',
-        }).then((result: any) => {
-          if (result && result.error) {
-            notify(`Cashfree note: ${result.error.message || 'Modal dismissed'}`);
-          }
-          executeFinalOrderPlacement('Verified via Cashfree Payments Gateway');
-        }).catch((err: any) => {
-          console.warn('Cashfree SDK handler notice:', err);
-          executeFinalOrderPlacement('Verified via Cashfree Sandbox Session');
-        });
-        return;
-      } catch (err: any) {
-        console.warn('Cashfree SDK invocation:', err);
+  const triggerCashfreeSdkCheckout = async (redirectTarget: '_modal' | '_self' = '_modal') => {
+    setCashfreeError(null);
+    setCashfreeLaunching(true);
+
+    try {
+      let activeIntent = paymentIntent;
+      if (!activeIntent?.cashfree?.paymentSessionId) {
+        activeIntent = await initializePaymentIntent();
       }
+
+      const sessionId = activeIntent?.cashfree?.paymentSessionId;
+      if (!sessionId) {
+        const errMsg =
+          activeIntent?.cashfree?.error ||
+          intentError ||
+          'Cashfree payment session could not be created. Please verify CASHFREE_CLIENT_ID and CASHFREE_CLIENT_SECRET.';
+        setCashfreeError(errMsg);
+        notify(errMsg);
+        return;
+      }
+
+      const CashfreeSDK = await loadCashfreeSdk();
+      const rawEnv = String(activeIntent?.cashfree?.environment || 'sandbox').toLowerCase();
+      const sdkMode = rawEnv === 'production' ? 'production' : 'sandbox';
+      const cfInstance = CashfreeSDK({ mode: sdkMode });
+
+      if (redirectTarget === '_self') {
+        try {
+          sessionStorage.setItem(
+            PENDING_CF_STORAGE_KEY,
+            JSON.stringify({
+              intentId: activeIntent.intentId,
+              cashfreeOrderId: activeIntent.cashfree.orderId,
+              address: currentAddress,
+              couponCode: activeCoupon?.code,
+              amount: finalAmount,
+            })
+          );
+        } catch {
+          // ignore storage failure
+        }
+      }
+
+      const result = await cfInstance.checkout({
+        paymentSessionId: sessionId,
+        redirectTarget,
+      });
+
+      if (result?.error) {
+        const msg = result.error.message || 'Cashfree Checkout was closed or failed before payment completed.';
+        setCashfreeError(msg);
+        notify(msg);
+        return;
+      }
+
+      if (result?.paymentDetails) {
+        await executeFinalOrderPlacement('Verified via Cashfree Payments Gateway', activeIntent);
+        return;
+      }
+
+      if (result?.redirect) {
+        notify('Redirecting to Cashfree Hosted Checkout...');
+        return;
+      }
+    } catch (err: any) {
+      const msg = err?.message || 'Unable to launch Cashfree Checkout. Try opening Cashfree Hosted Page below.';
+      setCashfreeError(msg);
+      notify(msg);
+    } finally {
+      setCashfreeLaunching(false);
     }
-    executeFinalOrderPlacement('Verified via Cashfree Sandbox Session');
   };
 
   const handleTriggerPaymentVerification = async () => {
     if (paymentMethod === 'cashfree') {
-      triggerCashfreeSdkCheckout();
+      await triggerCashfreeSdkCheckout('_modal');
       return;
     }
 
@@ -154,20 +351,22 @@ export const CheckoutModal: React.FC = () => {
       return;
     }
 
-    if (paymentMethod === 'cod' && !isCodOtpSent) {
-      handleSendCodOtp();
+    if (paymentMethod === 'cod') {
+      await executeFinalOrderPlacement('Confirmed via Cash on Delivery');
       return;
     }
 
-    executeFinalOrderPlacement('Verified via NPCI UPI Gateway');
+    await executeFinalOrderPlacement('Verified via NPCI UPI Gateway');
   };
 
-  const executeFinalOrderPlacement = async (authNote?: string) => {
+  const executeFinalOrderPlacement = async (authNote?: string, intentOverride?: any) => {
+    const activeIntent = intentOverride || paymentIntent;
     setLoading(true);
     try {
       // 1. Verify with Backend Payment API
       const paymentReceipt = await api.payments.verify({
-        intentId: paymentIntent?.intentId,
+        intentId: activeIntent?.intentId,
+        cashfreeOrderId: activeIntent?.cashfree?.orderId,
         paymentMethod,
         upiRefNumber: upiUtr || 'UTR' + Math.floor(100000000000 + Math.random() * 900000000000),
         cardNumber: paymentMethod === 'card' ? cardNumber.slice(-4) : undefined,
@@ -186,11 +385,16 @@ export const CheckoutModal: React.FC = () => {
       setCompletedOrder({
         ...order,
         id: paymentReceipt.invoiceNumber ? paymentReceipt.invoiceNumber.replace('PB-INV-2026-', 'PB-') : order.id,
+        invoiceNumber: paymentReceipt.invoiceNumber || order.invoiceNumber,
       });
       setStep('success');
-      notify('Payment authorized & order placed successfully!');
+      notify(authNote ? `${authNote} · Order placed!` : 'Payment authorized & order placed successfully!');
     } catch (err: any) {
-      notify(err.message || 'Payment verification failed.');
+      const msg = err?.message || 'Payment verification failed.';
+      if (paymentMethod === 'cashfree') {
+        setCashfreeError(msg);
+      }
+      notify(msg);
     } finally {
       setLoading(false);
     }
@@ -201,6 +405,7 @@ export const CheckoutModal: React.FC = () => {
       className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 animate-fadeIn"
       onClick={() => {
         setIsCheckoutOpen(false);
+        setSkipAddressOnCheckoutOpen(false);
         setStep('address');
       }}
     >
@@ -217,6 +422,7 @@ export const CheckoutModal: React.FC = () => {
             type="button"
             onClick={() => {
               setIsCheckoutOpen(false);
+              setSkipAddressOnCheckoutOpen(false);
               setStep('address');
             }}
             className="p-2 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors"
@@ -412,6 +618,24 @@ export const CheckoutModal: React.FC = () => {
               </div>
             </div>
 
+            {currentAddress && (
+              <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-2 text-xs">
+                <div className="flex items-center gap-2 min-w-0">
+                  <MapPin className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span className="truncate text-zinc-700 dark:text-zinc-300">
+                    Delivering to <strong className="text-zinc-900 dark:text-white">{currentAddress.fullName}</strong> · {currentAddress.city} ({currentAddress.pinCode})
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setStep('address')}
+                  className="text-emerald-600 font-bold hover:underline shrink-0 text-[11px]"
+                >
+                  Change
+                </button>
+              </div>
+            )}
+
             <div className="space-y-3">
               {/* Option 0: Cashfree Sandbox Payment Gateway */}
               <div
@@ -431,7 +655,7 @@ export const CheckoutModal: React.FC = () => {
                     className="mt-1 accent-emerald-600 w-4 h-4 cursor-pointer"
                   />
                   <div className="flex-1 text-xs">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
                       <div className="flex items-center gap-2">
                         <div className="w-5 h-5 rounded-md bg-amber-500 text-white flex items-center justify-center font-black text-[10px]">
                           CF
@@ -440,29 +664,71 @@ export const CheckoutModal: React.FC = () => {
                           Cashfree Payments (Cards, NetBanking, Wallets, UPI)
                         </span>
                       </div>
-                      <span className="text-[10px] text-amber-700 dark:text-amber-300 font-bold bg-amber-100 dark:bg-amber-950 px-2 py-0.5 rounded border border-amber-500/20">
-                        Live Sandbox Active
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
+                          paymentIntent?.cashfree?.paymentSessionId
+                            ? 'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950 border-emerald-500/20'
+                            : cashfreeError || intentError
+                              ? 'text-rose-700 dark:text-rose-300 bg-rose-100 dark:bg-rose-950 border-rose-500/20'
+                              : 'text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-950 border-amber-500/20'
+                        }`}
+                      >
+                        {initializingIntent
+                          ? 'Connecting Gateway...'
+                          : paymentIntent?.cashfree?.paymentSessionId
+                            ? `${(paymentIntent.cashfree.environment || 'sandbox').toUpperCase()} Session Ready`
+                            : cashfreeError || intentError
+                              ? 'Gateway Error'
+                              : 'Gateway Ready'}
                       </span>
                     </div>
 
                     {paymentMethod === 'cashfree' && (
                       <div className="mt-3.5 p-3.5 rounded-2xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 space-y-3">
                         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 p-2.5 rounded-xl bg-amber-50/60 dark:bg-amber-950/30 border border-amber-500/20">
-                          <div>
+                          <div className="min-w-0">
                             <span className="font-bold text-amber-900 dark:text-amber-200 block text-xs">
-                              Cashfree PG Session Initialized
+                              {initializingIntent
+                                ? 'Creating Cashfree Payment Session...'
+                                : paymentIntent?.cashfree?.paymentSessionId
+                                  ? 'Cashfree PG Session Initialized'
+                                  : 'Cashfree Session Unavailable'}
                             </span>
                             <span className="text-[11px] text-amber-700 dark:text-amber-400 font-mono block break-all">
-                              CF Order: {paymentIntent?.cashfree?.cfOrderId || paymentIntent?.cashfree?.orderId || 'Active Order Session'}
+                              {paymentIntent?.cashfree?.cfOrderId
+                                ? `CF Order: ${paymentIntent.cashfree.cfOrderId} (${paymentIntent.cashfree.orderId})`
+                                : paymentIntent?.cashfree?.orderId
+                                  ? `Order Ref: ${paymentIntent.cashfree.orderId}`
+                                  : 'Awaiting Cashfree order creation'}
                             </span>
                           </div>
                           <span className="text-[10px] text-emerald-700 dark:text-emerald-300 font-semibold bg-emerald-100 dark:bg-emerald-950 px-2 py-1 rounded-md shrink-0">
-                            API v2025-01-01
+                            API v{paymentIntent?.cashfree?.apiVersion || '2025-01-01'}
                           </span>
                         </div>
 
+                        {(cashfreeError || intentError) && (
+                          <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-[11px] flex items-start justify-between gap-2">
+                            <div className="flex items-start gap-2">
+                              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                              <span>{cashfreeError || intentError}</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                initializePaymentIntent();
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-[10px] shrink-0 flex items-center gap-1"
+                            >
+                              <RefreshCw className="w-3 h-3" />
+                              <span>Retry</span>
+                            </button>
+                          </div>
+                        )}
+
                         <div className="text-[11px] text-zinc-600 dark:text-zinc-400 space-y-1">
-                          <p>Supports all Indian payment rails via Cashfree sandbox credentials:</p>
+                          <p>Supports all Indian payment rails via Cashfree credentials:</p>
                           <div className="flex flex-wrap gap-1.5 pt-1">
                             {['Google Pay', 'PhonePe', 'Paytm', 'Visa / RuPay Cards', 'HDFC / SBI / ICICI NetBanking'].map((m) => (
                               <span key={m} className="px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-700/60 text-zinc-700 dark:text-zinc-300 text-[10px] font-medium">
@@ -472,17 +738,37 @@ export const CheckoutModal: React.FC = () => {
                           </div>
                         </div>
 
-                        <div className="pt-1">
+                        <div className="pt-1 space-y-2">
                           <button
                             type="button"
+                            disabled={initializingIntent || cashfreeLaunching || loading}
                             onClick={(e) => {
                               e.stopPropagation();
-                              triggerCashfreeSdkCheckout();
+                              triggerCashfreeSdkCheckout('_modal');
                             }}
-                            className="w-full py-2.5 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition-all active:scale-[0.99]"
+                            className="w-full py-2.5 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-60 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition-all active:scale-[0.99]"
                           >
-                            <span>Pay ₹{finalAmount} with Cashfree Checkout</span>
+                            <span>
+                              {cashfreeLaunching
+                                ? 'Opening Cashfree Checkout...'
+                                : initializingIntent
+                                  ? 'Preparing Cashfree Session...'
+                                  : `Pay ₹${finalAmount.toLocaleString('en-IN')} with Cashfree Checkout`}
+                            </span>
                             <ArrowRight className="w-4 h-4" />
+                          </button>
+
+                          <button
+                            type="button"
+                            disabled={initializingIntent || cashfreeLaunching || loading}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              triggerCashfreeSdkCheckout('_self');
+                            }}
+                            className="w-full py-2 px-3 rounded-xl border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-700/50 text-zinc-700 dark:text-zinc-300 font-semibold text-[11px] flex items-center justify-center gap-1.5 transition-colors"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            <span>Having trouble with the popup? Open Cashfree Hosted Payment Page</span>
                           </button>
                         </div>
                       </div>
@@ -767,7 +1053,13 @@ export const CheckoutModal: React.FC = () => {
                 className="px-6 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs flex items-center gap-2 shadow-lg shadow-emerald-600/25 active:scale-95 transition-all"
               >
                 <Check className="w-4 h-4" />
-                <span>{loading ? 'Verifying with Bank...' : 'Authorize & Pay ₹' + finalAmount.toLocaleString('en-IN')}</span>
+                <span>
+                  {loading
+                    ? 'Processing...'
+                    : paymentMethod === 'cod'
+                      ? 'Confirm Cash on Delivery Order (₹' + finalAmount.toLocaleString('en-IN') + ')'
+                      : 'Authorize & Pay ₹' + finalAmount.toLocaleString('en-IN')}
+                </span>
               </button>
             </div>
           </div>
@@ -839,7 +1131,7 @@ export const CheckoutModal: React.FC = () => {
             <div className="text-left p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800 text-xs space-y-2 max-w-md mx-auto">
               <div className="flex justify-between pb-2 border-b border-zinc-200 dark:border-zinc-700 font-bold">
                 <span className="text-zinc-700 dark:text-zinc-300">GST Tax Invoice</span>
-                <span className="font-mono text-emerald-600">PB-INV-2026-92841</span>
+                <span className="font-mono text-emerald-600">{completedOrder.invoiceNumber || `PB-INV-${completedOrder.id}`}</span>
               </div>
               <div className="flex justify-between">
                 <span>Seller GSTIN</span>
@@ -893,6 +1185,7 @@ export const CheckoutModal: React.FC = () => {
             type="button"
             onClick={() => {
               setIsCheckoutOpen(false);
+              setSkipAddressOnCheckoutOpen(false);
               setStep('address');
             }}
             className="px-4 py-2 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-100 font-bold text-xs flex items-center gap-1.5 transition-all"
