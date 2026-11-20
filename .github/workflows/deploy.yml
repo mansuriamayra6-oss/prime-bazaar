@@ -1,0 +1,75 @@
+name: Build & Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.5
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Build
+        run: bun run build
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          echo "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+
+      - name: Upload release
+        env:
+          TARGET: ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}
+          RELEASE: /opt/primebazaar-releases/${{ github.sha }}
+        run: |
+          # ponytail: ships node_modules built on the runner (linux x64, same as server); no build tools needed on the box
+          rsync -az --delete --exclude .git --exclude .github ./ "$TARGET:$RELEASE/"
+
+      - name: Activate release
+        env:
+          TARGET: ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}
+          SHA: ${{ github.sha }}
+        run: |
+          ssh "$TARGET" "SHA=$SHA bash -s" <<'EOF'
+          set -euo pipefail
+          RELEASES=/opt/primebazaar-releases
+          NEW=$RELEASES/$SHA
+          PREV=$(readlink -f /opt/primebazaar-fashion)
+
+          chown -R root:primebazaar "$NEW"
+          chmod -R u=rwX,g=rX,o= "$NEW"
+
+          ln -sfn "$NEW" /opt/primebazaar-fashion
+          systemctl restart primebazaar
+
+          for i in $(seq 1 15); do
+            if curl -fsS -o /dev/null http://127.0.0.1:3010/; then
+              echo "Healthy: $SHA"
+              # keep newest 5 releases plus whatever is live
+              ls -1dt "$RELEASES"/*/ | tail -n +6 | grep -v "$NEW" | xargs -r rm -rf
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "Health check failed, rolling back to $PREV"
+          ln -sfn "$PREV" /opt/primebazaar-fashion
+          systemctl restart primebazaar
+          exit 1
+          EOF
