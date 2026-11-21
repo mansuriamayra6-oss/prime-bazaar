@@ -38,6 +38,9 @@ jobs:
           TARGET: ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}
           RELEASE: /opt/primebazaar-releases/${{ github.sha }}
         run: |
+          ssh "$TARGET" "mkdir -p '$RELEASE'"
+          rsync -az --delete --exclude .git --exclude .github ./ "$TARGET:$RELEASE/"
+        run: |
           # ponytail: ships node_modules built on the runner (linux x64, same as server); no build tools needed on the box
           rsync -az --delete --exclude .git --exclude .github ./ "$TARGET:$RELEASE/"
 
