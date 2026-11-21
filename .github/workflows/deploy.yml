@@ -1,8 +1,10 @@
+
 name: Build & Deploy
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   workflow_dispatch:
 
 concurrency:
@@ -13,37 +15,51 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     environment: production
-    steps:
-      - uses: actions/checkout@v4
 
-      - uses: oven-sh/setup-bun@v2
+    steps:
+      # 1. Download source code
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 2. Install Bun
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.5
 
-      - name: Install
+      # 3. Install dependencies
+      - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Build
+      # 4. Build production website
+      - name: Build application
         run: bun run build
 
+      # 5. Configure SSH
       - name: Set up SSH
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           echo "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
 
+      # 6. Upload release to VPS
       - name: Upload release
         env:
           TARGET: ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}
           RELEASE: /opt/primebazaar-releases/${{ github.sha }}
         run: |
           ssh "$TARGET" "mkdir -p '$RELEASE'"
-          rsync -az --delete --exclude .git --exclude .github ./ "$TARGET:$RELEASE/"
-        run: |
-          # ponytail: ships node_modules built on the runner (linux x64, same as server); no build tools needed on the box
-          rsync -az --delete --exclude .git --exclude .github ./ "$TARGET:$RELEASE/"
 
+          rsync -az --delete \
+            --exclude '.git' \
+            --exclude '.github' \
+            --exclude '.env' \
+            --exclude '.env.*' \
+            ./ "$TARGET:$RELEASE/"
+
+      # 7. Activate production release
       - name: Activate release
         env:
           TARGET: ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}
@@ -51,28 +67,49 @@ jobs:
         run: |
           ssh "$TARGET" "SHA=$SHA bash -s" <<'EOF'
           set -euo pipefail
+
           RELEASES=/opt/primebazaar-releases
           NEW=$RELEASES/$SHA
-          PREV=$(readlink -f /opt/primebazaar-fashion)
+          CURRENT=/opt/primebazaar-fashion
+
+          PREV=$(readlink -f "$CURRENT" || true)
+
+          if [ ! -d "$NEW" ]; then
+            echo "Release directory not found!"
+            exit 1
+          fi
 
           chown -R root:primebazaar "$NEW"
           chmod -R u=rwX,g=rX,o= "$NEW"
 
-          ln -sfn "$NEW" /opt/primebazaar-fashion
+          ln -sfn "$NEW" "$CURRENT"
+
           systemctl restart primebazaar
 
+          # Health check
           for i in $(seq 1 15); do
             if curl -fsS -o /dev/null http://127.0.0.1:3010/; then
-              echo "Healthy: $SHA"
-              # keep newest 5 releases plus whatever is live
-              ls -1dt "$RELEASES"/*/ | tail -n +6 | grep -v "$NEW" | xargs -r rm -rf
+              echo "Deployment successful: $SHA"
+
+              # Keep newest 5 releases
+              ls -1dt "$RELEASES"/*/ | tail -n +6 | xargs -r rm -rf
+
               exit 0
             fi
+
             sleep 2
           done
 
-          echo "Health check failed, rolling back to $PREV"
-          ln -sfn "$PREV" /opt/primebazaar-fashion
-          systemctl restart primebazaar
+          # Automatic rollback
+          echo "Health check failed. Rolling back..."
+
+          if [ -n "$PREV" ] && [ -d "$PREV" ]; then
+            ln -sfn "$PREV" "$CURRENT"
+            systemctl restart primebazaar
+            echo "Rollback completed."
+          else
+            echo "No previous release available for rollback."
+          fi
+
           exit 1
           EOF
