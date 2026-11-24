@@ -37,9 +37,15 @@ jobs:
 
       # 5. Configure SSH
       - name: Set up SSH
+        env:
+          SSH_KEY: ${{ secrets.SSH_KEY }}
         run: |
+          if [ -z "$SSH_KEY" ]; then
+            echo "::error::SSH_KEY secret is empty. Add it under Settings > Environments > production > Environment secrets."
+            exit 1
+          fi
           mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           # Server's public host key (not secret). Pinned for IP and domain so SSH_HOST can be either.
           # If server is rebuilt, update with: ssh-keyscan -t ed25519 <ip>
