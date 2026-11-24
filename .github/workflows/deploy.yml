@@ -41,7 +41,9 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          echo "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          # Server's public host key (not secret). Pinned for IP and domain so SSH_HOST can be either.
+          # If server is rebuilt, update with: ssh-keyscan -t ed25519 <ip>
+          echo "200.97.161.238,primebazaarfashion.in ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINpvERTvtNTqfcrkfxdbjXLJUC/bVmVGMF5Rr00EbBU/" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
       # 6. Upload release to VPS
