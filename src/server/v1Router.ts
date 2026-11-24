@@ -15,6 +15,15 @@ import {
   isValidEmail,
   isValidPasswordInput,
 } from './security.ts';
+import { recordAuditLog } from './auditAndRbac.ts';
+import {
+  recordSellerEscrowForOrder,
+  releaseEscrowToSellerWallet,
+  roundMoney,
+} from './financeLedger.ts';
+import { getInvoicesForOrder } from './gstInvoiceService.ts';
+import { sanitizeSellerForApi, computeRealPlatformAnalytics } from './marketplaceOpsService.ts';
+import { listWarehouses, upsertWarehouseStock } from './warehouseAndShipping.ts';
 
 export const v1Router = express.Router();
 
@@ -585,19 +594,33 @@ export function splitOrderIntoSellerOrders(orderPayload: {
       };
     });
 
-    // Commission lookup (10% default for ethnic, 12% standard, or seller rate)
-    const commissionPercent = 12;
-    const commissionAmount = Math.round((subtotal * commissionPercent) / 100);
-    const gstOnCommission = Math.round(commissionAmount * 0.18);
-    const sellerPayout = Math.max(0, subtotal - commissionAmount - gstOnCommission);
+    const categorySlug =
+      sellerItems[0]?.product?.category ||
+      sellerItems[0]?.category ||
+      sellerItems[0]?.categorySlug ||
+      'western';
+
+    const escrowBreakdown = recordSellerEscrowForOrder({
+      orderId,
+      suborderNumber: `${orderNumber}-${suffixLetters[suffixIndex % suffixLetters.length]}`,
+      sellerId,
+      grossSubtotal: subtotal,
+      categorySlug,
+      actorId: 'sys-order-splitter',
+    });
+
+    const commissionPercent = escrowBreakdown.commissionPercent;
+    const commissionAmount = escrowBreakdown.commissionAmount;
+    const gstOnCommission = escrowBreakdown.gstOnCommission;
+    const sellerPayout = escrowBreakdown.netSellerEarnings;
 
     const subSuffix = suffixLetters[suffixIndex % suffixLetters.length];
     suffixIndex++;
 
     const suborderId = `so-${orderId.replace(/^ord-?/, '')}-${subSuffix.toLowerCase()}`;
     const suborderNumber = `${orderNumber}-${subSuffix}`;
-    const trackingNumber = `BD-${Math.floor(10000000 + Math.random() * 90000000)}`;
-    const invoiceNumber = `PB-INV-2026-${orderNumber.replace(/[^\d]/g, '')}-${subSuffix}`;
+    const trackingNumber = `PENDING_CARRIER`;
+    const invoiceNumber = `PB-INV-${new Date().getFullYear()}-${orderNumber.replace(/[^\d]/g, '') || Date.now().toString().slice(-5)}-${subSuffix}`;
 
     const newSuborder: DBSellerOrder = {
       id: suborderId,
@@ -617,7 +640,7 @@ export function splitOrderIntoSellerOrders(orderPayload: {
       customerName: customerName || shippingAddress?.fullName || 'Verified Shopper',
       customerPhone: customerPhone || shippingAddress?.phone || '+91 98765 43210',
       trackingNumber,
-      courierPartner: 'BlueDart Express',
+      courierPartner: 'Awaiting Carrier Manifest',
       shippingLabelGenerated: false,
       invoiceNumber,
       createdAt: new Date().toISOString(),
@@ -626,12 +649,6 @@ export function splitOrderIntoSellerOrders(orderPayload: {
 
     dbSellerOrders.set(suborderId, newSuborder);
     createdSuborders.push(newSuborder);
-
-    // Update wallet pending settlement
-    const wallet = dbSellerWallets.get(sellerId);
-    if (wallet) {
-      wallet.pendingSettlement += sellerPayout;
-    }
 
     // Log inventory movements
     for (const fi of formattedItems) {
@@ -941,7 +958,7 @@ v1Router.get(
       return res.status(404).json({ error: 'Seller not found' });
     }
     const wallet = dbSellerWallets.get(sellerId);
-    res.json({ success: true, profile: seller, wallet });
+    res.json({ success: true, profile: sanitizeSellerForApi(seller), wallet });
   }
 );
 
@@ -959,7 +976,7 @@ v1Router.put(
     if (req.body.pickupAddress) seller.pickupAddress = req.body.pickupAddress;
     if (req.body.bankAccount) seller.bankAccount = req.body.bankAccount;
 
-    res.json({ success: true, message: 'Seller profile updated successfully', profile: seller });
+    res.json({ success: true, message: 'Seller profile updated successfully', profile: sanitizeSellerForApi(seller) });
   }
 );
 
@@ -1058,7 +1075,7 @@ v1Router.get(
 v1Router.post(
   '/seller/products',
   requireSellerOwnership(req => req.body?.sellerId as string | undefined),
-  (req, res) => {
+  async (req, res) => {
     const sellerId = resolveEffectiveSellerId(req, req.body?.sellerId as string | undefined);
     const {
       name,
@@ -1130,12 +1147,15 @@ v1Router.post(
       dimensions: dimensions || { lengthCm: 30, widthCm: 20, heightCm: 5 },
       returnPeriodDays: Number(returnPeriodDays),
       warrantyPolicy,
-      status: 'APPROVED',
+      status: req.body?.status === 'DRAFT' ? 'DRAFT' : 'PENDING_APPROVAL',
       variants: resolvedVariants,
       createdAt: new Date().toISOString(),
     };
 
     dbProducts.set(prodId, newProduct);
+
+    const sellerWarehouses = listWarehouses(sellerId);
+    const defaultWhId = sellerWarehouses[0]?.id || 'wh-mum-central';
 
     for (const v of resolvedVariants) {
       dbInventoryMovements.push({
@@ -1149,11 +1169,22 @@ v1Router.post(
         notes: `Initial stock added for ${newProduct.name}`,
         createdAt: new Date().toISOString(),
       });
+      await upsertWarehouseStock({
+        warehouseId: defaultWhId,
+        variantId: v.id,
+        sku: v.sku,
+        productId: prodId,
+        productTitle: newProduct.name,
+        absoluteAvailableQty: v.stock,
+        movementType: 'STOCK_IN',
+        referenceId: 'INITIAL_STOCK',
+        notes: `Initial stock synced on product creation`,
+      });
     }
 
     res.status(201).json({
       success: true,
-      message: 'Product published successfully to marketplace catalog!',
+      message: 'Product submitted for catalog moderation review.',
       product: newProduct,
     });
   }
@@ -1168,8 +1199,17 @@ v1Router.put(
       return res.status(404).json({ error: 'Product not found' });
     }
 
-    const { sellerId: _ignoredSellerId, id: _ignoredId, ...safeUpdates } = req.body || {};
+    const { sellerId: _ignoredSellerId, id: _ignoredId, status: requestedStatus, ...safeUpdates } = req.body || {};
     Object.assign(prod, safeUpdates);
+    // Sellers cannot self-approve rejected or draft listings; resubmissions go to moderation queue
+    if (req.auth!.role === 'SELLER') {
+      if (prod.status === 'REJECTED' || requestedStatus === 'PENDING_APPROVAL' || requestedStatus === 'SUBMITTED') {
+        prod.status = 'PENDING_APPROVAL';
+        prod.rejectionReason = undefined;
+      }
+    } else if (requestedStatus) {
+      prod.status = requestedStatus;
+    }
     res.json({ success: true, message: 'Product updated successfully', product: prod });
   }
 );
@@ -1206,7 +1246,7 @@ v1Router.post(
 v1Router.post(
   '/seller/products/bulk-upload',
   requireSellerOwnership(req => req.body?.sellerId as string | undefined),
-  (req, res) => {
+  async (req, res) => {
     const sellerId = resolveEffectiveSellerId(req, req.body?.sellerId as string | undefined);
     const { products } = req.body || {};
     if (!Array.isArray(products) || products.length === 0) {
@@ -1214,6 +1254,7 @@ v1Router.post(
     }
 
     const seller = dbSellers.get(sellerId);
+    const defaultWhId = listWarehouses(sellerId)[0]?.id || 'wh-mum-central';
     let imported = 0;
     for (const item of products) {
       const prodId = `prod-bulk-${Date.now().toString(36)}-${imported}`;
@@ -1230,7 +1271,7 @@ v1Router.post(
         taxGstPercent: 12,
         weightGrams: 500,
         returnPeriodDays: 7,
-        status: 'APPROVED',
+        status: 'PENDING_APPROVAL',
         variants: [
           {
             id: `var-${prodId}-1`,
@@ -1246,6 +1287,16 @@ v1Router.post(
         createdAt: new Date().toISOString(),
       };
       dbProducts.set(prodId, p);
+      await upsertWarehouseStock({
+        warehouseId: defaultWhId,
+        variantId: p.variants[0].id,
+        sku: p.variants[0].sku,
+        productId: prodId,
+        productTitle: p.name,
+        absoluteAvailableQty: p.variants[0].stock,
+        movementType: 'STOCK_IN',
+        referenceId: 'BULK_UPLOAD',
+      });
       imported++;
     }
 
@@ -1525,6 +1576,32 @@ v1Router.post(
   }
 );
 
+v1Router.post(
+  '/seller/orders/:id/deliver',
+  requireSellerOwnership(req => dbSellerOrders.get(req.params.id)?.sellerId),
+  (req, res) => {
+    const so = dbSellerOrders.get(req.params.id);
+    if (!so) return res.status(404).json({ error: 'Suborder not found' });
+
+    so.fulfillmentStatus = 'DELIVERED';
+    so.settlementStatus = 'READY';
+    so.updatedAt = new Date().toISOString();
+    const wallet = releaseEscrowToSellerWallet({
+      sellerId: so.sellerId,
+      suborderNumber: so.suborderNumber,
+      netSellerEarnings: so.sellerPayout,
+      actorId: req.auth!.userId,
+    });
+
+    res.json({
+      success: true,
+      message: `Suborder ${so.suborderNumber} marked delivered; escrow released to seller wallet.`,
+      order: so,
+      wallet,
+    });
+  }
+);
+
 v1Router.get(
   '/seller/orders/:id/invoice',
   requireSellerOwnership(req => dbSellerOrders.get(req.params.id)?.sellerId),
@@ -1532,10 +1609,45 @@ v1Router.get(
     const so = dbSellerOrders.get(req.params.id);
     if (!so) return res.status(404).json({ error: 'Suborder not found' });
 
-    const taxableValue = Math.round(so.subtotal / 1.12);
-    const totalTax = so.subtotal - taxableValue;
-    const cgst = Math.round(totalTax / 2);
-    const sgst = totalTax - cgst;
+    const { invoices } = getInvoicesForOrder(so.orderId);
+    const issued = invoices.find((inv) => inv.sellerOrderId === so.id || inv.sellerId === so.sellerId);
+    if (issued) {
+      return res.json({
+        success: true,
+        invoice: {
+          id: issued.id,
+          invoiceNumber: issued.invoiceNumber,
+          financialYear: issued.financialYear,
+          date: issued.issuedAt,
+          suborderNumber: so.suborderNumber,
+          sellerName: issued.sellerSnapshot.businessName,
+          sellerGstin: issued.sellerGstin,
+          sellerState: issued.sellerState,
+          placeOfSupplyState: issued.placeOfSupplyState,
+          isInterState: issued.isInterState,
+          missingGstFlag: issued.missingGstFlag,
+          customerName: issued.buyerSnapshot.name,
+          shippingAddress: issued.buyerSnapshot.shippingAddress,
+          items: issued.items,
+          taxableValue: issued.taxableValue,
+          cgst: issued.cgstAmount,
+          sgst: issued.sgstAmount,
+          igst: issued.igstAmount,
+          totalAmount: issued.grandTotal,
+          currency: 'INR',
+        },
+      });
+    }
+
+    const seller = dbSellers.get(so.sellerId);
+    const sellerState = seller?.pickupAddress?.state || 'Maharashtra';
+    const destState = so.shippingAddress?.state || sellerState;
+    const isInterState = sellerState.toLowerCase() !== String(destState).toLowerCase();
+    const taxableValue = roundMoney(so.subtotal / 1.12);
+    const totalTax = roundMoney(so.subtotal - taxableValue);
+    const cgst = isInterState ? 0 : roundMoney(totalTax / 2);
+    const sgst = isInterState ? 0 : roundMoney(totalTax - cgst);
+    const igst = isInterState ? totalTax : 0;
 
     res.json({
       success: true,
@@ -1544,15 +1656,21 @@ v1Router.get(
         date: so.createdAt,
         suborderNumber: so.suborderNumber,
         sellerName: so.sellerName,
+        sellerGstin: seller?.gstNumber && seller.gstNumber !== 'Unregistered' ? seller.gstNumber : null,
+        sellerState,
+        placeOfSupplyState: destState,
+        isInterState,
+        missingGstFlag: !seller?.gstNumber || seller.gstNumber === 'Unregistered',
         customerName: so.customerName,
         shippingAddress: so.shippingAddress,
         items: so.items,
         taxableValue,
         cgst,
         sgst,
+        igst,
         totalAmount: so.subtotal,
         currency: 'INR',
-      }
+      },
     });
   }
 );
@@ -1702,24 +1820,20 @@ v1Router.get(
   requireSellerOwnership(req => req.query.sellerId as string | undefined),
   (req, res) => {
     const sellerId = resolveEffectiveSellerId(req, req.query.sellerId as string | undefined);
-    const seller = dbSellers.get(sellerId);
+    const analytics = computeRealPlatformAnalytics({
+      ordersList: [],
+      sellerId,
+    });
     res.json({
       success: true,
       summary: {
-        totalRevenue: seller?.totalRevenue || 0,
-        totalOrders: seller?.totalOrders || 0,
-        averageOrderValue: 820,
-        returnRate: '3.8%',
-        fulfillmentRate: '99.4%',
+        totalRevenue: analytics.grossMerchandiseValue,
+        totalOrders: analytics.totalSuborders,
+        averageOrderValue: analytics.averageOrderValue,
+        returnRate: analytics.returnRate,
+        fulfillmentRate: analytics.fulfillmentRate,
       },
-      monthlyTrend: [
-        { month: 'Jun', sales: 480000, orders: 580 },
-        { month: 'Jul', sales: 520000, orders: 630 },
-        { month: 'Aug', sales: 610000, orders: 740 },
-        { month: 'Sep', sales: 590000, orders: 710 },
-        { month: 'Oct', sales: 680000, orders: 820 },
-        { month: 'Nov', sales: 570000, orders: 730 },
-      ]
+      monthlyTrend: analytics.monthlyTrend,
     });
   }
 );
@@ -1730,15 +1844,24 @@ v1Router.get(
   (req, res) => {
     const sellerId = resolveEffectiveSellerId(req, req.query.sellerId as string | undefined);
     const wallet = dbSellerWallets.get(sellerId);
+    const suborders = Array.from(dbSellerOrders.values()).filter(
+      (so) => so.sellerId === sellerId && so.fulfillmentStatus !== 'CANCELLED'
+    );
+    const totalPlatformCommissionPaid = roundMoney(
+      suborders.reduce((s, so) => s + Number(so.commissionAmount || 0), 0)
+    );
+    const gstPaidOnCommission = roundMoney(
+      suborders.reduce((s, so) => s + Number(so.gstOnCommission || 0), 0)
+    );
     res.json({
       success: true,
       earnings: {
         availableForWithdrawal: wallet?.balance || 0,
         pendingEscrow: wallet?.pendingSettlement || 0,
-        totalPlatformCommissionPaid: 414000,
-        gstPaidOnCommission: 74520,
+        totalPlatformCommissionPaid,
+        gstPaidOnCommission,
         netDisbursed: wallet?.totalWithdrawn || 0,
-      }
+      },
     });
   }
 );
@@ -1754,7 +1877,7 @@ v1Router.get('/admin/sellers', (req, res) => {
   res.json({
     success: true,
     totalSellers: dbSellers.size,
-    sellers: Array.from(dbSellers.values()),
+    sellers: Array.from(dbSellers.values()).map((s) => sanitizeSellerForApi(s)),
   });
 });
 
@@ -1762,7 +1885,7 @@ v1Router.get('/admin/sellers/:id', (req, res) => {
   const seller = dbSellers.get(req.params.id);
   if (!seller) return res.status(404).json({ error: 'Seller not found' });
   const wallet = dbSellerWallets.get(seller.id);
-  res.json({ success: true, seller, wallet });
+  res.json({ success: true, seller: sanitizeSellerForApi(seller), wallet });
 });
 
 v1Router.post('/admin/sellers/:id/approve', (req, res) => {
@@ -1774,19 +1897,20 @@ v1Router.post('/admin/sellers/:id/approve', (req, res) => {
     doc.verificationStatus = 'VERIFIED';
   }
 
-  dbAuditLogs.push({
-    id: `audit-${Date.now()}`,
+  recordAuditLog({
     actorType: 'ADMIN',
     actorId: req.auth?.userId || 'admin-super',
     actorName: req.auth?.name || req.auth?.email || 'Super Admin',
+    actorRole: req.auth?.role || 'SUPER_ADMIN',
     action: 'SELLER_APPROVED',
     entityType: 'SELLER',
     entityId: seller.id,
+    afterState: { approvalStatus: 'APPROVED' },
     details: `Approved seller ${seller.businessName} and verified all compliance dossiers.`,
-    timestamp: new Date().toISOString(),
+    legacyAuditSink: dbAuditLogs,
   });
 
-  res.json({ success: true, message: `Seller ${seller.businessName} approved and authorized for catalog publishing.`, seller });
+  res.json({ success: true, message: `Seller ${seller.businessName} approved and authorized for catalog publishing.`, seller: sanitizeSellerForApi(seller) });
 });
 
 v1Router.post('/admin/sellers/:id/reject', (req, res) => {
@@ -1796,19 +1920,21 @@ v1Router.post('/admin/sellers/:id/reject', (req, res) => {
   seller.approvalStatus = 'REJECTED';
   seller.rejectionReason = req.body.reason || 'KYC documentation failed verification criteria';
 
-  dbAuditLogs.push({
-    id: `audit-${Date.now()}`,
+  recordAuditLog({
     actorType: 'ADMIN',
     actorId: req.auth?.userId || 'admin-super',
     actorName: req.auth?.name || req.auth?.email || 'Super Admin',
+    actorRole: req.auth?.role || 'SUPER_ADMIN',
     action: 'SELLER_REJECTED',
     entityType: 'SELLER',
     entityId: seller.id,
+    afterState: { approvalStatus: 'REJECTED' },
+    reason: seller.rejectionReason,
     details: `Rejected seller ${seller.businessName}: ${seller.rejectionReason}`,
-    timestamp: new Date().toISOString(),
+    legacyAuditSink: dbAuditLogs,
   });
 
-  res.json({ success: true, message: `Seller ${seller.businessName} registration rejected.`, seller });
+  res.json({ success: true, message: `Seller ${seller.businessName} registration rejected.`, seller: sanitizeSellerForApi(seller) });
 });
 
 v1Router.post('/admin/sellers/:id/suspend', (req, res) => {
@@ -1817,19 +1943,20 @@ v1Router.post('/admin/sellers/:id/suspend', (req, res) => {
 
   seller.approvalStatus = 'SUSPENDED';
 
-  dbAuditLogs.push({
-    id: `audit-${Date.now()}`,
+  recordAuditLog({
     actorType: 'ADMIN',
     actorId: req.auth?.userId || 'admin-super',
     actorName: req.auth?.name || req.auth?.email || 'Super Admin',
+    actorRole: req.auth?.role || 'SUPER_ADMIN',
     action: 'SELLER_SUSPENDED',
     entityType: 'SELLER',
     entityId: seller.id,
+    afterState: { approvalStatus: 'SUSPENDED' },
     details: `Suspended seller ${seller.businessName}. Orders paused.`,
-    timestamp: new Date().toISOString(),
+    legacyAuditSink: dbAuditLogs,
   });
 
-  res.json({ success: true, message: `Seller ${seller.businessName} suspended.`, seller });
+  res.json({ success: true, message: `Seller ${seller.businessName} suspended.`, seller: sanitizeSellerForApi(seller) });
 });
 
 v1Router.post('/admin/sellers/:id/activate', (req, res) => {
@@ -1838,19 +1965,20 @@ v1Router.post('/admin/sellers/:id/activate', (req, res) => {
 
   seller.approvalStatus = 'APPROVED';
 
-  dbAuditLogs.push({
-    id: `audit-${Date.now()}`,
+  recordAuditLog({
     actorType: 'ADMIN',
     actorId: req.auth?.userId || 'admin-super',
     actorName: req.auth?.name || req.auth?.email || 'Super Admin',
+    actorRole: req.auth?.role || 'SUPER_ADMIN',
     action: 'SELLER_ACTIVATED',
     entityType: 'SELLER',
     entityId: seller.id,
+    afterState: { approvalStatus: 'APPROVED' },
     details: `Re-activated seller ${seller.businessName}.`,
-    timestamp: new Date().toISOString(),
+    legacyAuditSink: dbAuditLogs,
   });
 
-  res.json({ success: true, message: `Seller ${seller.businessName} activated.`, seller });
+  res.json({ success: true, message: `Seller ${seller.businessName} activated.`, seller: sanitizeSellerForApi(seller) });
 });
 
 v1Router.get('/admin/products/pending', (req, res) => {
@@ -1916,21 +2044,18 @@ v1Router.post('/admin/settlements/:id/approve', (req, res) => {
 });
 
 v1Router.get('/admin/reports/overview', (req, res) => {
-  let gmv = 0;
-  let commission = 0;
-  for (const so of dbSellerOrders.values()) {
-    gmv += so.subtotal;
-    commission += so.commissionAmount;
-  }
-
+  const analytics = computeRealPlatformAnalytics({
+    ordersList: Array.from(dbSellerOrders.values()),
+  });
   res.json({
-    grossMerchandiseValue: gmv + 4825000,
-    totalSuborders: dbSellerOrders.size + 1420,
-    activeSellers: Array.from(dbSellers.values()).filter(s => s.approvalStatus === 'APPROVED').length,
-    pendingKYCSellers: Array.from(dbSellers.values()).filter(s => s.approvalStatus === 'PENDING_APPROVAL').length,
-    commissionRevenue: commission + 579000,
-    platformTakeRate: '12%',
-    disbursedToVendors: 4246000,
+    grossMerchandiseValue: analytics.grossMerchandiseValue,
+    totalSuborders: analytics.totalSuborders,
+    activeSellers: analytics.activeSellers,
+    pendingKYCSellers: analytics.pendingKYCSellers,
+    commissionRevenue: analytics.commissionRevenue,
+    platformTakeRate: analytics.platformTakeRate,
+    disbursedToVendors: analytics.disbursedToVendors,
+    ledgerBalanced: analytics.ledgerBalanced,
   });
 });
 

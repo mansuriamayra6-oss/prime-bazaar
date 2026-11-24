@@ -1,6 +1,7 @@
 import express from 'express';
 import crypto from 'crypto';
-import { requireAuth, extractBearerToken, getSession } from './security.ts';
+import { requireAuth, requireRole, extractBearerToken, getSession } from './security.ts';
+import { contentModerationOverrides } from './marketplaceOpsService.ts';
 
 export interface StoredReviewMedia {
   id: string;
@@ -305,7 +306,24 @@ export function createStorefrontRouter(deps: StorefrontDependencies) {
   // 2. Product Q&A Endpoints
   router.get('/products/:productId/qa', (req, res) => {
     const productId = sanitizePlainText(req.params.productId, 80);
-    const items = productQuestions.get(productId) || [];
+    const includeModerated = req.query.includeModerated === 'true';
+    const rawItems = productQuestions.get(productId) || [];
+    const hiddenStatuses = new Set(['HIDDEN', 'REMOVED', 'REJECTED']);
+    const items = rawItems
+      .filter((q) => {
+        if (includeModerated) return true;
+        const ov = contentModerationOverrides.get(`QUESTION:${q.id}`);
+        return !ov || !hiddenStatuses.has(ov.status);
+      })
+      .map((q) => ({
+        ...q,
+        moderationStatus: contentModerationOverrides.get(`QUESTION:${q.id}`)?.status || 'APPROVED',
+        answers: q.answers.filter((a) => {
+          if (includeModerated) return true;
+          const ov = contentModerationOverrides.get(`ANSWER:${a.id}`);
+          return !ov || !hiddenStatuses.has(ov.status);
+        }),
+      }));
     return res.json({
       success: true,
       productId,
@@ -404,6 +422,14 @@ export function createStorefrontRouter(deps: StorefrontDependencies) {
     const minRating = Number(req.query.minRating) || 0;
 
     let reviews = [...(productReviews.get(productId) || [])];
+    const includeModerated = req.query.includeModerated === 'true';
+    const hiddenStatuses = new Set(['HIDDEN', 'REMOVED', 'REJECTED']);
+    if (!includeModerated) {
+      reviews = reviews.filter((r) => {
+        const ov = contentModerationOverrides.get(`REVIEW:${r.id}`);
+        return !ov || !hiddenStatuses.has(ov.status);
+      });
+    }
     if (mediaOnly) {
       reviews = reviews.filter(r => r.media && r.media.length > 0);
     }
@@ -424,7 +450,58 @@ export function createStorefrontRouter(deps: StorefrontDependencies) {
     return res.json({
       success: true,
       productId,
-      reviews: reviews.map(({ helpfulVoters: _hv, reportedBy: _rb, ...publicReview }) => publicReview),
+      reviews: reviews.map(({ helpfulVoters: _hv, reportedBy: _rb, ...publicReview }) => ({
+        ...publicReview,
+        moderationStatus: contentModerationOverrides.get(`REVIEW:${publicReview.id}`)?.status || 'APPROVED',
+      })),
+    });
+  });
+
+  router.get('/moderation/queue', requireAuth, requireRole('ADMIN', 'SUPER_ADMIN'), (_req, res) => {
+    const reviewsList: any[] = [];
+    for (const [productId, list] of productReviews.entries()) {
+      for (const r of list) {
+        const ov = contentModerationOverrides.get(`REVIEW:${r.id}`);
+        reviewsList.push({
+          targetType: 'REVIEW',
+          id: r.id,
+          productId,
+          userId: r.userId,
+          userName: r.userName,
+          rating: r.rating,
+          comment: r.comment,
+          verifiedPurchase: r.verifiedPurchase,
+          reportCount: r.reportCount,
+          moderationStatus: ov?.status || 'APPROVED',
+          moderationReason: ov?.reason || null,
+          createdAt: r.createdAt,
+        });
+      }
+    }
+
+    const questionsList: any[] = [];
+    for (const [productId, list] of productQuestions.entries()) {
+      for (const q of list) {
+        const ov = contentModerationOverrides.get(`QUESTION:${q.id}`);
+        questionsList.push({
+          targetType: 'QUESTION',
+          id: q.id,
+          productId,
+          userId: q.userId,
+          userName: q.userName,
+          question: q.question,
+          answersCount: q.answers.length,
+          moderationStatus: ov?.status || 'APPROVED',
+          moderationReason: ov?.reason || null,
+          createdAt: q.createdAt,
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      reviews: reviewsList.sort((a, b) => b.reportCount - a.reportCount),
+      questions: questionsList,
     });
   });
 

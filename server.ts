@@ -28,6 +28,32 @@ import {
   isValidEmail,
   isValidPasswordInput,
 } from './src/server/security.ts';
+import { createPhase4Router } from './src/server/phase4Router.ts';
+import { createPhase5Router } from './src/server/phase5Router.ts';
+import {
+  authenticateAdminStaff,
+  adminSessionPermissionMap,
+  recordAuditLog,
+} from './src/server/auditAndRbac.ts';
+import { ACCOUNT_CODES, postBalancedLedgerGroup, roundMoney } from './src/server/financeLedger.ts';
+import {
+  setDeliveryOtpDispatcher,
+  reserveStockForOrder,
+  commitOrderReservations,
+  releaseOrderReservations,
+} from './src/server/warehouseAndShipping.ts';
+import { issueTaxInvoice } from './src/server/gstInvoiceService.ts';
+import {
+  calculateAuthoritativeQuote,
+  applyWalletsToOrder,
+  payments,
+  orderIdempotencyMap,
+  getCashfreeTransport,
+  applyWebhookRefundUpdate,
+  getCapturedPaidAmountForOrder,
+  initiateOrderRefund,
+} from './src/server/cashfreeAndPayments.ts';
+import { computeRealPlatformAnalytics } from './src/server/marketplaceOpsService.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -109,6 +135,31 @@ const storefrontRouter = createStorefrontRouter({
 });
 app.use('/api/storefront', storefrontRouter);
 app.use('/api/v1/storefront', storefrontRouter);
+
+// Wire Delivery OTP outbound email dispatcher using Brevo helper (never returns OTP in API response)
+setDeliveryOtpDispatcher(async ({ recipientEmail, otpPlain }) => {
+  if (!recipientEmail) {
+    return { delivered: false, channel: 'SMS', error: 'No recipient email supplied for OTP dispatch.' };
+  }
+  const result = await sendBrevoEmailOtp(recipientEmail, otpPlain, 'Valued Customer');
+  return { delivered: result.success, channel: 'EMAIL', error: result.error };
+});
+
+// Mount Phase 4 (Payments, Refunds, Gift Cards, Store Credits, Warehouses, Shipping, GST Invoices, Ledger, Reconciliation & Exports)
+const phase4Router = createPhase4Router({
+  getOrdersMap: () => orders,
+  getPaymentIntentsMap: () => paymentIntents,
+  sendOtpEmail: sendBrevoEmailOtp,
+});
+app.use('/api/v1', phase4Router);
+app.use('/api', phase4Router);
+
+// Mount Phase 5 (Seller Onboarding/Staff/Ads, Moderation, CMS, Suppliers/PO/GRN, Admin Staff RBAC & Real Analytics)
+const phase5Router = createPhase5Router({
+  getOrdersMap: () => orders,
+});
+app.use('/api/v1', phase5Router);
+app.use('/api', phase5Router);
 
 
 // ==========================================
@@ -357,11 +408,8 @@ interface CreateCashfreeOrderParams {
 }
 
 async function createCashfreeOrder(params: CreateCashfreeOrderParams) {
-  const { env, clientId, clientSecret, apiVersion, baseUrl } = getCashfreeConfig();
-
-  if (!clientId || !clientSecret) {
-    throw new Error('Cashfree credentials (CASHFREE_CLIENT_ID / CASHFREE_CLIENT_SECRET) missing in environment secrets.');
-  }
+  const { env, clientId, clientSecret } = getCashfreeConfig();
+  const transport = getCashfreeTransport();
 
   const rawPhone = (params.customerPhone || '9876543210').replace(/\D/g, '');
   const formattedPhone = rawPhone.length >= 10 ? rawPhone.slice(-10) : '9876543210';
@@ -393,48 +441,18 @@ async function createCashfreeOrder(params: CreateCashfreeOrderParams) {
     order_note: `Prime Bazaar Retail Order ${params.orderId}`,
   };
 
-  const response = await fetch(`${baseUrl}/orders`, {
-    method: 'POST',
-    headers: {
-      'x-client-id': clientId,
-      'x-client-secret': clientSecret,
-      'x-api-version': apiVersion,
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-    },
-    body: JSON.stringify(orderPayload),
-  });
-
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.message || `Cashfree Error ${response.status} (${env})`);
+  try {
+    return await transport.createOrder(orderPayload);
+  } catch (err: any) {
+    if (!clientId || !clientSecret) {
+      throw new Error(err?.message || 'Cashfree credentials (CASHFREE_CLIENT_ID / CASHFREE_CLIENT_SECRET) missing in environment secrets.');
+    }
+    throw new Error(err?.message || `Cashfree Error (${env})`);
   }
-
-  return data;
 }
 
 async function getCashfreeOrderStatus(orderId: string) {
-  const { clientId, clientSecret, apiVersion, baseUrl } = getCashfreeConfig();
-
-  if (!clientId || !clientSecret) {
-    throw new Error('Cashfree credentials missing in environment secrets.');
-  }
-
-  const response = await fetch(`${baseUrl}/orders/${encodeURIComponent(orderId)}`, {
-    method: 'GET',
-    headers: {
-      'x-client-id': clientId,
-      'x-client-secret': clientSecret,
-      'x-api-version': apiVersion,
-      'Accept': 'application/json',
-    },
-  });
-
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.message || `Cashfree Status Error ${response.status}`);
-  }
-  return data;
+  return getCashfreeTransport().getOrderStatus(orderId);
 }
 
 // ==========================================
@@ -482,8 +500,14 @@ interface DBOrder {
   totalAmount: number;
   discountAmount: number;
   shippingFee: number;
+  taxAmount?: number;
+  giftCardAmount?: number;
+  storeCreditAmount?: number;
+  finalGatewayPayable?: number;
+  splitWarehousePlan?: any[];
+  idempotencyKey?: string;
   status: 'confirmed' | 'processing' | 'shipped' | 'out_for_delivery' | 'delivered' | 'cancelled' | 'returned';
-  paymentMethod: 'cod' | 'upi' | 'card' | 'netbanking' | 'cashfree';
+  paymentMethod: 'cod' | 'upi' | 'card' | 'netbanking' | 'cashfree' | 'WALLET_ONLY';
   paymentStatus: 'PAID' | 'PENDING' | 'REFUNDED' | 'FAILED' | 'PARTIAL_REFUND';
   transactionId?: string;
   invoiceNumber: string;
@@ -1086,6 +1110,52 @@ app.post('/api/auth/admin/login', (req, res) => {
     });
   }
 
+  // 1. Check granular AdminStaffMember directory first when email is provided
+  if (typeof email === 'string' && email.trim()) {
+    const staffAuth = authenticateAdminStaff(email.trim(), password);
+    if (staffAuth) {
+      const assignedRole: UserRole = staffAuth.member.roleName === 'SUPER_ADMIN' ? 'SUPER_ADMIN' : 'ADMIN';
+      const session = createSession({
+        userId: staffAuth.member.id,
+        role: assignedRole,
+        email: staffAuth.member.email,
+        name: staffAuth.member.name,
+      });
+      adminSessionPermissionMap.set(session.token, {
+        staffId: staffAuth.member.id,
+        roleName: staffAuth.member.roleName,
+        permissions: staffAuth.permissions,
+      });
+
+      recordAuditLog({
+        actorType: 'ADMIN',
+        actorId: staffAuth.member.id,
+        actorName: staffAuth.member.name,
+        actorRole: staffAuth.member.roleName,
+        action: 'ADMIN_STAFF_LOGIN',
+        entityType: 'SESSION',
+        entityId: staffAuth.member.id,
+        details: `Admin staff ${staffAuth.member.email} (${staffAuth.member.roleName}) signed in.`,
+        legacyAuditSink: dbAuditLogs,
+      });
+
+      return res.json({
+        success: true,
+        token: session.token,
+        user: {
+          id: staffAuth.member.id,
+          name: staffAuth.member.name,
+          email: staffAuth.member.email,
+          role: assignedRole,
+          staffRole: staffAuth.member.roleName,
+          permissions: staffAuth.permissions,
+          isLoggedIn: true,
+        },
+      });
+    }
+  }
+
+  // 2. Super Admin pass verification
   const envPass = (process.env.ADMIN_ACCESS_PASS || '').trim();
   const isValid = envPass
     ? safeCompareStrings(password, envPass)
@@ -1106,16 +1176,16 @@ app.post('/api/auth/admin/login', (req, res) => {
     name: 'Super Admin',
   });
 
-  dbAuditLogs.push({
-    id: `audit-${Date.now()}`,
+  recordAuditLog({
     actorType: 'ADMIN',
     actorId: 'admin-super',
     actorName: adminEmail,
+    actorRole: 'SUPER_ADMIN',
     action: 'ADMIN_LOGIN',
     entityType: 'SESSION',
     entityId: session.userId,
     details: 'Administrator signed in via verified session.',
-    timestamp: new Date().toISOString(),
+    legacyAuditSink: dbAuditLogs,
   });
 
   res.json({
@@ -1126,6 +1196,8 @@ app.post('/api/auth/admin/login', (req, res) => {
       name: 'Super Admin',
       email: adminEmail,
       role: 'SUPER_ADMIN',
+      staffRole: 'SUPER_ADMIN',
+      permissions: ['*'],
       isLoggedIn: true,
     },
   });
@@ -1285,6 +1357,26 @@ app.post('/api/payments/verify', async (req, res) => {
 
   if (intent) {
     intent.status = 'SUCCESS';
+  }
+
+  // Update matching PaymentRecord if one exists for this Cashfree/order reference
+  const resolvedCfRef = cashfreeOrderState?.order_id || intent?.cashfreeOrderId || cashfreeOrderId;
+  if (resolvedCfRef) {
+    for (const p of payments.values()) {
+      if (p.gatewayReference === resolvedCfRef) {
+        p.status = 'PAID';
+        p.cfPaymentId = cashfreeOrderState?.cf_order_id ? String(cashfreeOrderState.cf_order_id) : p.cfPaymentId;
+        p.rawProviderStatus = cashfreeOrderState?.order_status || 'PAID';
+        p.verifiedAt = new Date().toISOString();
+        p.updatedAt = p.verifiedAt;
+        const linkedOrder = orders.get(p.orderId);
+        if (linkedOrder && linkedOrder.paymentStatus !== 'PAID') {
+          linkedOrder.paymentStatus = 'PAID';
+          linkedOrder.transactionId = p.cfPaymentId ? `CF-${p.cfPaymentId}` : p.gatewayReference;
+          await commitOrderReservations(linkedOrder.id);
+        }
+      }
+    }
   }
 
   const transactionId =
@@ -1474,6 +1566,28 @@ app.post('/api/payments/cashfree-webhook', async (req, res) => {
       if (!matchedOrder.transactionId) {
         matchedOrder.transactionId = paymentId ? `CF-PAY-${paymentId}` : `CF-${cfOrderId}`;
       }
+      await commitOrderReservations(matchedOrder.id);
+      if (Number(matchedOrder.finalGatewayPayable ?? matchedOrder.totalAmount) > 0) {
+        postBalancedLedgerGroup({
+          referenceNumber: `WEBHOOK_PAY:${cfOrderId}`,
+          description: `Cashfree webhook payment capture for ${matchedOrder.orderNumber}`,
+          createdBy: 'cashfree-webhook',
+          orderId: matchedOrder.id,
+          lines: [
+            { accountCode: ACCOUNT_CODES.GATEWAY_RECEIVABLE, entryType: 'DEBIT', amount: roundMoney(reportedAmount || matchedOrder.finalGatewayPayable || matchedOrder.totalAmount) },
+            { accountCode: ACCOUNT_CODES.PLATFORM_ESCROW_CASH, entryType: 'CREDIT', amount: roundMoney(reportedAmount || matchedOrder.finalGatewayPayable || matchedOrder.totalAmount) },
+          ],
+        });
+      }
+    }
+    for (const p of payments.values()) {
+      if (p.gatewayReference === cfOrderId || (matchedOrder && p.orderId === matchedOrder.id)) {
+        p.status = 'PAID';
+        if (paymentId) p.cfPaymentId = paymentId;
+        p.rawProviderStatus = reportedStatus || 'SUCCESS';
+        p.verifiedAt = new Date().toISOString();
+        p.updatedAt = p.verifiedAt;
+      }
     }
   } else if (isFailedEvent || isDroppedOrCancelled) {
     if (matchedIntent && matchedIntent.status !== 'SUCCESS') {
@@ -1484,12 +1598,38 @@ app.post('/api/payments/cashfree-webhook', async (req, res) => {
       if (isDroppedOrCancelled) {
         matchedOrder.status = 'cancelled';
       }
+      await releaseOrderReservations(matchedOrder.id, reportedStatus || 'PAYMENT_FAILED');
+    }
+    for (const p of payments.values()) {
+      if (p.gatewayReference === cfOrderId || (matchedOrder && p.orderId === matchedOrder.id && p.status !== 'PAID')) {
+        p.status = isDroppedOrCancelled ? 'CANCELLED' : 'FAILED';
+        p.rawProviderStatus = reportedStatus || 'FAILED';
+        p.updatedAt = new Date().toISOString();
+      }
     }
   } else if (isRefundEvent) {
+    const refundRef = String(refundObj.refund_id || refundObj.cf_refund_id || cfOrderId);
+    const updatedRefund = applyWebhookRefundUpdate({
+      refundReference: refundRef,
+      orderId: matchedOrder?.id,
+      refundStatus: reportedStatus || 'SUCCESS',
+      payload,
+      maxCapForMode: matchedOrder
+        ? Math.max(
+            getCapturedPaidAmountForOrder(matchedOrder.id),
+            Number(matchedOrder.finalGatewayPayable ?? matchedOrder.totalAmount)
+          )
+        : Number(reportedAmount || 0),
+      onOrderRefundStateChange: (newStatus) => {
+        if (matchedOrder) matchedOrder.paymentStatus = newStatus;
+      },
+    });
     if (matchedOrder) {
       const isPartial =
         reportedAmount > 0 && matchedOrder.totalAmount > 0 && reportedAmount < matchedOrder.totalAmount;
-      matchedOrder.paymentStatus = isPartial ? 'PARTIAL_REFUND' : 'REFUNDED';
+      if (!updatedRefund) {
+        matchedOrder.paymentStatus = isPartial ? 'PARTIAL_REFUND' : 'REFUNDED';
+      }
       matchedOrder.trackingCheckpoints.push({
         title: isPartial ? 'Partial Refund Processed' : 'Refund Processed via Cashfree',
         description: `Refund confirmed (${refundObj.cf_refund_id || cfOrderId})`,
@@ -1552,147 +1692,400 @@ app.get('/api/orders/:id', (req, res) => {
   res.json({ success: true, order });
 });
 
-app.post('/api/orders', (req, res) => {
-  const { 
-    items, 
-    address, 
-    paymentMethod, 
-    couponCode, 
-    coinsUsed = 0,
-    totalAmount,
-    discountAmount = 0,
-    transactionId
-  } = req.body;
+app.post('/api/orders', async (req, res) => {
+  try {
+    const {
+      items,
+      address,
+      paymentMethod = 'upi',
+      couponCode,
+      giftCardCode,
+      useStoreCredit = false,
+      requestedStoreCreditAmount,
+      coinsUsed = 0,
+      transactionId,
+      intentId,
+      cashfreeOrderId,
+      idempotencyKey,
+      buyerGstin,
+    } = req.body || {};
 
-  if (!items || items.length === 0) {
-    return res.status(400).json({ error: 'Order must contain at least 1 item' });
-  }
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ success: false, error: 'Order must contain at least 1 item' });
+    }
 
-  const orderId = generateId('ord');
-  const orderNumber = `PB-ORD-${Math.floor(10000 + Math.random() * 90000)}`;
-  const invoiceNumber = `PB-INV-2026-${Math.floor(10000 + Math.random() * 90000)}`;
-  const trackingNumber = `BD-${Math.floor(10000000 + Math.random() * 90000000)}`;
-
-  const now = new Date();
-  const dateStr = now.toLocaleDateString('en-IN', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-
-  const authUser = getAuthenticatedUser(req);
-  const newOrder: DBOrder = {
-    id: orderId,
-    orderNumber,
-    userId: authUser?.id,
-    customerEmail: authUser?.email,
-    date: dateStr,
-    items,
-    totalAmount: Number(totalAmount) || 1899,
-    discountAmount: Number(discountAmount) || 0,
-    shippingFee: (Number(totalAmount) || 1899) > 999 ? 0 : 49,
-    status: 'confirmed',
-    paymentMethod: paymentMethod || 'upi',
-    paymentStatus: paymentMethod === 'cod' ? 'PENDING' : 'PAID',
-    transactionId: transactionId || `PB-TXN-${(paymentMethod || 'COD').toUpperCase()}-${Date.now().toString(36).toUpperCase()}`,
-    invoiceNumber,
-    shippingAddress: address,
-    trackingNumber,
-    courierPartner: 'BlueDart Express',
-    deliveryPartnerName: 'Ramesh Verma',
-    deliveryPartnerPhone: '+91 98234 11223',
-    estimatedDelivery: 'Within 3-4 Business Days',
-    trackingCheckpoints: [
-      {
-        title: 'Order Placed & Verified',
-        description: 'Payment verified and order confirmed with merchant',
-        timestamp: dateStr,
-        done: true,
-        location: address?.city || 'Warehouse Hub',
-      },
-      {
-        title: 'Packed & Dispatched',
-        description: 'Seller packing items with tamper-evident security seal',
-        timestamp: 'Estimated within 12 hours',
-        done: false,
-        location: 'Merchant Fulfillment Hub',
-      },
-      {
-        title: 'In Transit via BlueDart',
-        description: 'Package en route through regional distribution hubs',
-        timestamp: 'Pending Dispatch',
-        done: false,
-        location: 'Sorting Hub',
-      },
-      {
-        title: 'Out for Delivery',
-        description: 'Delivery associate will contact via mobile OTP',
-        timestamp: 'Pending Delivery',
-        done: false,
-        location: address?.city || 'Destination Center',
-      },
-      {
-        title: 'Delivered',
-        description: 'Order handed over successfully',
-        timestamp: 'Pending',
-        done: false,
-        location: address?.street || 'Customer Address',
+    const cleanIdemKey = typeof idempotencyKey === 'string' && idempotencyKey.trim() ? idempotencyKey.trim() : undefined;
+    if (cleanIdemKey && orderIdempotencyMap.has(cleanIdemKey)) {
+      const existingOrder = orders.get(orderIdempotencyMap.get(cleanIdemKey)!);
+      if (existingOrder) {
+        return res.status(200).json({
+          success: true,
+          duplicate: true,
+          message: 'Idempotent replay returned existing order without double charging.',
+          order: existingOrder,
+        });
       }
-    ]
-  };
+    }
 
-  orders.set(orderId, newOrder);
+    const authUser = getAuthenticatedUser(req);
+    const resolvedUserId = authUser?.id || 'usr_demo123';
 
-  // Automatically split multi-vendor order into independent seller_orders suborders
-  const sellerSuborders = splitOrderIntoSellerOrders({
-    orderId,
-    orderNumber,
-    items,
-    shippingAddress: address,
-    customerName: address?.fullName,
-    customerPhone: address?.phone,
-  });
+    // 1. Server-Authoritative Pricing Evaluation (never trust client price/discount/total)
+    const quote = calculateAuthoritativeQuote({
+      items,
+      couponCode,
+      giftCardCode,
+      useStoreCredit: Boolean(useStoreCredit),
+      requestedStoreCreditAmount:
+        requestedStoreCreditAmount !== undefined ? Number(requestedStoreCreditAmount) : undefined,
+      userId: resolvedUserId,
+      coinsUsed: Number(coinsUsed || 0),
+    });
 
-  // Reward 5% Prime Coins on successful order
-  const earnedCoins = Math.floor(newOrder.totalAmount * 0.05);
+    const orderId = generateId('ord');
+    const orderNumber = `PB-ORD-${Math.floor(10000 + Math.random() * 90000)}`;
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('en-IN', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
 
-  res.status(201).json({
-    success: true,
-    message: 'Order created and confirmed successfully',
-    order: newOrder,
-    sellerSuborders,
-    earnedCoins,
-  });
+    // 2. Atomic Multi-Warehouse Stock Reservation (supports split-warehouse fulfillment)
+    const stockPlan = await reserveStockForOrder({
+      orderId,
+      items: quote.items.map((it) => ({
+        productId: it.productId,
+        variantId: it.variantId,
+        sku: it.sku,
+        title: it.title,
+        sellerId: it.sellerId,
+        quantity: it.quantity,
+      })),
+      destinationState: address?.state,
+      destinationPincode: address?.pinCode,
+    });
+
+    // 3. Apply Gift Card & Store Credit atomically after stock lock succeeds
+    let gcRedeemed = 0;
+    let scRedeemed = 0;
+    try {
+      const walletRes = await applyWalletsToOrder({
+        orderId,
+        userId: resolvedUserId,
+        giftCardCode,
+        giftCardAmount: quote.giftCardAmount,
+        storeCreditAmount: quote.storeCreditAmount,
+      });
+      gcRedeemed = walletRes.gcRedeemed;
+      scRedeemed = walletRes.scRedeemed;
+    } catch (walletErr) {
+      await releaseOrderReservations(orderId, 'WALLET_APPLICATION_FAILED');
+      throw walletErr;
+    }
+
+    // 4. Payment Verification Gate (no trusting client "PAID" status for Cashfree)
+    const effectiveMethod = quote.finalGatewayPayable <= 0 ? 'WALLET_ONLY' : paymentMethod;
+    const matchedIntent = intentId && paymentIntents.has(intentId) ? paymentIntents.get(intentId)! : null;
+    const resolvedGatewayRef =
+      cashfreeOrderId ||
+      matchedIntent?.cashfreeOrderId ||
+      transactionId ||
+      `PB-TXN-${String(effectiveMethod).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`;
+
+    let resolvedPaymentStatus: DBOrder['paymentStatus'] = 'PENDING';
+    let cfState: any = null;
+
+    if (quote.finalGatewayPayable <= 0) {
+      resolvedPaymentStatus = 'PAID';
+    } else if (effectiveMethod === 'cod') {
+      resolvedPaymentStatus = 'PENDING';
+    } else if (effectiveMethod === 'cashfree') {
+      if (matchedIntent?.status === 'SUCCESS') {
+        resolvedPaymentStatus = 'PAID';
+      } else if (cashfreeOrderId || matchedIntent?.cashfreeOrderId) {
+        try {
+          cfState = await getCashfreeTransport().getOrderStatus(cashfreeOrderId || matchedIntent!.cashfreeOrderId!);
+          if (cfState?.order_status === 'PAID') {
+            resolvedPaymentStatus = 'PAID';
+            if (matchedIntent) matchedIntent.status = 'SUCCESS';
+          }
+        } catch {
+          resolvedPaymentStatus = 'PENDING';
+        }
+      }
+    } else {
+      // Standard card/upi/netbanking intent verification
+      resolvedPaymentStatus = matchedIntent && matchedIntent.status !== 'SUCCESS' ? 'PENDING' : 'PAID';
+    }
+
+    if (resolvedPaymentStatus === 'PAID') {
+      await commitOrderReservations(orderId);
+    }
+
+    const resolvedTotalAmount = quote.grossPayableBeforeWallet;
+    const trackingNumber = 'PENDING_CARRIER';
+
+    // 5. Split Order into Seller Suborders + Commission Escrow Ledger
+    const enrichedItems = quote.items.map((it) => ({
+      productId: it.productId,
+      variantId: it.variantId,
+      selectedSize: it.selectedSize,
+      selectedColor: it.selectedColor,
+      quantity: it.quantity,
+      priceAtPurchase: it.unitPrice,
+      lineDiscount: it.lineDiscount,
+      product: {
+        id: it.productId,
+        title: it.title,
+        brand: it.brand,
+        category: it.category,
+        price: it.unitPrice,
+        sku: it.sku,
+        gstRate: it.gstRate,
+        sellerId: it.sellerId,
+        sellerName: it.sellerName,
+        images: [it.image],
+      },
+    }));
+
+    const sellerSuborders = splitOrderIntoSellerOrders({
+      orderId,
+      orderNumber,
+      items: enrichedItems,
+      shippingAddress: address,
+      customerName: address?.fullName,
+      customerPhone: address?.phone,
+    });
+
+    // 6. Issue Immutable Sequential GST Tax Invoice(s) per Seller Suborder
+    const issuedInvoices = sellerSuborders.map((so, idx) =>
+      issueTaxInvoice({
+        orderId,
+        sellerOrderId: so.id,
+        sellerId: so.sellerId,
+        buyerUserId: resolvedUserId,
+        buyerName: address?.fullName || authUser?.name || 'Verified Shopper',
+        buyerEmail: authUser?.email,
+        buyerPhone: address?.phone || authUser?.phone,
+        buyerGstin,
+        shippingAddress: address,
+        warehouseState: stockPlan.splitWarehousePlan[0]?.warehouseState,
+        shippingFee: idx === 0 ? quote.deliveryFee : 0,
+        items: so.items.map((si) => ({
+          productId: si.productId,
+          title: si.title,
+          gstRate: si.taxRate,
+          quantity: si.quantity,
+          unitPrice: si.unitPrice,
+        })),
+        issuedBy: resolvedUserId,
+      })
+    );
+
+    const primaryInvoiceNumber = issuedInvoices[0]?.invoiceNumber || `PB-INV-2026-${Math.floor(10000 + Math.random() * 90000)}`;
+
+    const newOrder: DBOrder = {
+      id: orderId,
+      orderNumber,
+      userId: authUser?.id,
+      customerEmail: authUser?.email,
+      date: dateStr,
+      items: enrichedItems,
+      totalAmount: resolvedTotalAmount,
+      discountAmount: quote.discountAmount,
+      shippingFee: quote.deliveryFee,
+      taxAmount: quote.taxAmount,
+      giftCardAmount: gcRedeemed,
+      storeCreditAmount: scRedeemed,
+      finalGatewayPayable: quote.finalGatewayPayable,
+      splitWarehousePlan: stockPlan.splitWarehousePlan,
+      idempotencyKey: cleanIdemKey,
+      status: 'confirmed',
+      paymentMethod: effectiveMethod as any,
+      paymentStatus: resolvedPaymentStatus,
+      transactionId:
+        effectiveMethod === 'cashfree' && cfState?.cf_order_id
+          ? `CF-${cfState.cf_order_id}`
+          : resolvedGatewayRef,
+      invoiceNumber: primaryInvoiceNumber,
+      shippingAddress: address,
+      trackingNumber,
+      courierPartner: 'Awaiting Carrier Manifest',
+      deliveryPartnerName: 'Assigned upon dispatch',
+      deliveryPartnerPhone: '+91 98234 11223',
+      estimatedDelivery: 'Within 3-4 Business Days',
+      trackingCheckpoints: [
+        {
+          title: 'Order Placed & Stock Reserved',
+          description: `Inventory locked across ${stockPlan.splitWarehousePlan.length} fulfillment hub(s)`,
+          timestamp: dateStr,
+          done: true,
+          location: stockPlan.splitWarehousePlan[0]?.warehouseName || address?.city || 'Fulfillment Hub',
+        },
+        {
+          title: 'Packed & Carrier Label Assigned',
+          description: 'Awaiting seller pack & carrier manifest',
+          timestamp: 'Pending Dispatch',
+          done: false,
+          location: 'Merchant Fulfillment Hub',
+        },
+        {
+          title: 'Out for Delivery',
+          description: 'Customer will verify handover via cryptographic Delivery OTP',
+          timestamp: 'Pending Delivery',
+          done: false,
+          location: address?.city || 'Destination Center',
+        },
+        {
+          title: 'Delivered',
+          description: 'Order handed over upon OTP confirmation',
+          timestamp: 'Pending',
+          done: false,
+          location: address?.street || 'Customer Address',
+        },
+      ],
+    };
+
+    orders.set(orderId, newOrder);
+    if (cleanIdemKey) {
+      orderIdempotencyMap.set(cleanIdemKey, orderId);
+    }
+
+    // 7. Persist PaymentRecord & Gateway Ledger Entry
+    const payId = `pay_${crypto.randomBytes(5).toString('hex')}`;
+    const gatewayType =
+      effectiveMethod === 'WALLET_ONLY'
+        ? 'WALLET_ONLY'
+        : effectiveMethod === 'cod'
+        ? 'COD'
+        : 'CASHFREE';
+
+    payments.set(payId, {
+      id: payId,
+      orderId,
+      idempotencyKey: cleanIdemKey,
+      gateway: gatewayType,
+      gatewayReference: resolvedGatewayRef,
+      cfPaymentId: cfState?.cf_order_id ? String(cfState.cf_order_id) : undefined,
+      paymentSessionId: matchedIntent?.paymentSessionId,
+      paymentMethod: effectiveMethod,
+      amount: quote.finalGatewayPayable,
+      status: resolvedPaymentStatus === 'PAID' ? 'PAID' : 'PENDING',
+      attemptNumber: 1,
+      verifiedAt: resolvedPaymentStatus === 'PAID' ? now.toISOString() : undefined,
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+    });
+
+    if (resolvedPaymentStatus === 'PAID' && quote.finalGatewayPayable > 0) {
+      postBalancedLedgerGroup({
+        referenceNumber: `PAY:${resolvedGatewayRef}`,
+        description: `Gateway payment captured for order ${orderNumber}`,
+        createdBy: resolvedUserId,
+        orderId,
+        paymentId: payId,
+        lines: [
+          { accountCode: ACCOUNT_CODES.GATEWAY_RECEIVABLE, entryType: 'DEBIT', amount: quote.finalGatewayPayable },
+          { accountCode: ACCOUNT_CODES.PLATFORM_ESCROW_CASH, entryType: 'CREDIT', amount: quote.finalGatewayPayable },
+        ],
+      });
+    }
+
+    const earnedCoins = Math.floor(newOrder.totalAmount * 0.05);
+
+    res.status(201).json({
+      success: true,
+      message: 'Order created and inventory reserved successfully',
+      order: newOrder,
+      quote,
+      sellerSuborders,
+      invoices: issuedInvoices,
+      splitWarehousePlan: stockPlan.splitWarehousePlan,
+      earnedCoins,
+    });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: err?.message || 'Unable to process checkout order.' });
+  }
 });
 
+app.post('/api/orders/:id/cancel', async (req, res) => {
+  try {
+    const order = orders.get(req.params.id);
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
 
-app.post('/api/orders/:id/cancel', (req, res) => {
-  const order = orders.get(req.params.id);
-  if (!order) {
-    return res.status(404).json({ error: 'Order not found' });
+    if (order.status === 'delivered') {
+      return res.status(400).json({ error: 'Delivered orders cannot be cancelled. Please initiate a return.' });
+    }
+    if (order.status === 'cancelled') {
+      return res.json({ success: true, message: 'Order already cancelled.', order });
+    }
+
+    const reason = String(req.body?.reason || 'Cancelled by customer');
+    await releaseOrderReservations(order.id, reason);
+
+    order.status = 'cancelled';
+
+    let refundResult: any = null;
+    if (order.paymentStatus === 'PAID' || order.paymentStatus === 'PARTIAL_REFUND') {
+      const requestedMode = req.body?.refundMode === 'STORE_CREDIT' ? 'STORE_CREDIT' : 'ORIGINAL_METHOD';
+      const refundAmount = Number(order.finalGatewayPayable ?? order.totalAmount);
+      const hasGatewayPayment = Array.from(payments.values()).some(
+        (p) => p.orderId === order.id && p.gateway === 'CASHFREE' && p.status === 'PAID'
+      );
+
+      if (requestedMode === 'STORE_CREDIT' || hasGatewayPayment) {
+        refundResult = await initiateOrderRefund({
+          orderId: order.id,
+          orderUserId: order.userId || 'usr_demo123',
+          orderFinalPaidAmount: refundAmount,
+          orderTotalWithWallets: order.totalAmount,
+          paymentMethod: order.paymentMethod,
+          amount: requestedMode === 'STORE_CREDIT' ? order.totalAmount : refundAmount,
+          refundMode: requestedMode,
+          reason,
+          idempotencyKey: `cancel_${order.id}`,
+          actorId: req.auth?.userId || order.userId || 'customer',
+          actorName: req.auth?.name || 'Customer Cancellation',
+          onOrderRefundStateChange: (newStatus) => {
+            order.paymentStatus = newStatus;
+          },
+        });
+      }
+      // Note: ORIGINAL_METHOD Cashfree refunds stay in PENDING until provider webhook / sync confirms!
+    } else {
+      order.paymentStatus = 'FAILED';
+    }
+
+    order.trackingCheckpoints.push({
+      title:
+        refundResult?.refund?.status === 'SUCCESS'
+          ? 'Order Cancelled & Refunded'
+          : order.paymentStatus === 'PAID'
+          ? 'Order Cancelled — Refund Pending Confirmation'
+          : 'Order Cancelled & Stock Released',
+      description: reason,
+      timestamp: new Date().toLocaleTimeString(),
+      done: true,
+      location: 'Central Order Desk',
+    });
+
+    res.json({
+      success: true,
+      message:
+        refundResult?.refund?.status === 'PENDING'
+          ? 'Order cancelled and inventory released. Refund initiated (awaiting gateway confirmation).'
+          : 'Order cancelled and inventory released.',
+      order,
+      refund: refundResult?.refund || null,
+    });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: err?.message || 'Unable to cancel order.' });
   }
-
-  if (order.status === 'delivered') {
-    return res.status(400).json({ error: 'Delivered orders cannot be cancelled. Please initiate a return.' });
-  }
-
-  order.status = 'cancelled';
-  order.paymentStatus = 'REFUNDED';
-  order.trackingCheckpoints.push({
-    title: 'Order Cancelled & Refund Initiated',
-    description: req.body.reason || 'Cancelled by customer',
-    timestamp: new Date().toLocaleTimeString(),
-    done: true,
-    location: 'Central Order Desk',
-  });
-
-  res.json({
-    success: true,
-    message: 'Order cancelled successfully. Refund initiated to original payment source.',
-    order,
-  });
 });
 
 app.post('/api/orders/:id/return', (req, res) => {
@@ -1988,23 +2381,21 @@ app.post(
   }
 );
 
-app.get('/api/admin/metrics', requireAuth, requireRole('ADMIN', 'SUPER_ADMIN'), (req, res) => {
-  let gmv = 0;
-  for (const o of orders.values()) {
-    if (o.status !== 'cancelled') {
-      gmv += o.totalAmount;
-    }
-  }
+app.get('/api/admin/metrics', requireAuth, requireRole('ADMIN', 'SUPER_ADMIN'), (_req, res) => {
+  const analytics = computeRealPlatformAnalytics({
+    ordersList: Array.from(orders.values()),
+  });
 
   res.json({
-    grossMerchandiseValue: gmv + 4825000,
-    totalOrders: orders.size + 1420,
-    activeVendors: serverSellers.size,
-    activeListings: 124,
-    platformTakeRate: '12%',
-    commissionCollected: Math.round((gmv + 4825000) * 0.12),
-    fulfillmentRate: '99.2%',
-    returnRate: '4.1%',
+    grossMerchandiseValue: analytics.grossMerchandiseValue,
+    totalOrders: analytics.totalOrders,
+    activeVendors: analytics.activeSellers,
+    activeListings: analytics.activeListings,
+    platformTakeRate: analytics.platformTakeRate,
+    commissionCollected: analytics.commissionRevenue,
+    fulfillmentRate: analytics.fulfillmentRate,
+    returnRate: analytics.returnRate,
+    ledgerBalanced: analytics.ledgerBalanced,
   });
 });
 
