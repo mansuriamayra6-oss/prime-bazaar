@@ -49,7 +49,7 @@ jobs:
       # 6. Upload release to VPS
       - name: Upload release
         env:
-          TARGET: ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}
+          TARGET: root@200.97.161.238
           RELEASE: /opt/primebazaar-releases/${{ github.sha }}
         run: |
           ssh "$TARGET" "mkdir -p '$RELEASE'"
@@ -64,7 +64,7 @@ jobs:
       # 7. Activate production release
       - name: Activate release
         env:
-          TARGET: ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}
+          TARGET: root@200.97.161.238
           SHA: ${{ github.sha }}
         run: |
           ssh "$TARGET" "SHA=$SHA bash -s" <<'EOF'
