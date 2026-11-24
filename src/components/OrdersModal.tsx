@@ -236,11 +236,11 @@ export const OrdersModal: React.FC = () => {
 
               <div className="flex items-center justify-between border-b pb-4">
                 <div className="flex items-center gap-3">
-                  <div className="px-3 py-1.5 rounded-2xl bg-white border border-zinc-200 shadow-xs flex items-center">
+                  <div className="p-1.5 rounded-2xl bg-white border border-zinc-200 shadow-xs flex items-center">
                     <img
-                      src="/assets/aistudio/Prime_Bazaar_Shopping_Logo_0c82d149.png"
+                      src="/assets/aistudio/IMG_20261124_134619_98e88ce3.png"
                       alt="Prime Bazaar"
-                      className="h-11 w-auto object-contain"
+                      className="h-11 w-11 object-contain"
                     />
                   </div>
                   <div>

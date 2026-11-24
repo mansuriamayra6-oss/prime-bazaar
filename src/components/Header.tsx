@@ -76,12 +76,20 @@ export const Header: React.FC = () => {
             className="text-left group flex items-center focus:outline-none transition-transform active:scale-98 shrink-0"
             aria-label="Prime Bazaar Home"
           >
-            <div className="h-12 sm:h-15 px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-2xl bg-white border border-zinc-200/90 shadow-xs flex items-center justify-center transition-all group-hover:shadow-md">
+            <div className="h-12 sm:h-14 px-2.5 sm:px-3 py-1.5 rounded-2xl bg-white border border-zinc-200/90 shadow-xs flex items-center gap-2.5 transition-all group-hover:shadow-md">
               <img
-                src="/assets/aistudio/Prime_Bazaar_Shopping_Logo_0c82d149.png"
-                alt="Prime Bazaar - Shop Smarter. Live Better."
-                className="h-9 sm:h-12 md:h-13 w-auto object-contain transition-transform group-hover:scale-102"
+                src="/assets/aistudio/IMG_20261124_134619_98e88ce3.png"
+                alt="Prime Bazaar Logo"
+                className="h-9 sm:h-10 w-9 sm:w-10 object-contain shrink-0 transition-transform group-hover:scale-105"
               />
+              <div className="hidden xs:flex sm:flex flex-col leading-none pr-0.5">
+                <span className="text-sm sm:text-base font-extrabold tracking-tight text-zinc-900 font-display">
+                  Prime <span className="text-emerald-700">Bazaar</span>
+                </span>
+                <span className="text-[9px] sm:text-[10px] font-semibold text-zinc-500 tracking-tight mt-0.5">
+                  Shop Smarter. Live Better.
+                </span>
+              </div>
             </div>
           </button>
 

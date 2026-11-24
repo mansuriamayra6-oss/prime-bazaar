@@ -11,12 +11,20 @@ export const Footer: React.FC = () => {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-12">
           {/* Col 1: Brand & Promise */}
           <div className="col-span-2 md:col-span-1 space-y-3">
-            <div className="inline-block px-3.5 py-2 rounded-2xl bg-white border border-zinc-200/90 shadow-sm">
+            <div className="inline-flex items-center gap-3 px-3.5 py-2 rounded-2xl bg-white border border-zinc-200/90 shadow-sm">
               <img
-                src="/assets/aistudio/Prime_Bazaar_Shopping_Logo_0c82d149.png"
-                alt="Prime Bazaar - Shop Smarter. Live Better."
-                className="h-12 sm:h-14 w-auto object-contain"
+                src="/assets/aistudio/IMG_20261124_134619_98e88ce3.png"
+                alt="Prime Bazaar Logo"
+                className="h-11 w-11 object-contain shrink-0"
               />
+              <div className="flex flex-col leading-none pr-1">
+                <span className="text-base font-extrabold tracking-tight text-zinc-900 font-display">
+                  Prime <span className="text-emerald-700">Bazaar</span>
+                </span>
+                <span className="text-[10px] font-semibold text-zinc-500 mt-0.5">
+                  Shop Smarter. Live Better.
+                </span>
+              </div>
             </div>
             <p className="text-zinc-500 leading-relaxed text-[11px]">
               India’s high-velocity social fashion marketplace. Bridging authentic artisan weavers and contemporary streetwear labels directly to conscious shoppers.
