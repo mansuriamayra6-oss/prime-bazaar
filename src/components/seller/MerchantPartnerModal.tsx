@@ -137,17 +137,44 @@ export const MerchantPartnerModal: React.FC = () => {
         return;
       }
       setIsVerifyingOtp(false);
+
+      const matchedSeller = sellers.find(s =>
+        s.phone?.includes(target) || s.email?.toLowerCase() === target.toLowerCase()
+      ) || sellers[0];
+
+      setCurrentSellerId(matchedSeller.id);
+      setActivePortal('seller');
+      setIsMerchantAuthOpen(false);
+      notify(`Welcome to Prime Bazaar Merchant Studio, ${matchedSeller.businessName}!`);
+      return;
     }
 
-    // Pick the first active seller or match
-    const matchedSeller = sellers.find(s =>
-      s.phone?.includes(target) || s.email?.toLowerCase() === target.toLowerCase()
-    ) || sellers[0];
+    if (!target || !password) {
+      notify('Please enter your registered email or mobile number and password.');
+      return;
+    }
 
-    setCurrentSellerId(matchedSeller.id);
-    setActivePortal('seller');
-    setIsMerchantAuthOpen(false);
-    notify(`Welcome to Prime Bazaar Merchant Studio, ${matchedSeller.businessName}!`);
+    setIsVerifyingOtp(true);
+    setOtpError(null);
+    try {
+      const res = await api.v1.auth.sellerLogin({
+        emailOrPhone: target,
+        password,
+      });
+      const loggedInSellerId = res.seller?.id;
+      if (loggedInSellerId) {
+        setCurrentSellerId(loggedInSellerId);
+      }
+      setActivePortal('seller');
+      setIsMerchantAuthOpen(false);
+      notify(`Welcome to Prime Bazaar Merchant Studio, ${res.seller?.businessName || 'Merchant'}!`);
+    } catch (err: any) {
+      const msg = err.message || 'Invalid seller credentials.';
+      setOtpError(msg);
+      notify(msg);
+    } finally {
+      setIsVerifyingOtp(false);
+    }
   };
 
   return (

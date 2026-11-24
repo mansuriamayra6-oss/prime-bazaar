@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useMarketplace } from '../context/MarketplaceContext';
 import { usePWAInstall } from '../hooks/usePWAInstall';
+import { filterProductsBySearch, getCategoryDisplayName } from '../utils/productSearch';
 import { 
   ShoppingBag, 
   Heart, 
@@ -22,13 +23,21 @@ import {
   Database,
   Building2,
   Smartphone,
-  Bell
+  Bell,
+  X,
+  Tag,
+  ArrowRight
 } from 'lucide-react';
 
 export const Header: React.FC = () => {
   const {
     activePortal,
     setActivePortal,
+    products,
+    setSelectedProduct,
+    selectedCategory,
+    setSelectedCategory,
+    formatPrice,
     cart,
     wishlist,
     openWishlist,
@@ -66,6 +75,65 @@ export const Header: React.FC = () => {
   const { isInstallable, isInstalled } = usePWAInstall();
   const totalCartItems = cart.reduce((sum, item) => sum + item.quantity, 0);
 
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
+        setIsSearchFocused(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const trimmedQuery = searchQuery.trim();
+
+  const matchedProducts = useMemo(() => {
+    if (!trimmedQuery) return [];
+    return filterProductsBySearch(products, trimmedQuery);
+  }, [products, trimmedQuery]);
+
+  const matchedCategories = useMemo(() => {
+    if (!trimmedQuery) return [];
+    const q = trimmedQuery.toLowerCase();
+    const categoryCounts = new Map<string, number>();
+
+    products.forEach(p => {
+      const cat = p.category || '';
+      const displayName = getCategoryDisplayName(cat).toLowerCase();
+      if (cat.toLowerCase().includes(q) || displayName.includes(q)) {
+        categoryCounts.set(cat, (categoryCounts.get(cat) || 0) + 1);
+      }
+    });
+
+    return Array.from(categoryCounts.entries())
+      .map(([id, count]) => ({
+        id,
+        label: getCategoryDisplayName(id),
+        count,
+      }))
+      .slice(0, 5);
+  }, [products, trimmedQuery]);
+
+  const scrollToCatalog = () => {
+    const catalogEl = document.getElementById('catalog-section');
+    if (catalogEl) {
+      catalogEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value);
+    setIsSearchFocused(true);
+  };
+
+  const handleClearSearch = () => {
+    setSearchQuery('');
+    setIsSearchFocused(false);
+  };
+
   return (
     <header className="sticky top-0 z-40 bg-white/95 dark:bg-zinc-950/95 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800 transition-colors pt-[env(safe-area-inset-top,0px)]">
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 sm:h-20 flex items-center justify-between gap-2 sm:gap-4 lg:gap-6">
@@ -87,22 +155,160 @@ export const Header: React.FC = () => {
 
           {/* Search bar directly beside the logo */}
           {activePortal === 'customer' && (
-            <div className="relative flex-1 min-w-[130px] max-w-xs sm:max-w-sm md:max-w-md flex items-center">
+            <div ref={searchContainerRef} className="relative flex-1 min-w-[130px] max-w-xs sm:max-w-sm md:max-w-md flex items-center">
               <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-2.5 sm:left-3 pointer-events-none" />
               <input
                 type="text"
-                placeholder="Search kurti, jacket, sneakers..."
+                role="searchbox"
+                aria-label="Search products by name or category"
+                placeholder="Search by product name or category..."
                 value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                className="w-full pl-8 sm:pl-9 pr-7 sm:pr-9 py-1.5 sm:py-2 text-xs bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-xl border border-zinc-200/80 dark:border-zinc-700/80 focus:border-emerald-500 dark:focus:border-emerald-500 focus:outline-none transition-all shadow-2xs font-medium placeholder:text-zinc-400"
+                onFocus={() => setIsSearchFocused(true)}
+                onChange={e => handleSearchChange(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Escape') {
+                    setIsSearchFocused(false);
+                  } else if (e.key === 'Enter' && trimmedQuery) {
+                    setIsSearchFocused(false);
+                    scrollToCatalog();
+                  }
+                }}
+                className={`w-full pl-8 sm:pl-9 ${trimmedQuery ? 'pr-14 sm:pr-16' : 'pr-7 sm:pr-9'} py-1.5 sm:py-2 text-xs bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-xl border border-zinc-200/80 dark:border-zinc-700/80 focus:border-emerald-500 dark:focus:border-emerald-500 focus:outline-none transition-all shadow-2xs font-medium placeholder:text-zinc-400`}
               />
+              {trimmedQuery && (
+                <button
+                  type="button"
+                  onClick={handleClearSearch}
+                  aria-label="Clear search"
+                  title="Clear search"
+                  className="absolute right-8 sm:right-9 p-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
               <button
+                type="button"
                 onClick={() => setIsVisualSearchOpen(true)}
                 title="Search by image (AI visual match)"
                 className="absolute right-1.5 sm:right-2.5 p-1 text-zinc-400 hover:text-emerald-600 transition-colors"
               >
                 <Camera className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               </button>
+
+              {/* Real-Time Search Results Dropdown */}
+              {isSearchFocused && trimmedQuery.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xl overflow-hidden z-50 animate-fadeIn">
+                  <div className="px-3.5 py-2 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between gap-2 bg-zinc-50/80 dark:bg-zinc-950/60">
+                    <span className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">
+                      {matchedProducts.length} {matchedProducts.length === 1 ? 'product' : 'products'} found
+                    </span>
+                    {selectedCategory !== 'all' && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedCategory('all');
+                          scrollToCatalog();
+                        }}
+                        className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline"
+                      >
+                        Search all categories
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Matching Category Chips */}
+                  {matchedCategories.length > 0 && (
+                    <div className="px-3.5 py-2.5 border-b border-zinc-100 dark:border-zinc-800">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1.5">
+                        Matching Categories
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {matchedCategories.map(cat => (
+                          <button
+                            key={cat.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedCategory(cat.id);
+                              setSearchQuery('');
+                              setIsSearchFocused(false);
+                              scrollToCatalog();
+                            }}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/80 text-[11px] font-semibold hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition-colors"
+                          >
+                            <Tag className="w-3 h-3" />
+                            <span>{cat.label}</span>
+                            <span className="text-[10px] opacity-75">({cat.count})</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Real-time Filtered Product Matches */}
+                  {matchedProducts.length > 0 ? (
+                    <div className="max-h-72 overflow-y-auto divide-y divide-zinc-100 dark:divide-zinc-800">
+                      {matchedProducts.slice(0, 6).map(product => (
+                        <button
+                          key={product.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedProduct(product);
+                            setIsSearchFocused(false);
+                          }}
+                          className="w-full px-3.5 py-2.5 flex items-center gap-3 text-left hover:bg-zinc-50 dark:hover:bg-zinc-800/70 transition-colors"
+                        >
+                          <img
+                            src={product.images[0]}
+                            alt={product.title}
+                            className="w-10 h-10 rounded-lg object-cover bg-zinc-100 dark:bg-zinc-800 shrink-0"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 truncate">
+                              {product.title}
+                            </p>
+                            <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-zinc-500 dark:text-zinc-400">
+                              <span className="px-1.5 py-0.2 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 font-medium">
+                                {getCategoryDisplayName(product.category)}
+                              </span>
+                              <span className="truncate">{product.brand}</span>
+                            </div>
+                          </div>
+                          <span className="text-xs font-bold text-zinc-900 dark:text-white shrink-0">
+                            {formatPrice(product.price)}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="px-4 py-6 text-center">
+                      <p className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                        No products matching &ldquo;{trimmedQuery}&rdquo;
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleClearSearch}
+                        className="mt-2 inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-[11px] font-semibold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+                      >
+                        Reset search
+                      </button>
+                    </div>
+                  )}
+
+                  {matchedProducts.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsSearchFocused(false);
+                        scrollToCatalog();
+                      }}
+                      className="w-full px-3.5 py-2 bg-zinc-50 dark:bg-zinc-950/70 border-t border-zinc-100 dark:border-zinc-800 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50/70 dark:hover:bg-emerald-950/30 flex items-center justify-center gap-1 transition-colors"
+                    >
+                      <span>View all {matchedProducts.length} matching products</span>
+                      <ArrowRight className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

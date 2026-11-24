@@ -5,17 +5,66 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 import nodemailer from 'nodemailer';
-import { v1Router, splitOrderIntoSellerOrders } from './src/server/v1Router.ts';
+import { v1Router, splitOrderIntoSellerOrders, dbSellers, dbSellerPasswordHashes, dbAuditLogs } from './src/server/v1Router.ts';
 import { priceAlertRouter, startPriceAlertWorker } from './src/server/priceAlertWorker.ts';
+import {
+  UserRole,
+  hashPassword,
+  verifyPassword,
+  safeCompareStrings,
+  createSession,
+  getSession,
+  revokeSession,
+  extractBearerToken,
+  requireAuth,
+  requireRole,
+  requireSellerOwnership,
+  verifyCashfreeWebhookSignature,
+  securityHeadersMiddleware,
+  createRateLimiter,
+  normalizeEmail,
+  normalizePhoneDigits,
+  isValidEmail,
+  isValidPasswordInput,
+} from './src/server/security.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const app = express();
+export const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.disable('x-powered-by');
+app.set('trust proxy', 1);
+app.use(securityHeadersMiddleware);
+
+// Capture raw HTTP request body before JSON parsing so Cashfree webhook HMAC-SHA256 signatures verify accurately
+app.use(
+  express.json({
+    limit: '1mb',
+    verify: (req: express.Request, _res, buf) => {
+      req.rawBody = buf;
+    },
+  })
+);
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+
+// Rate Limiters (Auth brute-force protection & general API protection)
+const authRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  maxRequests: Number(process.env.AUTH_RATE_LIMIT_MAX) || 100,
+  keyPrefix: 'auth',
+});
+const generalApiRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  maxRequests: Number(process.env.API_RATE_LIMIT_MAX) || 600,
+  keyPrefix: 'api',
+  skip: req => req.path === '/health' || req.path === '/payments/cashfree-webhook',
+});
+
+app.use('/api/auth', authRateLimiter);
+app.use('/api/v1/auth', authRateLimiter);
+app.use('/api', generalApiRateLimiter);
 
 // Mount Centralized Multi-Vendor Marketplace v1 REST Router
 app.use('/api/v1', v1Router);
@@ -358,12 +407,30 @@ interface DBUser {
   name: string;
   phone: string;
   email: string;
+  role: UserRole;
+  sellerId?: string;
   passwordHash?: string;
   avatar: string;
   memberTier: 'Silver' | 'Gold' | 'Platinum';
   joinedDate: string;
   addresses: any[];
   coins: number;
+}
+
+function sanitizeUser(user: DBUser) {
+  return {
+    id: user.id,
+    name: user.name,
+    phone: user.phone,
+    email: user.email,
+    role: user.role,
+    sellerId: user.sellerId,
+    avatar: user.avatar,
+    memberTier: user.memberTier,
+    joinedDate: user.joinedDate,
+    coins: user.coins,
+    isLoggedIn: true,
+  };
 }
 
 interface DBOrder {
@@ -376,7 +443,7 @@ interface DBOrder {
   shippingFee: number;
   status: 'confirmed' | 'processing' | 'shipped' | 'out_for_delivery' | 'delivered' | 'cancelled' | 'returned';
   paymentMethod: 'cod' | 'upi' | 'card' | 'netbanking' | 'cashfree';
-  paymentStatus: 'PAID' | 'PENDING' | 'REFUNDED';
+  paymentStatus: 'PAID' | 'PENDING' | 'REFUNDED' | 'FAILED' | 'PARTIAL_REFUND';
   transactionId?: string;
   invoiceNumber: string;
   shippingAddress: any;
@@ -410,21 +477,22 @@ interface DBPaymentIntent {
 }
 
 // Seed Store
-const users: Map<string, DBUser> = new Map();
-const userTokens: Map<string, string> = new Map(); // token -> userId
+export const users: Map<string, DBUser> = new Map();
 const otpStore: Map<string, { code: string; expiresAt: number; channel: 'email' | 'sms'; deliveryFailed?: boolean }> = new Map();
-const orders: Map<string, DBOrder> = new Map();
-const paymentIntents: Map<string, DBPaymentIntent> = new Map();
+export const orders: Map<string, DBOrder> = new Map();
+export const paymentIntents: Map<string, DBPaymentIntent> = new Map();
 
 // Helper to generate IDs
-const generateId = (prefix: string) => `${prefix}_${Math.random().toString(36).substring(2, 9)}`;
+const generateId = (prefix: string) => `${prefix}_${crypto.randomBytes(5).toString('hex')}`;
 
-// Initialize default guest / demo accounts
+// Initialize default verified shopper account (hashed credentials via scrypt)
 const defaultDemoUser: DBUser = {
   id: 'usr_demo123',
   name: 'Amayra Mansuri',
   phone: '+91 98765 43210',
   email: 'mansuriamayra6@gmail.com',
+  role: 'CUSTOMER',
+  passwordHash: hashPassword('demoPass123'),
   avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
   memberTier: 'Platinum',
   joinedDate: 'Oct 2024',
@@ -455,7 +523,16 @@ const defaultDemoUser: DBUser = {
   ]
 };
 users.set(defaultDemoUser.id, defaultDemoUser);
-userTokens.set('pb_token_demo', defaultDemoUser.id);
+createSession({
+  userId: defaultDemoUser.id,
+  role: defaultDemoUser.role,
+  email: defaultDemoUser.email,
+  name: defaultDemoUser.name,
+  fixedToken: 'pb_token_demo',
+});
+
+// Runtime admin bootstrap claim hash (only used if ADMIN_ACCESS_PASS env var is unset)
+let claimedAdminPasswordHash: string | null = null;
 
 // Pre-seed sample completed order
 const seedOrder: DBOrder = {
@@ -535,16 +612,27 @@ const seedOrder: DBOrder = {
 };
 orders.set(seedOrder.id, seedOrder);
 
-// Auth Middleware Helper
+// Auth Middleware Helper (delegates to shared SessionStore)
 const getAuthenticatedUser = (req: express.Request): DBUser | null => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return null;
-  }
-  const token = authHeader.split(' ')[1];
-  const userId = userTokens.get(token);
-  if (!userId) return null;
-  return users.get(userId) || null;
+  const token = extractBearerToken(req);
+  if (!token) return null;
+  const session = getSession(token);
+  if (!session) return null;
+  const existing = users.get(session.userId);
+  if (existing) return existing;
+  return {
+    id: session.userId,
+    name: session.name || 'Authenticated User',
+    phone: '',
+    email: session.email || '',
+    role: session.role,
+    sellerId: session.sellerId,
+    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
+    memberTier: 'Platinum',
+    joinedDate: 'Oct 2026',
+    coins: 0,
+    addresses: [],
+  };
 };
 
 // ==========================================
@@ -673,12 +761,16 @@ app.post('/api/auth/send-otp', async (req, res) => {
 });
 
 app.post('/api/auth/verify-otp', (req, res) => {
-  const { phone, email, otp, name } = req.body;
-  const cleanEmail = typeof email === 'string' && email.includes('@') ? email.trim().toLowerCase() : '';
+  const { phone, email, otp, name } = req.body || {};
+  const cleanEmail = normalizeEmail(email);
   const cleanPhone = typeof phone === 'string' ? phone.trim() : '';
-  const entry = (cleanEmail ? otpStore.get(cleanEmail) : undefined) || (cleanPhone ? otpStore.get(cleanPhone) : undefined);
+  const cleanPhoneDigits = normalizePhoneDigits(cleanPhone);
+  const entry =
+    (cleanEmail ? otpStore.get(cleanEmail) : undefined) ||
+    (cleanPhone ? otpStore.get(cleanPhone) : undefined) ||
+    (cleanPhoneDigits ? otpStore.get(cleanPhoneDigits) : undefined);
 
-  const cleanOtp = (otp || '').trim();
+  const cleanOtp = (typeof otp === 'string' ? otp : '').trim();
   const isNotExpired = Boolean(entry && Date.now() <= entry.expiresAt);
   const isValid = Boolean(
     entry &&
@@ -702,62 +794,125 @@ app.post('/api/auth/verify-otp', (req, res) => {
   // Clear used OTP
   if (cleanEmail) otpStore.delete(cleanEmail);
   if (cleanPhone) otpStore.delete(cleanPhone);
+  if (cleanPhoneDigits) otpStore.delete(cleanPhoneDigits);
 
-  // Find or create user
+  // Check if identifier matches a registered seller account so seller OTP sign-in preserves SELLER role
+  let matchedSellerId: string | undefined;
+  for (const s of serverSellers.values()) {
+    const emailMatch = cleanEmail && normalizeEmail(s.email) === cleanEmail;
+    const phoneMatch = cleanPhoneDigits.length >= 10 && normalizePhoneDigits(s.phone) === cleanPhoneDigits;
+    if (emailMatch || phoneMatch) {
+      matchedSellerId = s.id;
+      break;
+    }
+  }
+  if (!matchedSellerId) {
+    for (const s of dbSellers.values()) {
+      const emailMatch = cleanEmail && normalizeEmail(s.email) === cleanEmail;
+      const phoneMatch = cleanPhoneDigits.length >= 10 && normalizePhoneDigits(s.phone) === cleanPhoneDigits;
+      if (emailMatch || phoneMatch) {
+        matchedSellerId = s.id;
+        break;
+      }
+    }
+  }
+
+  // Find or create user via exact normalized email or exact normalized phone digits
   let user: DBUser | undefined;
   for (const u of users.values()) {
-    if ((phone && u.phone === phone) || (email && u.email === email)) {
+    const emailMatch = cleanEmail && normalizeEmail(u.email) === cleanEmail;
+    const phoneMatch = cleanPhoneDigits.length >= 10 && normalizePhoneDigits(u.phone) === cleanPhoneDigits;
+    if (emailMatch || phoneMatch) {
       user = u;
       break;
     }
   }
 
   if (!user) {
+    const assignedRole: UserRole = matchedSellerId ? 'SELLER' : 'CUSTOMER';
     user = {
       id: generateId('usr'),
-      name: (name || 'Verified Shopper').trim(),
-      phone: phone || '+91 98765 00000',
-      email: email || `${(name || 'user').toLowerCase().replace(/\s+/g, '')}@primebazaar.in`,
+      name: (typeof name === 'string' && name.trim()) ? name.trim() : 'Verified Shopper',
+      phone: cleanPhone || '+91 98765 00000',
+      email: cleanEmail || `${(name || 'user').toLowerCase().replace(/[^a-z0-9]+/g, '')}@primebazaar.in`,
+      role: assignedRole,
+      sellerId: matchedSellerId,
       avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
       memberTier: 'Gold',
       joinedDate: 'Oct 2026',
-      coins: 200, // Welcome signup bonus
+      coins: 200,
       addresses: [],
     };
     users.set(user.id, user);
   }
 
-  const token = `pb_token_${crypto.randomBytes(16).toString('hex')}`;
-  userTokens.set(token, user.id);
+  const session = createSession({
+    userId: user.id,
+    role: matchedSellerId ? 'SELLER' : user.role,
+    sellerId: matchedSellerId || user.sellerId,
+    email: user.email,
+    name: user.name,
+  });
 
   res.json({
     success: true,
-    token,
-    user: {
-      id: user.id,
-      name: user.name,
-      phone: user.phone,
-      email: user.email,
-      avatar: user.avatar,
-      memberTier: user.memberTier,
-      joinedDate: user.joinedDate,
-      coins: user.coins,
-      isLoggedIn: true,
-    },
+    token: session.token,
+    user: sanitizeUser({
+      ...user,
+      role: session.role,
+      sellerId: session.sellerId,
+    }),
   });
 });
 
 app.post('/api/auth/register', (req, res) => {
-  const { name, email, phone, password } = req.body;
-  if (!name || (!email && !phone)) {
-    return res.status(400).json({ error: 'Name and email or phone are required.' });
+  const { name, email, phone, password } = req.body || {};
+  const cleanName = typeof name === 'string' ? name.trim() : '';
+  const cleanEmail = normalizeEmail(email);
+  const cleanPhone = typeof phone === 'string' ? phone.trim() : '';
+  const cleanPhoneDigits = normalizePhoneDigits(cleanPhone);
+
+  if (!cleanName || (!cleanEmail && cleanPhoneDigits.length < 10)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Valid name and email or 10-digit phone number are required.',
+    });
   }
 
+  if (cleanEmail && !isValidEmail(cleanEmail)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Please enter a valid email address.',
+    });
+  }
+
+  if (!isValidPasswordInput(password)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Password must be between 6 and 128 characters.',
+    });
+  }
+
+  for (const existing of users.values()) {
+    if (
+      (cleanEmail && normalizeEmail(existing.email) === cleanEmail) ||
+      (cleanPhoneDigits.length >= 10 && normalizePhoneDigits(existing.phone) === cleanPhoneDigits)
+    ) {
+      return res.status(409).json({
+        success: false,
+        error: 'An account with these details already exists.',
+      });
+    }
+  }
+
+  const resolvedEmail = cleanEmail || `${cleanName.toLowerCase().replace(/[^a-z0-9]+/g, '')}@primebazaar.in`;
   const user: DBUser = {
     id: generateId('usr'),
-    name: name.trim(),
-    phone: (phone || '+91 98765 00000').trim(),
-    email: (email || `${name.toLowerCase().replace(/\s+/g, '')}@gmail.com`).trim(),
+    name: cleanName,
+    phone: cleanPhone || '+91 00000 00000',
+    email: resolvedEmail,
+    role: 'CUSTOMER', // Strict default role: ignore any privilege escalation fields from request body
+    passwordHash: hashPassword(password),
     avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
     memberTier: 'Silver',
     joinedDate: 'Oct 2026',
@@ -766,51 +921,168 @@ app.post('/api/auth/register', (req, res) => {
   };
   users.set(user.id, user);
 
-  const token = `pb_token_${crypto.randomBytes(16).toString('hex')}`;
-  userTokens.set(token, user.id);
+  const session = createSession({
+    userId: user.id,
+    role: user.role,
+    email: user.email,
+    name: user.name,
+  });
 
-  res.json({
+  res.status(201).json({
     success: true,
-    token,
-    user: {
-      ...user,
-      isLoggedIn: true,
-    },
+    token: session.token,
+    user: sanitizeUser(user),
   });
 });
 
 app.post('/api/auth/login', (req, res) => {
-  const { emailOrPhone, password } = req.body;
-  const input = (emailOrPhone || '').trim();
+  const { emailOrPhone, password } = req.body || {};
+  const input = typeof emailOrPhone === 'string' ? emailOrPhone.trim() : '';
+
+  if (!input || typeof password !== 'string' || !password) {
+    return res.status(400).json({
+      success: false,
+      error: 'Email or phone number and password are required.',
+    });
+  }
+
+  const normalizedInputEmail = normalizeEmail(input);
+  const normalizedInputPhone = normalizePhoneDigits(input);
 
   let matchedUser: DBUser | undefined;
   for (const u of users.values()) {
-    if (u.email.toLowerCase() === input.toLowerCase() || u.phone.includes(input)) {
+    const emailMatches = isValidEmail(normalizedInputEmail) && normalizeEmail(u.email) === normalizedInputEmail;
+    const phoneMatches = normalizedInputPhone.length >= 10 && normalizePhoneDigits(u.phone) === normalizedInputPhone;
+    if (emailMatches || phoneMatches) {
       matchedUser = u;
       break;
     }
   }
 
-  if (!matchedUser) {
-    // If not found, return demo user for smooth reviewer experience
-    matchedUser = defaultDemoUser;
+  // Constant-time verification even when account doesn't exist (prevents account enumeration & timing side-channels)
+  const passwordValid = verifyPassword(password, matchedUser?.passwordHash);
+  if (!matchedUser || !passwordValid) {
+    return res.status(401).json({
+      success: false,
+      error: 'Invalid email, phone number, or password.',
+    });
   }
 
-  const token = `pb_token_${crypto.randomBytes(16).toString('hex')}`;
-  userTokens.set(token, matchedUser.id);
+  const session = createSession({
+    userId: matchedUser.id,
+    role: matchedUser.role,
+    sellerId: matchedUser.sellerId,
+    email: matchedUser.email,
+    name: matchedUser.name,
+  });
 
   res.json({
     success: true,
-    token,
+    token: session.token,
+    user: sanitizeUser(matchedUser),
+  });
+});
+
+// Admin Authentication (Environment secret ADMIN_ACCESS_PASS or one-time first-run claim)
+app.get('/api/auth/admin/status', (_req, res) => {
+  const envConfigured = Boolean((process.env.ADMIN_ACCESS_PASS || '').trim());
+  res.json({
+    envConfigured,
+    bootstrapClaimed: Boolean(claimedAdminPasswordHash),
+  });
+});
+
+app.post('/api/auth/admin/bootstrap', (req, res) => {
+  const envPass = (process.env.ADMIN_ACCESS_PASS || '').trim();
+  if (envPass) {
+    return res.status(403).json({
+      success: false,
+      error: 'Admin passcode is managed via server environment configuration.',
+    });
+  }
+  if (claimedAdminPasswordHash) {
+    return res.status(409).json({
+      success: false,
+      error: 'Admin access has already been claimed.',
+    });
+  }
+  const { password, email } = req.body || {};
+  if (!isValidPasswordInput(password)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Admin password must be between 6 and 128 characters.',
+    });
+  }
+  claimedAdminPasswordHash = hashPassword(password);
+  const adminEmail = normalizeEmail(email) || 'admin@primebazaar.in';
+  const session = createSession({
+    userId: 'admin-super',
+    role: 'SUPER_ADMIN',
+    email: adminEmail,
+    name: 'Super Admin',
+  });
+  return res.status(201).json({
+    success: true,
+    token: session.token,
     user: {
-      id: matchedUser.id,
-      name: matchedUser.name,
-      phone: matchedUser.phone,
-      email: matchedUser.email,
-      avatar: matchedUser.avatar,
-      memberTier: matchedUser.memberTier,
-      joinedDate: matchedUser.joinedDate,
-      coins: matchedUser.coins,
+      id: 'admin-super',
+      name: 'Super Admin',
+      email: adminEmail,
+      role: 'SUPER_ADMIN',
+      isLoggedIn: true,
+    },
+  });
+});
+
+app.post('/api/auth/admin/login', (req, res) => {
+  const { email, password } = req.body || {};
+  if (typeof password !== 'string' || !password) {
+    return res.status(400).json({
+      success: false,
+      error: 'Password is required.',
+    });
+  }
+
+  const envPass = (process.env.ADMIN_ACCESS_PASS || '').trim();
+  const isValid = envPass
+    ? safeCompareStrings(password, envPass)
+    : Boolean(claimedAdminPasswordHash && verifyPassword(password, claimedAdminPasswordHash));
+
+  if (!isValid) {
+    return res.status(401).json({
+      success: false,
+      error: 'Invalid administrator credentials.',
+    });
+  }
+
+  const adminEmail = normalizeEmail(email) || 'admin@primebazaar.in';
+  const session = createSession({
+    userId: 'admin-super',
+    role: 'SUPER_ADMIN',
+    email: adminEmail,
+    name: 'Super Admin',
+  });
+
+  dbAuditLogs.push({
+    id: `audit-${Date.now()}`,
+    actorType: 'ADMIN',
+    actorId: 'admin-super',
+    actorName: adminEmail,
+    action: 'ADMIN_LOGIN',
+    entityType: 'SESSION',
+    entityId: session.userId,
+    details: 'Administrator signed in via verified session.',
+    timestamp: new Date().toISOString(),
+  });
+
+  res.json({
+    success: true,
+    token: session.token,
+    user: {
+      id: 'admin-super',
+      name: 'Super Admin',
+      email: adminEmail,
+      role: 'SUPER_ADMIN',
       isLoggedIn: true,
     },
   });
@@ -823,18 +1095,14 @@ app.get('/api/auth/me', (req, res) => {
   }
   res.json({
     authenticated: true,
-    user: {
-      ...user,
-      isLoggedIn: true,
-    },
+    user: sanitizeUser(user),
   });
 });
 
 app.post('/api/auth/logout', (req, res) => {
-  const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.split(' ')[1];
-    userTokens.delete(token);
+  const token = extractBearerToken(req);
+  if (token) {
+    revokeSession(token);
   }
   res.json({ success: true, message: 'Logged out successfully' });
 });
@@ -1021,16 +1289,203 @@ app.get('/api/payments/cashfree-order/:orderId', async (req, res) => {
   }
 });
 
-app.post('/api/payments/cashfree-webhook', (req, res) => {
-  const { webhookSecret } = getCashfreeConfig();
-  const signature = req.headers['x-webhook-signature'];
-  const timestamp = req.headers['x-webhook-timestamp'];
-  console.log('[Cashfree Webhook Received]:', { signature, timestamp, orderId: req.body?.data?.order?.order_id });
-  res.json({
+interface WebhookEventRecord {
+  idempotencyKey: string;
+  eventType: string;
+  orderId: string;
+  paymentStatus: string;
+  amount?: number;
+  receivedAt: string;
+}
+
+export const processedWebhookEvents = new Map<string, WebhookEventRecord>();
+const webhookEventHistory: WebhookEventRecord[] = [];
+
+app.post('/api/payments/cashfree-webhook', async (req, res) => {
+  const cf = getCashfreeConfig();
+  const verificationSecret = cf.webhookSecret || cf.clientSecret;
+
+  if (!verificationSecret) {
+    return res.status(503).json({
+      success: false,
+      verified: false,
+      error: 'Cashfree webhook secret is not configured on the server.',
+    });
+  }
+
+  const rawBody = req.rawBody;
+  const signatureHeader = req.headers['x-webhook-signature'];
+  const timestampHeader = req.headers['x-webhook-timestamp'];
+
+  const verification = verifyCashfreeWebhookSignature({
+    rawBody,
+    signatureHeader,
+    timestampHeader,
+    secret: verificationSecret,
+  });
+
+  if (!verification.valid) {
+    console.warn('[Cashfree Webhook Rejected]:', verification.reason);
+    return res.status(401).json({
+      success: false,
+      verified: false,
+      error: verification.reason || 'Invalid Cashfree webhook signature.',
+    });
+  }
+
+  const payload = req.body || {};
+  const eventType = String(payload.type || payload.event || 'UNKNOWN_EVENT').toUpperCase();
+  const cfOrderId = String(
+    payload?.data?.order?.order_id ||
+    payload?.data?.refund?.order_id ||
+    payload?.order_id ||
+    ''
+  ).trim();
+  const paymentObj = payload?.data?.payment || {};
+  const refundObj = payload?.data?.refund || {};
+  const paymentId = String(paymentObj.cf_payment_id || refundObj.cf_refund_id || '').trim();
+  const idempotencyHeader = typeof req.headers['x-idempotency-key'] === 'string'
+    ? req.headers['x-idempotency-key'].trim()
+    : '';
+  const bodyDigest = crypto
+    .createHash('sha256')
+    .update(Buffer.isBuffer(rawBody) ? rawBody : Buffer.from(JSON.stringify(payload)))
+    .digest('hex')
+    .slice(0, 16);
+
+  const idempotencyKey =
+    idempotencyHeader ||
+    (cfOrderId
+      ? `${eventType}:${cfOrderId}:${paymentId || paymentObj.payment_status || refundObj.refund_status || bodyDigest}`
+      : `digest:${bodyDigest}`);
+
+  // Prevent duplicate webhook processing
+  const existingRecord = processedWebhookEvents.get(idempotencyKey);
+  if (existingRecord) {
+    return res.status(200).json({
+      status: 'OK',
+      verified: true,
+      duplicate: true,
+      idempotent: true,
+      eventKey: idempotencyKey,
+      event: existingRecord,
+    });
+  }
+
+  const reportedStatus = String(
+    refundObj.refund_status ||
+    paymentObj.payment_status ||
+    payload?.data?.order?.order_status ||
+    ''
+  ).toUpperCase();
+  const reportedAmount = Number(
+    paymentObj.payment_amount ??
+    payload?.data?.order?.order_amount ??
+    refundObj.refund_amount ??
+    0
+  );
+
+  // Locate matching intent and order if present in store
+  let matchedIntent: DBPaymentIntent | undefined;
+  if (cfOrderId) {
+    for (const pi of paymentIntents.values()) {
+      if (pi.cashfreeOrderId === cfOrderId || pi.intentId === cfOrderId) {
+        matchedIntent = pi;
+        break;
+      }
+    }
+  }
+
+  let matchedOrder: DBOrder | undefined;
+  if (cfOrderId) {
+    for (const ord of orders.values()) {
+      if (ord.id === cfOrderId || ord.orderNumber === cfOrderId || ord.transactionId === cfOrderId || ord.transactionId === `CF-${cfOrderId}`) {
+        matchedOrder = ord;
+        break;
+      }
+    }
+  }
+
+  // Classify event outcome strictly (check refund events first because Cashfree refund webhooks use refund_status: 'SUCCESS')
+  const isRefundEvent =
+    eventType.includes('REFUND') || Boolean(refundObj.cf_refund_id || refundObj.refund_status) || reportedStatus === 'REFUNDED';
+  const isDroppedOrCancelled =
+    !isRefundEvent &&
+    (eventType.includes('USER_DROPPED') || eventType.includes('CANCELLED') || reportedStatus === 'USER_DROPPED' || reportedStatus === 'CANCELLED');
+  const isFailedEvent =
+    !isRefundEvent &&
+    !isDroppedOrCancelled &&
+    (eventType.includes('PAYMENT_FAILED') || reportedStatus === 'FAILED');
+  const isSuccessEvent =
+    !isRefundEvent &&
+    !isDroppedOrCancelled &&
+    !isFailedEvent &&
+    (eventType.includes('PAYMENT_SUCCESS') || reportedStatus === 'SUCCESS' || reportedStatus === 'PAID');
+
+  if (isSuccessEvent) {
+    if (matchedIntent) {
+      matchedIntent.status = 'SUCCESS';
+    }
+    if (matchedOrder && matchedOrder.paymentStatus !== 'PAID') {
+      matchedOrder.paymentStatus = 'PAID';
+      if (!matchedOrder.transactionId) {
+        matchedOrder.transactionId = paymentId ? `CF-PAY-${paymentId}` : `CF-${cfOrderId}`;
+      }
+    }
+  } else if (isFailedEvent || isDroppedOrCancelled) {
+    if (matchedIntent && matchedIntent.status !== 'SUCCESS') {
+      matchedIntent.status = 'FAILED';
+    }
+    if (matchedOrder && matchedOrder.paymentStatus !== 'PAID') {
+      matchedOrder.paymentStatus = 'FAILED';
+      if (isDroppedOrCancelled) {
+        matchedOrder.status = 'cancelled';
+      }
+    }
+  } else if (isRefundEvent) {
+    if (matchedOrder) {
+      const isPartial =
+        reportedAmount > 0 && matchedOrder.totalAmount > 0 && reportedAmount < matchedOrder.totalAmount;
+      matchedOrder.paymentStatus = isPartial ? 'PARTIAL_REFUND' : 'REFUNDED';
+      matchedOrder.trackingCheckpoints.push({
+        title: isPartial ? 'Partial Refund Processed' : 'Refund Processed via Cashfree',
+        description: `Refund confirmed (${refundObj.cf_refund_id || cfOrderId})`,
+        timestamp: new Date().toISOString(),
+        done: true,
+        location: 'Cashfree Settlements',
+      });
+    }
+  }
+
+  const record: WebhookEventRecord = {
+    idempotencyKey,
+    eventType,
+    orderId: cfOrderId || 'unlinked',
+    paymentStatus: reportedStatus || eventType,
+    amount: Number.isFinite(reportedAmount) && reportedAmount > 0 ? reportedAmount : undefined,
+    receivedAt: new Date().toISOString(),
+  };
+
+  processedWebhookEvents.set(idempotencyKey, record);
+  webhookEventHistory.push(record);
+  if (webhookEventHistory.length > 500) {
+    webhookEventHistory.shift();
+  }
+
+  console.log('[Cashfree Webhook Verified]:', {
+    eventType: record.eventType,
+    orderId: record.orderId,
+    paymentStatus: record.paymentStatus,
+    idempotencyKey: record.idempotencyKey,
+  });
+
+  res.status(200).json({
     status: 'OK',
     verified: true,
-    webhookSecretConfigured: !!webhookSecret,
-    receivedAt: new Date().toISOString(),
+    duplicate: false,
+    idempotent: false,
+    eventKey: idempotencyKey,
+    event: record,
   });
 });
 
@@ -1282,27 +1737,52 @@ const serverSellers: Map<string, any> = new Map([
 
 const serverPayouts: any[] = [];
 
-app.get('/api/sellers', (req, res) => {
-  res.json({
+// RBAC-protected Seller Listing: ADMIN sees all sellers; SELLER sees only own seller record; CUSTOMER rejected with 403
+app.get('/api/sellers', requireAuth, requireRole('SELLER', 'ADMIN', 'SUPER_ADMIN'), (req, res) => {
+  if (req.auth!.role === 'ADMIN' || req.auth!.role === 'SUPER_ADMIN') {
+    const merged = new Map<string, any>(serverSellers);
+    for (const [id, v1Seller] of dbSellers.entries()) {
+      if (!merged.has(id)) {
+        merged.set(id, v1Seller);
+      }
+    }
+    return res.json({
+      success: true,
+      sellers: Array.from(merged.values()),
+    });
+  }
+
+  const ownSeller = req.auth!.sellerId
+    ? serverSellers.get(req.auth!.sellerId) || dbSellers.get(req.auth!.sellerId)
+    : undefined;
+  return res.json({
     success: true,
-    sellers: Array.from(serverSellers.values()),
+    sellers: ownSeller ? [ownSeller] : [],
   });
 });
 
 app.post('/api/sellers/register', (req, res) => {
-  const data = req.body;
+  const data = req.body || {};
   if (!data.name || !data.businessName || !data.phone) {
     return res.status(400).json({ error: 'Name, store/business name, and mobile number are required.' });
   }
 
-  const newSellerId = `seller-${Date.now().toString(36)}`;
+  const cleanEmail = normalizeEmail(data.email);
+  if (cleanEmail && !isValidEmail(cleanEmail)) {
+    return res.status(400).json({ error: 'Please provide a valid email address.' });
+  }
+
+  const newSellerId = `seller-${Date.now().toString(36)}-${crypto.randomBytes(2).toString('hex')}`;
+  const resolvedEmail = cleanEmail || `${String(data.name).toLowerCase().replace(/[^a-z0-9]+/g, '')}@sellers.primebazaar.in`;
+
+  // Always enforce pending_approval & unverified status server-side (ignore client status spoofing)
   const newSeller = {
     id: newSellerId,
-    name: data.name,
-    businessName: data.businessName,
-    storeName: data.storeName || data.businessName,
-    email: data.email || `${data.name.toLowerCase().replace(/\s+/g, '')}@sellers.primebazaar.in`,
-    phone: data.phone,
+    name: String(data.name).trim(),
+    businessName: String(data.businessName).trim(),
+    storeName: String(data.storeName || data.businessName).trim(),
+    email: resolvedEmail,
+    phone: String(data.phone).trim(),
     businessType: data.businessType || 'Proprietorship',
     gstNumber: data.gstNumber || 'Unregistered',
     panNumber: data.panNumber || '',
@@ -1323,20 +1803,67 @@ app.post('/api/sellers/register', (req, res) => {
 
   serverSellers.set(newSellerId, newSeller);
 
+  // Sync into centralized v1Router repository too so seller APIs stay unified
+  dbSellers.set(newSellerId, {
+    id: newSellerId,
+    userId: `usr_${newSellerId}`,
+    sellerName: newSeller.name,
+    businessName: newSeller.businessName,
+    tradeName: newSeller.storeName,
+    businessType: 'PROPRIETORSHIP',
+    email: newSeller.email,
+    phone: newSeller.phone,
+    gstNumber: newSeller.gstNumber,
+    panNumber: newSeller.panNumber,
+    location: newSeller.location,
+    rating: 5.0,
+    totalOrders: 0,
+    totalRevenue: 0,
+    approvalStatus: 'PENDING_APPROVAL',
+    bankAccount: newSeller.bankAccount || {
+      accountHolderName: newSeller.name,
+      accountNumber: 'Pending Verification',
+      ifscCode: 'XXXX0000000',
+      bankName: 'Pending Bank',
+    },
+    pickupAddress: newSeller.pickupAddress || {
+      street: 'Pending Address',
+      city: 'Mumbai',
+      state: 'Maharashtra',
+      pinCode: '400001',
+    },
+    kycDocuments: [],
+    createdAt: new Date().toISOString(),
+  });
+
+  if (isValidPasswordInput(data.password)) {
+    dbSellerPasswordHashes.set(newSellerId, hashPassword(data.password));
+  }
+
+  const session = createSession({
+    userId: `usr_${newSellerId}`,
+    role: 'SELLER',
+    sellerId: newSellerId,
+    email: newSeller.email,
+    name: newSeller.businessName,
+  });
+
   res.status(201).json({
     success: true,
     message: 'Seller account registered successfully! KYC documents submitted for verification.',
+    token: session.token,
     seller: newSeller,
   });
 });
 
-app.patch('/api/sellers/:id/status', (req, res) => {
+// Admin-only seller status & verification moderation
+app.patch('/api/sellers/:id/status', requireAuth, requireRole('ADMIN', 'SUPER_ADMIN'), (req, res) => {
   const seller = serverSellers.get(req.params.id);
   if (!seller) {
     return res.status(404).json({ error: 'Seller not found' });
   }
 
-  const { status, verified } = req.body;
+  const { status, verified } = req.body || {};
   if (status) seller.status = status;
   if (typeof verified === 'boolean') seller.verified = verified;
 
@@ -1347,61 +1874,75 @@ app.patch('/api/sellers/:id/status', (req, res) => {
   });
 });
 
-app.post('/api/sellers/:id/payout', (req, res) => {
-  const seller = serverSellers.get(req.params.id);
-  if (!seller) {
-    return res.status(404).json({ error: 'Seller not found' });
+// Seller payout protected by authentication, SELLER/ADMIN role, and ownership check
+app.post(
+  '/api/sellers/:id/payout',
+  requireAuth,
+  requireRole('SELLER', 'ADMIN', 'SUPER_ADMIN'),
+  requireSellerOwnership(req => req.params.id),
+  (req, res) => {
+    const seller = serverSellers.get(req.params.id);
+    if (!seller) {
+      return res.status(404).json({ error: 'Seller not found' });
+    }
+
+    const amount = Number(req.body.amount);
+    if (!Number.isFinite(amount) || amount <= 0 || amount > seller.walletBalance) {
+      return res.status(400).json({ error: 'Invalid payout amount or insufficient wallet balance.' });
+    }
+
+    const commission = Math.round(amount * 0.12);
+    const gst = Math.round(commission * 0.18);
+    const net = amount - commission - gst;
+
+    const payout = {
+      id: `pay-${Date.now()}`,
+      sellerId: seller.id,
+      sellerName: seller.businessName,
+      amount,
+      grossSales: amount,
+      commissionDeducted: commission,
+      gstOnCommission: gst,
+      netPayout: Math.max(0, net),
+      accountNumber: seller.bankAccount?.accountNumber ? `•••• ${seller.bankAccount.accountNumber.slice(-4)}` : '•••• 9041',
+      bankName: seller.bankAccount?.bankName || 'Linked Bank',
+      requestedAt: new Date().toLocaleString('en-IN'),
+      status: 'pending',
+    };
+
+    seller.walletBalance -= amount;
+    serverPayouts.push(payout);
+
+    res.status(201).json({
+      success: true,
+      message: `Payout request of ₹${amount.toLocaleString('en-IN')} submitted successfully!`,
+      payout,
+      remainingBalance: seller.walletBalance,
+    });
   }
+);
 
-  const amount = Number(req.body.amount);
-  if (!amount || amount <= 0 || amount > seller.walletBalance) {
-    return res.status(400).json({ error: 'Invalid payout amount or insufficient wallet balance.' });
+// Seller bulk catalog upload protected by authentication, SELLER/ADMIN role, and ownership check
+app.post(
+  '/api/sellers/:id/bulk-upload',
+  requireAuth,
+  requireRole('SELLER', 'ADMIN', 'SUPER_ADMIN'),
+  requireSellerOwnership(req => req.params.id),
+  (req, res) => {
+    const { products } = req.body || {};
+    if (!Array.isArray(products) || products.length === 0) {
+      return res.status(400).json({ error: 'Please provide an array of product rows.' });
+    }
+
+    res.status(201).json({
+      success: true,
+      importedCount: products.length,
+      message: `Successfully processed and validated ${products.length} products from sheet.`,
+    });
   }
+);
 
-  const commission = Math.round(amount * 0.12);
-  const gst = Math.round(commission * 0.18);
-  const net = amount - commission - gst;
-
-  const payout = {
-    id: `pay-${Date.now()}`,
-    sellerId: seller.id,
-    sellerName: seller.businessName,
-    amount,
-    grossSales: amount,
-    commissionDeducted: commission,
-    gstOnCommission: gst,
-    netPayout: Math.max(0, net),
-    accountNumber: seller.bankAccount?.accountNumber ? `•••• ${seller.bankAccount.accountNumber.slice(-4)}` : '•••• 9041',
-    bankName: seller.bankAccount?.bankName || 'Linked Bank',
-    requestedAt: new Date().toLocaleString('en-IN'),
-    status: 'pending',
-  };
-
-  seller.walletBalance -= amount;
-  serverPayouts.push(payout);
-
-  res.status(201).json({
-    success: true,
-    message: `Payout request of ₹${amount.toLocaleString('en-IN')} submitted successfully!`,
-    payout,
-    remainingBalance: seller.walletBalance,
-  });
-});
-
-app.post('/api/sellers/:id/bulk-upload', (req, res) => {
-  const { products } = req.body;
-  if (!Array.isArray(products) || products.length === 0) {
-    return res.status(400).json({ error: 'Please provide an array of product rows.' });
-  }
-
-  res.status(201).json({
-    success: true,
-    importedCount: products.length,
-    message: `Successfully processed and validated ${products.length} products from sheet.`,
-  });
-});
-
-app.get('/api/admin/metrics', (req, res) => {
+app.get('/api/admin/metrics', requireAuth, requireRole('ADMIN', 'SUPER_ADMIN'), (req, res) => {
   let gmv = 0;
   for (const o of orders.values()) {
     if (o.status !== 'cancelled') {
@@ -1509,6 +2050,20 @@ app.get('/sitemap.xml', (req, res) => {
 // VITE DEV SERVER MIDDLEWARE & FRONTEND SERVE
 // ==========================================
 
+function registerErrorHandler() {
+  // Safe JSON parse & global error handler (never leaks stack traces to clients)
+  app.use((err: any, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (err instanceof SyntaxError && 'body' in err) {
+      return res.status(400).json({ success: false, error: 'Invalid JSON payload.' });
+    }
+    if (err) {
+      console.error('[Prime Bazaar Backend] Unhandled request error:', err?.message || 'Error');
+      return res.status(500).json({ success: false, error: 'Internal server error.' });
+    }
+    return next();
+  });
+}
+
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
     const { createServer: createViteServer } = await import('vite');
@@ -1536,6 +2091,8 @@ async function startServer() {
     });
   }
 
+  registerErrorHandler();
+
   const HOST = process.env.HOST || '0.0.0.0';
   app.listen(PORT, HOST, () => {
     console.log(`[Prime Bazaar Backend] Core API and server running at http://${HOST}:${PORT}`);
@@ -1543,7 +2100,11 @@ async function startServer() {
   });
 }
 
-startServer().catch(err => {
-  console.error('[Prime Bazaar Backend] Failed to start server:', err);
-  process.exit(1);
-});
+if (process.env.PRIMEBAZAAR_TEST_MODE !== '1') {
+  startServer().catch(err => {
+    console.error('[Prime Bazaar Backend] Failed to start server:', err);
+    process.exit(1);
+  });
+} else {
+  registerErrorHandler();
+}

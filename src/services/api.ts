@@ -223,11 +223,44 @@ export const api = {
   v1: {
     // Auth & Identity
     auth: {
-      sellerRegister: async (payload: any) => apiRequest('/api/v1/auth/seller/register', { method: 'POST', body: JSON.stringify(payload) }),
-      sellerLogin: async (payload: any) => apiRequest('/api/v1/auth/seller/login', { method: 'POST', body: JSON.stringify(payload) }),
-      verifyOtp: async (otp: string) => apiRequest('/api/v1/auth/verify-otp', { method: 'POST', body: JSON.stringify({ otp }) }),
-      refreshToken: async () => apiRequest('/api/v1/auth/refresh', { method: 'POST' }),
-      logout: async () => apiRequest('/api/v1/auth/logout', { method: 'POST' }),
+      sellerRegister: async (payload: any) => {
+        const res = await apiRequest('/api/v1/auth/seller/register', { method: 'POST', body: JSON.stringify(payload) });
+        if (res.token) setAuthToken(res.token);
+        return res;
+      },
+      sellerLogin: async (payload: any) => {
+        const res = await apiRequest('/api/v1/auth/seller/login', { method: 'POST', body: JSON.stringify(payload) });
+        if (res.token) setAuthToken(res.token);
+        return res;
+      },
+      verifyOtp: async (otp: string) => {
+        const res = await apiRequest('/api/v1/auth/verify-otp', { method: 'POST', body: JSON.stringify({ otp }) });
+        if (res.token) setAuthToken(res.token);
+        return res;
+      },
+      refreshToken: async () => {
+        const res = await apiRequest('/api/v1/auth/refresh', { method: 'POST' });
+        if (res.token) setAuthToken(res.token);
+        return res;
+      },
+      logout: async () => {
+        try {
+          return await apiRequest('/api/v1/auth/logout', { method: 'POST' });
+        } finally {
+          setAuthToken(null);
+        }
+      },
+      adminStatus: async () => apiRequest('/api/auth/admin/status'),
+      adminBootstrap: async (password: string) => {
+        const res = await apiRequest('/api/auth/admin/bootstrap', { method: 'POST', body: JSON.stringify({ password }) });
+        if (res.token) setAuthToken(res.token);
+        return res;
+      },
+      adminLogin: async (password: string) => {
+        const res = await apiRequest('/api/auth/admin/login', { method: 'POST', body: JSON.stringify({ password }) });
+        if (res.token) setAuthToken(res.token);
+        return res;
+      },
     },
 
     // Seller Products & Catalog

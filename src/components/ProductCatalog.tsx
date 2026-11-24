@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useMarketplace } from '../context/MarketplaceContext';
 import { ProductCard } from './ProductCard';
+import { matchesProductSearch } from '../utils/productSearch';
 import { SlidersHorizontal, ArrowUpDown, X, RotateCcw, Heart } from 'lucide-react';
 
 export const ProductCatalog: React.FC = () => {
@@ -43,15 +44,9 @@ export const ProductCatalog: React.FC = () => {
           return false;
         }
       }
-      // Search query
-      if (searchQuery.trim()) {
-        const query = searchQuery.toLowerCase();
-        const matchesTitle = p.title.toLowerCase().includes(query);
-        const matchesBrand = p.brand.toLowerCase().includes(query);
-        const matchesDesc = p.description.toLowerCase().includes(query);
-        if (!matchesTitle && !matchesBrand && !matchesDesc) {
-          return false;
-        }
+      // Real-time search query (matches name, category, subcategory, brand, description)
+      if (!matchesProductSearch(p, searchQuery)) {
+        return false;
       }
       // Price
       if (p.price > maxPrice) {

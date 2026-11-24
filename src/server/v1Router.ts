@@ -1,5 +1,20 @@
 import express from 'express';
 import crypto from 'crypto';
+import {
+  hashPassword,
+  verifyPassword,
+  createSession,
+  getSession,
+  revokeSession,
+  extractBearerToken,
+  requireAuth,
+  requireRole,
+  requireSellerOwnership,
+  normalizeEmail,
+  normalizePhoneDigits,
+  isValidEmail,
+  isValidPasswordInput,
+} from './security.ts';
 
 export const v1Router = express.Router();
 
@@ -230,6 +245,7 @@ export interface DBAuditLog {
 // ==========================================
 
 export const dbSellers = new Map<string, DBSellerProfile>();
+export const dbSellerPasswordHashes = new Map<string, string>();
 export const dbProducts = new Map<string, DBProduct>();
 export const dbInventoryMovements: DBInventoryMovement[] = [];
 export const dbSellerOrders = new Map<string, DBSellerOrder>();
@@ -660,38 +676,62 @@ v1Router.post('/auth/seller/register', (req, res) => {
     tradeName, 
     email, 
     phone, 
+    password,
     businessType = 'PROPRIETORSHIP', 
     gstNumber = 'Unregistered', 
     panNumber = '', 
     bankAccount, 
     pickupAddress 
-  } = req.body;
+  } = req.body || {};
 
-  if (!businessName || !phone) {
-    return res.status(400).json({ error: 'Business name and mobile number are required.' });
+  if (!businessName || typeof businessName !== 'string' || !businessName.trim()) {
+    return res.status(400).json({ success: false, error: 'Business name is required.' });
+  }
+  const cleanPhone = typeof phone === 'string' ? phone.trim() : '';
+  const cleanEmail = normalizeEmail(email);
+  if (!cleanPhone && !cleanEmail) {
+    return res.status(400).json({ success: false, error: 'Mobile number or email address is required.' });
+  }
+  if (cleanEmail && !isValidEmail(cleanEmail)) {
+    return res.status(400).json({ success: false, error: 'Please provide a valid email address.' });
+  }
+  if (password !== undefined && password !== '' && !isValidPasswordInput(password)) {
+    return res.status(400).json({ success: false, error: 'Password must be between 6 and 128 characters.' });
   }
 
-  const sellerId = `seller-${Date.now().toString(36)}`;
+  // Prevent duplicate registration by email or exact normalized phone
+  const phoneDigits = normalizePhoneDigits(cleanPhone);
+  for (const existing of dbSellers.values()) {
+    if (cleanEmail && normalizeEmail(existing.email) === cleanEmail) {
+      return res.status(409).json({ success: false, error: 'A seller account with these details already exists.' });
+    }
+    if (phoneDigits && normalizePhoneDigits(existing.phone) === phoneDigits) {
+      return res.status(409).json({ success: false, error: 'A seller account with these details already exists.' });
+    }
+  }
+
+  const sellerId = `seller-${Date.now().toString(36)}-${crypto.randomBytes(2).toString('hex')}`;
   const userId = `usr_${sellerId}`;
+  const resolvedEmail = cleanEmail || `${businessName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '')}@sellers.primebazaar.in`;
 
   const newSeller: DBSellerProfile = {
     id: sellerId,
     userId,
-    sellerName: sellerName || businessName,
-    businessName,
-    tradeName: tradeName || businessName,
+    sellerName: (typeof sellerName === 'string' && sellerName.trim()) ? sellerName.trim() : businessName.trim(),
+    businessName: businessName.trim(),
+    tradeName: (typeof tradeName === 'string' && tradeName.trim()) ? tradeName.trim() : businessName.trim(),
     businessType,
-    email: email || `${businessName.toLowerCase().replace(/\s+/g, '')}@sellers.primebazaar.in`,
-    phone,
-    gstNumber,
-    panNumber,
+    email: resolvedEmail,
+    phone: cleanPhone || '+91 00000 00000',
+    gstNumber: typeof gstNumber === 'string' ? gstNumber.trim() : 'Unregistered',
+    panNumber: typeof panNumber === 'string' ? panNumber.trim().toUpperCase() : '',
     location: pickupAddress?.city ? `${pickupAddress.city}, ${pickupAddress.state}` : 'India',
     rating: 5.0,
     totalOrders: 0,
     totalRevenue: 0,
     approvalStatus: 'PENDING_APPROVAL',
     bankAccount: bankAccount || {
-      accountHolderName: sellerName || businessName,
+      accountHolderName: sellerName || businessName.trim(),
       accountNumber: 'Pending Verification',
       ifscCode: 'XXXX0000000',
       bankName: 'Pending Bank',
@@ -707,6 +747,9 @@ v1Router.post('/auth/seller/register', (req, res) => {
   };
 
   dbSellers.set(sellerId, newSeller);
+  if (isValidPasswordInput(password)) {
+    dbSellerPasswordHashes.set(sellerId, hashPassword(password));
+  }
 
   // Initialize wallet
   dbSellerWallets.set(sellerId, {
@@ -718,354 +761,501 @@ v1Router.post('/auth/seller/register', (req, res) => {
     currency: 'INR',
   });
 
-  const token = `pb_seller_token_${crypto.randomBytes(16).toString('hex')}`;
+  const session = createSession({
+    userId,
+    role: 'SELLER',
+    sellerId,
+    email: newSeller.email,
+    name: newSeller.businessName,
+  });
 
   dbAuditLogs.push({
     id: `audit-${Date.now()}`,
     actorType: 'SELLER',
     actorId: sellerId,
-    actorName: businessName,
+    actorName: newSeller.businessName,
     action: 'SELLER_REGISTRATION_SUBMITTED',
     entityType: 'SELLER',
     entityId: sellerId,
-    details: `Seller registered with GST: ${gstNumber}, PAN: ${panNumber}. Awaiting admin approval.`,
+    details: `Seller registered with GST: ${newSeller.gstNumber}. Awaiting admin approval.`,
     timestamp: new Date().toISOString(),
   });
 
   res.status(201).json({
     success: true,
     message: 'Seller registration submitted successfully. Please upload KYC documents for review.',
-    token,
+    token: session.token,
     seller: newSeller,
   });
 });
 
 v1Router.post('/auth/seller/login', (req, res) => {
-  const { emailOrPhone } = req.body;
-  const input = (emailOrPhone || '').trim().toLowerCase();
+  const { emailOrPhone, password } = req.body || {};
+  const input = typeof emailOrPhone === 'string' ? emailOrPhone.trim() : '';
+
+  if (!input || typeof password !== 'string' || !password) {
+    return res.status(400).json({
+      success: false,
+      error: 'Email or mobile number and password are required.',
+    });
+  }
+
+  const normalizedInputEmail = normalizeEmail(input);
+  const normalizedInputPhone = normalizePhoneDigits(input);
 
   let matchedSeller: DBSellerProfile | undefined;
   for (const s of dbSellers.values()) {
-    if (s.email.toLowerCase() === input || s.phone.includes(input) || s.businessName.toLowerCase().includes(input)) {
+    const emailMatches = isValidEmail(normalizedInputEmail) && normalizeEmail(s.email) === normalizedInputEmail;
+    const phoneMatches = normalizedInputPhone.length >= 10 && normalizePhoneDigits(s.phone) === normalizedInputPhone;
+    if (emailMatches || phoneMatches) {
       matchedSeller = s;
       break;
     }
   }
 
-  // Fallback to seller-1 if testing with arbitrary credentials
-  if (!matchedSeller) {
-    matchedSeller = dbSellers.get('seller-1')!;
+  const storedHash = matchedSeller ? dbSellerPasswordHashes.get(matchedSeller.id) : undefined;
+  const passwordValid = verifyPassword(password, storedHash);
+
+  if (!matchedSeller || !passwordValid) {
+    return res.status(401).json({
+      success: false,
+      error: 'Invalid seller credentials.',
+    });
   }
 
-  const token = `pb_seller_token_${crypto.randomBytes(16).toString('hex')}`;
+  if (matchedSeller.approvalStatus === 'SUSPENDED') {
+    return res.status(403).json({
+      success: false,
+      error: 'This seller account is currently suspended.',
+    });
+  }
+
+  const session = createSession({
+    userId: matchedSeller.userId,
+    role: 'SELLER',
+    sellerId: matchedSeller.id,
+    email: matchedSeller.email,
+    name: matchedSeller.businessName,
+  });
 
   res.json({
     success: true,
-    token,
+    token: session.token,
     seller: matchedSeller,
   });
 });
 
 v1Router.post('/auth/verify-otp', (req, res) => {
-  const { otp = '7784' } = req.body;
-  const token = `pb_token_${crypto.randomBytes(16).toString('hex')}`;
+  const { otp, email, phone } = req.body || {};
+  const cleanOtp = typeof otp === 'string' ? otp.trim() : '';
+  if (!cleanOtp || cleanOtp.length < 4) {
+    return res.status(400).json({ success: false, error: 'A valid verification OTP is required.' });
+  }
+  const cleanEmail = normalizeEmail(email);
+  const cleanPhone = normalizePhoneDigits(phone);
+
+  // Match seller strictly if identifier matches; otherwise issue CUSTOMER role
+  let matchedSeller: DBSellerProfile | undefined;
+  if (cleanEmail || cleanPhone.length >= 10) {
+    for (const s of dbSellers.values()) {
+      if (
+        (cleanEmail && normalizeEmail(s.email) === cleanEmail) ||
+        (cleanPhone.length >= 10 && normalizePhoneDigits(s.phone) === cleanPhone)
+      ) {
+        matchedSeller = s;
+        break;
+      }
+    }
+  }
+
+  // Note: full email/SMS OTP challenge validation lives on /api/auth/verify-otp; reject unverified generic guesses except known SMS demo challenge
+  if (cleanOtp !== '7784') {
+    return res.status(400).json({
+      success: false,
+      error: 'Please use /api/auth/send-otp and /api/auth/verify-otp for email verification codes.',
+    });
+  }
+
+  const session = createSession({
+    userId: matchedSeller ? matchedSeller.userId : `usr_otp_${Date.now().toString(36)}`,
+    role: matchedSeller ? 'SELLER' : 'CUSTOMER',
+    sellerId: matchedSeller?.id,
+    email: matchedSeller?.email || cleanEmail || undefined,
+    name: matchedSeller?.businessName,
+  });
+
   res.json({
     success: true,
-    token,
+    token: session.token,
+    role: session.role,
     message: 'OTP verified successfully',
   });
 });
 
-v1Router.post('/auth/refresh', (req, res) => {
-  const newToken = `pb_token_${crypto.randomBytes(16).toString('hex')}`;
+v1Router.post('/auth/refresh', requireAuth, (req, res) => {
+  const current = req.auth!;
+  revokeSession(current.token);
+  const nextSession = createSession({
+    userId: current.userId,
+    role: current.role,
+    sellerId: current.sellerId,
+    email: current.email,
+    name: current.name,
+  });
+
   res.json({
     success: true,
-    token: newToken,
+    token: nextSession.token,
     expiresIn: 86400,
   });
 });
 
 v1Router.post('/auth/logout', (req, res) => {
+  const token = extractBearerToken(req);
+  if (token) {
+    revokeSession(token);
+  }
   res.json({ success: true, message: 'Seller session invalidated successfully.' });
 });
 
+// Apply global RBAC gate for all /api/v1/seller/* routes:
+// - 401 when unauthenticated
+// - 403 when caller is CUSTOMER or lacks SELLER / ADMIN / SUPER_ADMIN role
+v1Router.use('/seller', requireAuth, requireRole('SELLER', 'ADMIN', 'SUPER_ADMIN'));
+
+function resolveEffectiveSellerId(req: express.Request, explicitSellerId?: string): string {
+  if (req.auth && (req.auth.role === 'ADMIN' || req.auth.role === 'SUPER_ADMIN')) {
+    return explicitSellerId || req.auth.sellerId || 'seller-1';
+  }
+  return req.auth?.sellerId || '';
+}
+
 // Profile & Verification
-v1Router.get('/seller/profile', (req, res) => {
-  const sellerId = (req.query.sellerId as string) || 'seller-1';
-  const seller = dbSellers.get(sellerId);
-  if (!seller) {
-    return res.status(404).json({ error: 'Seller not found' });
+v1Router.get(
+  '/seller/profile',
+  requireSellerOwnership(req => req.query.sellerId as string | undefined),
+  (req, res) => {
+    const sellerId = resolveEffectiveSellerId(req, req.query.sellerId as string | undefined);
+    const seller = dbSellers.get(sellerId);
+    if (!seller) {
+      return res.status(404).json({ error: 'Seller not found' });
+    }
+    const wallet = dbSellerWallets.get(sellerId);
+    res.json({ success: true, profile: seller, wallet });
   }
-  const wallet = dbSellerWallets.get(sellerId);
-  res.json({ success: true, profile: seller, wallet });
-});
+);
 
-v1Router.put('/seller/profile', (req, res) => {
-  const sellerId = (req.body.sellerId as string) || 'seller-1';
-  const seller = dbSellers.get(sellerId);
-  if (!seller) {
-    return res.status(404).json({ error: 'Seller not found' });
+v1Router.put(
+  '/seller/profile',
+  requireSellerOwnership(req => req.body?.sellerId as string | undefined),
+  (req, res) => {
+    const sellerId = resolveEffectiveSellerId(req, req.body?.sellerId as string | undefined);
+    const seller = dbSellers.get(sellerId);
+    if (!seller) {
+      return res.status(404).json({ error: 'Seller not found' });
+    }
+
+    if (req.body.businessName) seller.businessName = String(req.body.businessName).trim();
+    if (req.body.pickupAddress) seller.pickupAddress = req.body.pickupAddress;
+    if (req.body.bankAccount) seller.bankAccount = req.body.bankAccount;
+
+    res.json({ success: true, message: 'Seller profile updated successfully', profile: seller });
   }
+);
 
-  if (req.body.businessName) seller.businessName = req.body.businessName;
-  if (req.body.pickupAddress) seller.pickupAddress = req.body.pickupAddress;
-  if (req.body.bankAccount) seller.bankAccount = req.body.bankAccount;
+v1Router.post(
+  '/seller/documents',
+  requireSellerOwnership(req => req.body?.sellerId as string | undefined),
+  (req, res) => {
+    const sellerId = resolveEffectiveSellerId(req, req.body?.sellerId as string | undefined);
+    const { documentType, documentUrl } = req.body || {};
+    const seller = dbSellers.get(sellerId);
+    if (!seller) {
+      return res.status(404).json({ error: 'Seller not found' });
+    }
 
-  res.json({ success: true, message: 'Seller profile updated successfully', profile: seller });
-});
+    const docId = `doc-${Date.now()}`;
+    const newDoc = {
+      id: docId,
+      documentType: documentType || 'PAN',
+      documentUrl: documentUrl || '/uploads/kyc_document.pdf',
+      verificationStatus: 'PENDING' as const,
+      submittedAt: new Date().toISOString(),
+    };
 
-v1Router.post('/seller/documents', (req, res) => {
-  const { sellerId = 'seller-1', documentType, documentUrl } = req.body;
-  const seller = dbSellers.get(sellerId);
-  if (!seller) {
-    return res.status(404).json({ error: 'Seller not found' });
+    seller.kycDocuments.push(newDoc);
+
+    dbAuditLogs.push({
+      id: `audit-${Date.now()}`,
+      actorType: 'SELLER',
+      actorId: sellerId,
+      actorName: seller.businessName,
+      action: 'KYC_DOCUMENT_UPLOADED',
+      entityType: 'DOCUMENT',
+      entityId: docId,
+      details: `Uploaded ${documentType} for compliance verification.`,
+      timestamp: new Date().toISOString(),
+    });
+
+    res.status(201).json({ success: true, message: 'Document uploaded for verification', document: newDoc });
   }
+);
 
-  const docId = `doc-${Date.now()}`;
-  const newDoc = {
-    id: docId,
-    documentType: documentType || 'PAN',
-    documentUrl: documentUrl || '/uploads/kyc_document.pdf',
-    verificationStatus: 'PENDING' as const,
-    submittedAt: new Date().toISOString(),
-  };
-
-  seller.kycDocuments.push(newDoc);
-
-  dbAuditLogs.push({
-    id: `audit-${Date.now()}`,
-    actorType: 'SELLER',
-    actorId: sellerId,
-    actorName: seller.businessName,
-    action: 'KYC_DOCUMENT_UPLOADED',
-    entityType: 'DOCUMENT',
-    entityId: docId,
-    details: `Uploaded ${documentType} for compliance verification.`,
-    timestamp: new Date().toISOString(),
-  });
-
-  res.status(201).json({ success: true, message: 'Document uploaded for verification', document: newDoc });
-});
-
-v1Router.get('/seller/verification', (req, res) => {
-  const sellerId = (req.query.sellerId as string) || 'seller-1';
-  const seller = dbSellers.get(sellerId);
-  if (!seller) {
-    return res.status(404).json({ error: 'Seller not found' });
+v1Router.get(
+  '/seller/verification',
+  requireSellerOwnership(req => req.query.sellerId as string | undefined),
+  (req, res) => {
+    const sellerId = resolveEffectiveSellerId(req, req.query.sellerId as string | undefined);
+    const seller = dbSellers.get(sellerId);
+    if (!seller) {
+      return res.status(404).json({ error: 'Seller not found' });
+    }
+    res.json({
+      success: true,
+      approvalStatus: seller.approvalStatus,
+      documents: seller.kycDocuments,
+    });
   }
-  res.json({
-    success: true,
-    approvalStatus: seller.approvalStatus,
-    documents: seller.kycDocuments,
-  });
-});
+);
 
 // ==========================================
 // 2. SELLER PRODUCTS & CATALOG (/api/v1/seller/products)
 // ==========================================
 
-v1Router.get('/seller/products', (req, res) => {
-  const sellerId = req.query.sellerId as string;
-  let list = Array.from(dbProducts.values());
+v1Router.get(
+  '/seller/products',
+  requireSellerOwnership(req => req.query.sellerId as string | undefined),
+  (req, res) => {
+    const requestedSellerId = req.query.sellerId as string | undefined;
+    let list = Array.from(dbProducts.values());
 
-  if (sellerId) {
-    list = list.filter(p => p.sellerId === sellerId);
-  }
+    if (req.auth!.role === 'SELLER') {
+      list = list.filter(p => p.sellerId === req.auth!.sellerId);
+    } else if (requestedSellerId) {
+      list = list.filter(p => p.sellerId === requestedSellerId);
+    }
 
-  res.json({
-    success: true,
-    count: list.length,
-    products: list,
-  });
-});
-
-v1Router.get('/seller/products/:id', (req, res) => {
-  const prod = dbProducts.get(req.params.id);
-  if (!prod) {
-    return res.status(404).json({ error: 'Product not found' });
-  }
-  res.json({ success: true, product: prod });
-});
-
-v1Router.post('/seller/products', (req, res) => {
-  const {
-    name,
-    categoryId = 'cat-ethnic',
-    subCategory,
-    brandId = 'br-1',
-    brandName,
-    description,
-    images = [],
-    videoUrl,
-    taxGstPercent = 12,
-    weightGrams = 500,
-    dimensions,
-    returnPeriodDays = 7,
-    warrantyPolicy,
-    variants = [],
-    sellerId = 'seller-1',
-    sellingPrice = 999,
-    mrp = 1999,
-    stock = 20,
-    sku,
-  } = req.body;
-
-  if (!name) {
-    return res.status(400).json({ error: 'Product name is required.' });
-  }
-
-  const seller = dbSellers.get(sellerId);
-  const prodId = `prod-${Date.now().toString(36)}`;
-
-  // Build variants if none supplied
-  const resolvedVariants: DBProductVariant[] = variants.length > 0 
-    ? variants.map((v: any, idx: number) => ({
-        id: `var-${prodId}-${idx}`,
-        productId: prodId,
-        sku: v.sku || `${name.slice(0, 3).toUpperCase()}-${v.size || 'STD'}-${idx}`,
-        size: v.size || 'M',
-        color: v.color || 'Standard',
-        price: Number(v.price) || sellingPrice,
-        mrp: Number(v.mrp) || mrp,
-        stock: Number(v.stock) || stock,
-      }))
-    : [
-        {
-          id: `var-${prodId}-std`,
-          productId: prodId,
-          sku: sku || `${name.slice(0, 3).toUpperCase()}-STD-${Math.floor(1000 + Math.random() * 9000)}`,
-          size: 'M',
-          color: 'Standard',
-          price: Number(sellingPrice),
-          mrp: Number(mrp),
-          stock: Number(stock),
-        }
-      ];
-
-  const newProduct: DBProduct = {
-    id: prodId,
-    sellerId,
-    sellerName: seller?.businessName || 'Varanasi Weavers Co.',
-    name,
-    categoryId,
-    subCategory,
-    brandId,
-    brandName: brandName || 'Prime Heritage',
-    description: description || 'Premium marketplace product handcrafted with high-grade materials.',
-    images: images.length > 0 ? images : ['/src/assets/images/collection_ethnic_wear_1793466539838.jpg'],
-    videoUrl,
-    taxGstPercent: Number(taxGstPercent),
-    weightGrams: Number(weightGrams),
-    dimensions: dimensions || { lengthCm: 30, widthCm: 20, heightCm: 5 },
-    returnPeriodDays: Number(returnPeriodDays),
-    warrantyPolicy,
-    status: 'APPROVED', // Autonomous publishing with post-moderation
-    variants: resolvedVariants,
-    createdAt: new Date().toISOString(),
-  };
-
-  dbProducts.set(prodId, newProduct);
-
-  // Inward inventory movements
-  for (const v of resolvedVariants) {
-    dbInventoryMovements.push({
-      id: `mov-${Date.now()}-${v.id}`,
-      variantId: v.id,
-      sku: v.sku,
-      sellerId,
-      movementType: 'INWARD',
-      quantity: v.stock,
-      referenceId: 'INITIAL_STOCK',
-      notes: `Initial stock added for ${newProduct.name}`,
-      createdAt: new Date().toISOString(),
+    res.json({
+      success: true,
+      count: list.length,
+      products: list,
     });
   }
+);
 
-  res.status(201).json({
-    success: true,
-    message: 'Product published successfully to marketplace catalog!',
-    product: newProduct,
-  });
-});
-
-v1Router.put('/seller/products/:id', (req, res) => {
-  const prod = dbProducts.get(req.params.id);
-  if (!prod) {
-    return res.status(404).json({ error: 'Product not found' });
+v1Router.get(
+  '/seller/products/:id',
+  requireSellerOwnership(req => dbProducts.get(req.params.id)?.sellerId),
+  (req, res) => {
+    const prod = dbProducts.get(req.params.id);
+    if (!prod) {
+      return res.status(404).json({ error: 'Product not found' });
+    }
+    res.json({ success: true, product: prod });
   }
+);
 
-  Object.assign(prod, req.body);
-  res.json({ success: true, message: 'Product updated successfully', product: prod });
-});
+v1Router.post(
+  '/seller/products',
+  requireSellerOwnership(req => req.body?.sellerId as string | undefined),
+  (req, res) => {
+    const sellerId = resolveEffectiveSellerId(req, req.body?.sellerId as string | undefined);
+    const {
+      name,
+      categoryId = 'cat-ethnic',
+      subCategory,
+      brandId = 'br-1',
+      brandName,
+      description,
+      images = [],
+      videoUrl,
+      taxGstPercent = 12,
+      weightGrams = 500,
+      dimensions,
+      returnPeriodDays = 7,
+      warrantyPolicy,
+      variants = [],
+      sellingPrice = 999,
+      mrp = 1999,
+      stock = 20,
+      sku,
+    } = req.body || {};
 
-v1Router.delete('/seller/products/:id', (req, res) => {
-  const prod = dbProducts.get(req.params.id);
-  if (!prod) {
-    return res.status(404).json({ error: 'Product not found' });
-  }
+    if (!name) {
+      return res.status(400).json({ error: 'Product name is required.' });
+    }
 
-  prod.status = 'ARCHIVED';
-  res.json({ success: true, message: 'Product archived successfully' });
-});
+    const seller = dbSellers.get(sellerId);
+    const prodId = `prod-${Date.now().toString(36)}`;
 
-v1Router.post('/seller/products/:id/images', (req, res) => {
-  const prod = dbProducts.get(req.params.id);
-  if (!prod) {
-    return res.status(404).json({ error: 'Product not found' });
-  }
-  if (req.body.imageUrl) {
-    prod.images.push(req.body.imageUrl);
-  }
-  res.json({ success: true, images: prod.images });
-});
+    // Build variants if none supplied
+    const resolvedVariants: DBProductVariant[] = variants.length > 0 
+      ? variants.map((v: any, idx: number) => ({
+          id: `var-${prodId}-${idx}`,
+          productId: prodId,
+          sku: v.sku || `${name.slice(0, 3).toUpperCase()}-${v.size || 'STD'}-${idx}`,
+          size: v.size || 'M',
+          color: v.color || 'Standard',
+          price: Number(v.price) || sellingPrice,
+          mrp: Number(v.mrp) || mrp,
+          stock: Number(v.stock) || stock,
+        }))
+      : [
+          {
+            id: `var-${prodId}-std`,
+            productId: prodId,
+            sku: sku || `${name.slice(0, 3).toUpperCase()}-STD-${Math.floor(1000 + Math.random() * 9000)}`,
+            size: 'M',
+            color: 'Standard',
+            price: Number(sellingPrice),
+            mrp: Number(mrp),
+            stock: Number(stock),
+          }
+        ];
 
-v1Router.post('/seller/products/bulk-upload', (req, res) => {
-  const { products, sellerId = 'seller-1' } = req.body;
-  if (!Array.isArray(products) || products.length === 0) {
-    return res.status(400).json({ error: 'Please provide an array of product rows.' });
-  }
-
-  let imported = 0;
-  for (const item of products) {
-    const prodId = `prod-bulk-${Date.now().toString(36)}-${imported}`;
-    const p: DBProduct = {
+    const newProduct: DBProduct = {
       id: prodId,
       sellerId,
-      sellerName: 'Varanasi Weavers Co.',
-      name: item.title || item.name || 'Catalog Item',
-      categoryId: item.category || 'cat-ethnic',
-      brandId: 'br-1',
-      brandName: item.brand || 'Prime Brand',
-      description: item.description || 'Uploaded via bulk spreadsheet',
-      images: [item.image || '/src/assets/images/collection_ethnic_wear_1793466539838.jpg'],
-      taxGstPercent: 12,
-      weightGrams: 500,
-      returnPeriodDays: 7,
+      sellerName: seller?.businessName || 'Prime Bazaar Merchant',
+      name,
+      categoryId,
+      subCategory,
+      brandId,
+      brandName: brandName || 'Prime Heritage',
+      description: description || 'Premium marketplace product handcrafted with high-grade materials.',
+      images: images.length > 0 ? images : ['/src/assets/images/collection_ethnic_wear_1793466539838.jpg'],
+      videoUrl,
+      taxGstPercent: Number(taxGstPercent),
+      weightGrams: Number(weightGrams),
+      dimensions: dimensions || { lengthCm: 30, widthCm: 20, heightCm: 5 },
+      returnPeriodDays: Number(returnPeriodDays),
+      warrantyPolicy,
       status: 'APPROVED',
-      variants: [
-        {
-          id: `var-${prodId}-1`,
-          productId: prodId,
-          sku: item.sku || `SKU-BULK-${imported}`,
-          size: item.size || 'Free Size',
-          color: item.color || 'Standard',
-          price: Number(item.price) || 999,
-          mrp: Number(item.mrp || item.originalPrice) || 1999,
-          stock: Number(item.stock || item.inStock) || 25,
-        }
-      ],
+      variants: resolvedVariants,
       createdAt: new Date().toISOString(),
     };
-    dbProducts.set(prodId, p);
-    imported++;
-  }
 
-  res.status(201).json({
-    success: true,
-    message: `Batch validation and catalog ingestion complete. Imported ${imported} products.`,
-    importedCount: imported,
-  });
-});
+    dbProducts.set(prodId, newProduct);
+
+    for (const v of resolvedVariants) {
+      dbInventoryMovements.push({
+        id: `mov-${Date.now()}-${v.id}`,
+        variantId: v.id,
+        sku: v.sku,
+        sellerId,
+        movementType: 'INWARD',
+        quantity: v.stock,
+        referenceId: 'INITIAL_STOCK',
+        notes: `Initial stock added for ${newProduct.name}`,
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    res.status(201).json({
+      success: true,
+      message: 'Product published successfully to marketplace catalog!',
+      product: newProduct,
+    });
+  }
+);
+
+v1Router.put(
+  '/seller/products/:id',
+  requireSellerOwnership(req => dbProducts.get(req.params.id)?.sellerId),
+  (req, res) => {
+    const prod = dbProducts.get(req.params.id);
+    if (!prod) {
+      return res.status(404).json({ error: 'Product not found' });
+    }
+
+    const { sellerId: _ignoredSellerId, id: _ignoredId, ...safeUpdates } = req.body || {};
+    Object.assign(prod, safeUpdates);
+    res.json({ success: true, message: 'Product updated successfully', product: prod });
+  }
+);
+
+v1Router.delete(
+  '/seller/products/:id',
+  requireSellerOwnership(req => dbProducts.get(req.params.id)?.sellerId),
+  (req, res) => {
+    const prod = dbProducts.get(req.params.id);
+    if (!prod) {
+      return res.status(404).json({ error: 'Product not found' });
+    }
+
+    prod.status = 'ARCHIVED';
+    res.json({ success: true, message: 'Product archived successfully' });
+  }
+);
+
+v1Router.post(
+  '/seller/products/:id/images',
+  requireSellerOwnership(req => dbProducts.get(req.params.id)?.sellerId),
+  (req, res) => {
+    const prod = dbProducts.get(req.params.id);
+    if (!prod) {
+      return res.status(404).json({ error: 'Product not found' });
+    }
+    if (req.body.imageUrl) {
+      prod.images.push(req.body.imageUrl);
+    }
+    res.json({ success: true, images: prod.images });
+  }
+);
+
+v1Router.post(
+  '/seller/products/bulk-upload',
+  requireSellerOwnership(req => req.body?.sellerId as string | undefined),
+  (req, res) => {
+    const sellerId = resolveEffectiveSellerId(req, req.body?.sellerId as string | undefined);
+    const { products } = req.body || {};
+    if (!Array.isArray(products) || products.length === 0) {
+      return res.status(400).json({ error: 'Please provide an array of product rows.' });
+    }
+
+    const seller = dbSellers.get(sellerId);
+    let imported = 0;
+    for (const item of products) {
+      const prodId = `prod-bulk-${Date.now().toString(36)}-${imported}`;
+      const p: DBProduct = {
+        id: prodId,
+        sellerId,
+        sellerName: seller?.businessName || 'Prime Bazaar Merchant',
+        name: item.title || item.name || 'Catalog Item',
+        categoryId: item.category || 'cat-ethnic',
+        brandId: 'br-1',
+        brandName: item.brand || 'Prime Brand',
+        description: item.description || 'Uploaded via bulk spreadsheet',
+        images: [item.image || '/src/assets/images/collection_ethnic_wear_1793466539838.jpg'],
+        taxGstPercent: 12,
+        weightGrams: 500,
+        returnPeriodDays: 7,
+        status: 'APPROVED',
+        variants: [
+          {
+            id: `var-${prodId}-1`,
+            productId: prodId,
+            sku: item.sku || `SKU-BULK-${imported}`,
+            size: item.size || 'Free Size',
+            color: item.color || 'Standard',
+            price: Number(item.price) || 999,
+            mrp: Number(item.mrp || item.originalPrice) || 1999,
+            stock: Number(item.stock || item.inStock) || 25,
+          }
+        ],
+        createdAt: new Date().toISOString(),
+      };
+      dbProducts.set(prodId, p);
+      imported++;
+    }
+
+    res.status(201).json({
+      success: true,
+      message: `Batch validation and catalog ingestion complete. Imported ${imported} products.`,
+      importedCount: imported,
+    });
+  }
+);
 
 v1Router.get('/seller/categories', (req, res) => {
   res.json({ success: true, categories: dbCategories });
@@ -1079,31 +1269,35 @@ v1Router.get('/seller/brands', (req, res) => {
 // 3. SELLER INVENTORY MANAGEMENT (/api/v1/seller/inventory)
 // ==========================================
 
-v1Router.get('/seller/inventory', (req, res) => {
-  const sellerId = (req.query.sellerId as string) || 'seller-1';
-  const inventoryItems: any[] = [];
+v1Router.get(
+  '/seller/inventory',
+  requireSellerOwnership(req => req.query.sellerId as string | undefined),
+  (req, res) => {
+    const sellerId = resolveEffectiveSellerId(req, req.query.sellerId as string | undefined);
+    const inventoryItems: any[] = [];
 
-  for (const p of dbProducts.values()) {
-    if (p.sellerId === sellerId) {
-      for (const v of p.variants) {
-        inventoryItems.push({
-          variantId: v.id,
-          productId: p.id,
-          productTitle: p.name,
-          sku: v.sku,
-          size: v.size,
-          color: v.color,
-          price: v.price,
-          stock: v.stock,
-          reservedQty: 0,
-          isLowStock: v.stock <= 5,
-        });
+    for (const p of dbProducts.values()) {
+      if (p.sellerId === sellerId) {
+        for (const v of p.variants) {
+          inventoryItems.push({
+            variantId: v.id,
+            productId: p.id,
+            productTitle: p.name,
+            sku: v.sku,
+            size: v.size,
+            color: v.color,
+            price: v.price,
+            stock: v.stock,
+            reservedQty: 0,
+            isLowStock: v.stock <= 5,
+          });
+        }
       }
     }
-  }
 
-  res.json({ success: true, inventory: inventoryItems });
-});
+    res.json({ success: true, inventory: inventoryItems });
+  }
+);
 
 v1Router.put('/seller/inventory/:variantId', (req, res) => {
   const { variantId } = req.params;
@@ -1123,6 +1317,13 @@ v1Router.put('/seller/inventory/:variantId', (req, res) => {
 
   if (!foundVariant || !targetProduct) {
     return res.status(404).json({ error: 'Variant not found in inventory.' });
+  }
+
+  if (req.auth!.role === 'SELLER' && targetProduct.sellerId !== req.auth!.sellerId) {
+    return res.status(403).json({
+      success: false,
+      error: 'Forbidden: Cannot adjust inventory belonging to another seller.',
+    });
   }
 
   const oldStock = foundVariant.stock;
@@ -1148,211 +1349,259 @@ v1Router.put('/seller/inventory/:variantId', (req, res) => {
   });
 });
 
-v1Router.get('/seller/inventory/low-stock', (req, res) => {
-  const sellerId = (req.query.sellerId as string) || 'seller-1';
-  const lowStock: any[] = [];
+v1Router.get(
+  '/seller/inventory/low-stock',
+  requireSellerOwnership(req => req.query.sellerId as string | undefined),
+  (req, res) => {
+    const sellerId = resolveEffectiveSellerId(req, req.query.sellerId as string | undefined);
+    const lowStock: any[] = [];
 
-  for (const p of dbProducts.values()) {
-    if (p.sellerId === sellerId) {
-      for (const v of p.variants) {
-        if (v.stock <= 5) {
-          lowStock.push({
-            variantId: v.id,
-            productId: p.id,
-            productTitle: p.name,
-            sku: v.sku,
-            size: v.size,
-            color: v.color,
-            stock: v.stock,
-            threshold: 5,
-          });
+    for (const p of dbProducts.values()) {
+      if (p.sellerId === sellerId) {
+        for (const v of p.variants) {
+          if (v.stock <= 5) {
+            lowStock.push({
+              variantId: v.id,
+              productId: p.id,
+              productTitle: p.name,
+              sku: v.sku,
+              size: v.size,
+              color: v.color,
+              stock: v.stock,
+              threshold: 5,
+            });
+          }
         }
       }
     }
-  }
 
-  res.json({ success: true, lowStock });
-});
-
-v1Router.get('/seller/inventory/movements', (req, res) => {
-  const sellerId = req.query.sellerId as string;
-  let list = dbInventoryMovements;
-  if (sellerId) {
-    list = list.filter(m => m.sellerId === sellerId);
+    res.json({ success: true, lowStock });
   }
-  res.json({ success: true, count: list.length, movements: list.slice(-50).reverse() });
-});
+);
+
+v1Router.get(
+  '/seller/inventory/movements',
+  requireSellerOwnership(req => req.query.sellerId as string | undefined),
+  (req, res) => {
+    const sellerId = resolveEffectiveSellerId(req, req.query.sellerId as string | undefined);
+    let list = dbInventoryMovements;
+    if (sellerId) {
+      list = list.filter(m => m.sellerId === sellerId);
+    }
+    res.json({ success: true, count: list.length, movements: list.slice(-50).reverse() });
+  }
+);
 
 // ==========================================
 // 4. SELLER ORDERS & SUBORDER FULFILLMENT (/api/v1/seller/orders)
 // ==========================================
 
-v1Router.get('/seller/orders', (req, res) => {
-  const sellerId = (req.query.sellerId as string) || 'seller-1';
-  const status = req.query.status as string;
+v1Router.get(
+  '/seller/orders',
+  requireSellerOwnership(req => req.query.sellerId as string | undefined),
+  (req, res) => {
+    const sellerId = resolveEffectiveSellerId(req, req.query.sellerId as string | undefined);
+    const status = req.query.status as string;
 
-  let orders = Array.from(dbSellerOrders.values()).filter(so => so.sellerId === sellerId);
-  if (status) {
-    orders = orders.filter(so => so.fulfillmentStatus.toLowerCase() === status.toLowerCase());
-  }
-
-  res.json({
-    success: true,
-    count: orders.length,
-    orders: orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
-  });
-});
-
-v1Router.get('/seller/orders/:id', (req, res) => {
-  const suborder = dbSellerOrders.get(req.params.id);
-  if (!suborder) {
-    return res.status(404).json({ error: 'Suborder not found' });
-  }
-  res.json({ success: true, order: suborder });
-});
-
-v1Router.post('/seller/orders/:id/accept', (req, res) => {
-  const so = dbSellerOrders.get(req.params.id);
-  if (!so) return res.status(404).json({ error: 'Suborder not found' });
-
-  so.fulfillmentStatus = 'ACCEPTED';
-  so.updatedAt = new Date().toISOString();
-
-  res.json({
-    success: true,
-    message: `Suborder ${so.suborderNumber} accepted. Ready for packing.`,
-    order: so,
-  });
-});
-
-v1Router.post('/seller/orders/:id/reject', (req, res) => {
-  const so = dbSellerOrders.get(req.params.id);
-  if (!so) return res.status(404).json({ error: 'Suborder not found' });
-
-  so.fulfillmentStatus = 'CANCELLED';
-  so.cancellationReason = req.body.reason || 'Rejected by merchant due to stock discrepancy';
-  so.updatedAt = new Date().toISOString();
-
-  res.json({
-    success: true,
-    message: `Suborder ${so.suborderNumber} rejected. Inventory released back.`,
-    order: so,
-  });
-});
-
-v1Router.post('/seller/orders/:id/pack', (req, res) => {
-  const so = dbSellerOrders.get(req.params.id);
-  if (!so) return res.status(404).json({ error: 'Suborder not found' });
-
-  so.fulfillmentStatus = 'PACKED';
-  so.shippingLabelGenerated = true;
-  so.updatedAt = new Date().toISOString();
-
-  res.json({
-    success: true,
-    message: `Suborder ${so.suborderNumber} packed. Thermal shipping label generated.`,
-    order: so,
-    shippingLabel: {
-      suborderNumber: so.suborderNumber,
-      awb: so.trackingNumber,
-      courier: so.courierPartner,
-      destinationHub: so.shippingAddress?.city,
+    let orders = Array.from(dbSellerOrders.values()).filter(so => so.sellerId === sellerId);
+    if (status) {
+      orders = orders.filter(so => so.fulfillmentStatus.toLowerCase() === status.toLowerCase());
     }
-  });
-});
 
-v1Router.post('/seller/orders/:id/dispatch', (req, res) => {
-  const so = dbSellerOrders.get(req.params.id);
-  if (!so) return res.status(404).json({ error: 'Suborder not found' });
+    res.json({
+      success: true,
+      count: orders.length,
+      orders: orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
+    });
+  }
+);
 
-  so.fulfillmentStatus = 'DISPATCHED';
-  so.pickupDate = new Date().toLocaleDateString('en-IN');
-  so.updatedAt = new Date().toISOString();
-
-  res.json({
-    success: true,
-    message: `Suborder ${so.suborderNumber} handed over to ${so.courierPartner}. Airway Bill active.`,
-    order: so,
-    trackingNumber: so.trackingNumber,
-  });
-});
-
-v1Router.post('/seller/orders/:id/cancel', (req, res) => {
-  const so = dbSellerOrders.get(req.params.id);
-  if (!so) return res.status(404).json({ error: 'Suborder not found' });
-
-  so.fulfillmentStatus = 'CANCELLED';
-  so.cancellationReason = req.body.reason || 'Merchant cancelled order';
-  so.updatedAt = new Date().toISOString();
-
-  res.json({ success: true, message: `Suborder ${so.suborderNumber} cancelled.`, order: so });
-});
-
-v1Router.get('/seller/orders/:id/invoice', (req, res) => {
-  const so = dbSellerOrders.get(req.params.id);
-  if (!so) return res.status(404).json({ error: 'Suborder not found' });
-
-  const taxableValue = Math.round(so.subtotal / 1.12);
-  const totalTax = so.subtotal - taxableValue;
-  const cgst = Math.round(totalTax / 2);
-  const sgst = totalTax - cgst;
-
-  res.json({
-    success: true,
-    invoice: {
-      invoiceNumber: so.invoiceNumber,
-      date: so.createdAt,
-      suborderNumber: so.suborderNumber,
-      sellerName: so.sellerName,
-      customerName: so.customerName,
-      shippingAddress: so.shippingAddress,
-      items: so.items,
-      taxableValue,
-      cgst,
-      sgst,
-      totalAmount: so.subtotal,
-      currency: 'INR',
+v1Router.get(
+  '/seller/orders/:id',
+  requireSellerOwnership(req => dbSellerOrders.get(req.params.id)?.sellerId),
+  (req, res) => {
+    const suborder = dbSellerOrders.get(req.params.id);
+    if (!suborder) {
+      return res.status(404).json({ error: 'Suborder not found' });
     }
-  });
-});
+    res.json({ success: true, order: suborder });
+  }
+);
+
+v1Router.post(
+  '/seller/orders/:id/accept',
+  requireSellerOwnership(req => dbSellerOrders.get(req.params.id)?.sellerId),
+  (req, res) => {
+    const so = dbSellerOrders.get(req.params.id);
+    if (!so) return res.status(404).json({ error: 'Suborder not found' });
+
+    so.fulfillmentStatus = 'ACCEPTED';
+    so.updatedAt = new Date().toISOString();
+
+    res.json({
+      success: true,
+      message: `Suborder ${so.suborderNumber} accepted. Ready for packing.`,
+      order: so,
+    });
+  }
+);
+
+v1Router.post(
+  '/seller/orders/:id/reject',
+  requireSellerOwnership(req => dbSellerOrders.get(req.params.id)?.sellerId),
+  (req, res) => {
+    const so = dbSellerOrders.get(req.params.id);
+    if (!so) return res.status(404).json({ error: 'Suborder not found' });
+
+    so.fulfillmentStatus = 'CANCELLED';
+    so.cancellationReason = req.body.reason || 'Rejected by merchant due to stock discrepancy';
+    so.updatedAt = new Date().toISOString();
+
+    res.json({
+      success: true,
+      message: `Suborder ${so.suborderNumber} rejected. Inventory released back.`,
+      order: so,
+    });
+  }
+);
+
+v1Router.post(
+  '/seller/orders/:id/pack',
+  requireSellerOwnership(req => dbSellerOrders.get(req.params.id)?.sellerId),
+  (req, res) => {
+    const so = dbSellerOrders.get(req.params.id);
+    if (!so) return res.status(404).json({ error: 'Suborder not found' });
+
+    so.fulfillmentStatus = 'PACKED';
+    so.shippingLabelGenerated = true;
+    so.updatedAt = new Date().toISOString();
+
+    res.json({
+      success: true,
+      message: `Suborder ${so.suborderNumber} packed. Thermal shipping label generated.`,
+      order: so,
+      shippingLabel: {
+        suborderNumber: so.suborderNumber,
+        awb: so.trackingNumber,
+        courier: so.courierPartner,
+        destinationHub: so.shippingAddress?.city,
+      }
+    });
+  }
+);
+
+v1Router.post(
+  '/seller/orders/:id/dispatch',
+  requireSellerOwnership(req => dbSellerOrders.get(req.params.id)?.sellerId),
+  (req, res) => {
+    const so = dbSellerOrders.get(req.params.id);
+    if (!so) return res.status(404).json({ error: 'Suborder not found' });
+
+    so.fulfillmentStatus = 'DISPATCHED';
+    so.pickupDate = new Date().toLocaleDateString('en-IN');
+    so.updatedAt = new Date().toISOString();
+
+    res.json({
+      success: true,
+      message: `Suborder ${so.suborderNumber} handed over to ${so.courierPartner}. Airway Bill active.`,
+      order: so,
+      trackingNumber: so.trackingNumber,
+    });
+  }
+);
+
+v1Router.post(
+  '/seller/orders/:id/cancel',
+  requireSellerOwnership(req => dbSellerOrders.get(req.params.id)?.sellerId),
+  (req, res) => {
+    const so = dbSellerOrders.get(req.params.id);
+    if (!so) return res.status(404).json({ error: 'Suborder not found' });
+
+    so.fulfillmentStatus = 'CANCELLED';
+    so.cancellationReason = req.body.reason || 'Merchant cancelled order';
+    so.updatedAt = new Date().toISOString();
+
+    res.json({ success: true, message: `Suborder ${so.suborderNumber} cancelled.`, order: so });
+  }
+);
+
+v1Router.get(
+  '/seller/orders/:id/invoice',
+  requireSellerOwnership(req => dbSellerOrders.get(req.params.id)?.sellerId),
+  (req, res) => {
+    const so = dbSellerOrders.get(req.params.id);
+    if (!so) return res.status(404).json({ error: 'Suborder not found' });
+
+    const taxableValue = Math.round(so.subtotal / 1.12);
+    const totalTax = so.subtotal - taxableValue;
+    const cgst = Math.round(totalTax / 2);
+    const sgst = totalTax - cgst;
+
+    res.json({
+      success: true,
+      invoice: {
+        invoiceNumber: so.invoiceNumber,
+        date: so.createdAt,
+        suborderNumber: so.suborderNumber,
+        sellerName: so.sellerName,
+        customerName: so.customerName,
+        shippingAddress: so.shippingAddress,
+        items: so.items,
+        taxableValue,
+        cgst,
+        sgst,
+        totalAmount: so.subtotal,
+        currency: 'INR',
+      }
+    });
+  }
+);
 
 // ==========================================
 // 5. SELLER SHIPPING & RETURNS
 // ==========================================
 
-v1Router.post('/seller/shipments', (req, res) => {
-  const { suborderId, courierPartner = 'BlueDart Express' } = req.body;
-  const so = dbSellerOrders.get(suborderId);
-  if (!so) return res.status(404).json({ error: 'Suborder not found' });
+v1Router.post(
+  '/seller/shipments',
+  requireSellerOwnership(req => dbSellerOrders.get(req.body?.suborderId)?.sellerId),
+  (req, res) => {
+    const { suborderId, courierPartner = 'BlueDart Express' } = req.body;
+    const so = dbSellerOrders.get(suborderId);
+    if (!so) return res.status(404).json({ error: 'Suborder not found' });
 
-  so.courierPartner = courierPartner;
-  so.shippingLabelGenerated = true;
+    so.courierPartner = courierPartner;
+    so.shippingLabelGenerated = true;
 
-  res.status(201).json({
-    success: true,
-    awb: so.trackingNumber,
-    courier: so.courierPartner,
-    pickupSlot: 'Tomorrow between 10:00 AM - 01:00 PM',
-    message: 'Manifest created and pickup booked with carrier.',
-  });
-});
-
-v1Router.get('/seller/shipments', (req, res) => {
-  const sellerId = (req.query.sellerId as string) || 'seller-1';
-  const shipments = Array.from(dbSellerOrders.values())
-    .filter(so => so.sellerId === sellerId && so.shippingLabelGenerated)
-    .map(so => ({
-      suborderNumber: so.suborderNumber,
+    res.status(201).json({
+      success: true,
       awb: so.trackingNumber,
       courier: so.courierPartner,
-      customer: so.customerName,
-      destination: `${so.shippingAddress?.city}, ${so.shippingAddress?.state}`,
-      status: so.fulfillmentStatus,
-      pickupDate: so.pickupDate || 'Scheduled',
-    }));
+      pickupSlot: 'Tomorrow between 10:00 AM - 01:00 PM',
+      message: 'Manifest created and pickup booked with carrier.',
+    });
+  }
+);
 
-  res.json({ success: true, shipments });
-});
+v1Router.get(
+  '/seller/shipments',
+  requireSellerOwnership(req => req.query.sellerId as string | undefined),
+  (req, res) => {
+    const sellerId = resolveEffectiveSellerId(req, req.query.sellerId as string | undefined);
+    const shipments = Array.from(dbSellerOrders.values())
+      .filter(so => so.sellerId === sellerId && so.shippingLabelGenerated)
+      .map(so => ({
+        suborderNumber: so.suborderNumber,
+        awb: so.trackingNumber,
+        courier: so.courierPartner,
+        customer: so.customerName,
+        destination: `${so.shippingAddress?.city}, ${so.shippingAddress?.state}`,
+        status: so.fulfillmentStatus,
+        pickupDate: so.pickupDate || 'Scheduled',
+      }));
+
+    res.json({ success: true, shipments });
+  }
+);
 
 v1Router.get('/seller/shipments/:id/track', (req, res) => {
   res.json({
@@ -1368,103 +1617,138 @@ v1Router.get('/seller/shipments/:id/track', (req, res) => {
   });
 });
 
-v1Router.get('/seller/returns', (req, res) => {
-  const sellerId = (req.query.sellerId as string) || 'seller-1';
-  const returns = Array.from(dbSellerReturns.values()).filter(r => r.sellerId === sellerId);
-  res.json({ success: true, returns });
-});
+v1Router.get(
+  '/seller/returns',
+  requireSellerOwnership(req => req.query.sellerId as string | undefined),
+  (req, res) => {
+    const sellerId = resolveEffectiveSellerId(req, req.query.sellerId as string | undefined);
+    const returns = Array.from(dbSellerReturns.values()).filter(r => r.sellerId === sellerId);
+    res.json({ success: true, returns });
+  }
+);
 
-v1Router.post('/seller/returns/:id/approve', (req, res) => {
-  const ret = dbSellerReturns.get(req.params.id);
-  if (!ret) return res.status(404).json({ error: 'Return request not found' });
+v1Router.post(
+  '/seller/returns/:id/approve',
+  requireSellerOwnership(req => dbSellerReturns.get(req.params.id)?.sellerId),
+  (req, res) => {
+    const ret = dbSellerReturns.get(req.params.id);
+    if (!ret) return res.status(404).json({ error: 'Return request not found' });
 
-  ret.status = 'APPROVED';
-  res.json({ success: true, message: 'Return authorized. Courier reverse pickup scheduled.', return: ret });
-});
+    ret.status = 'APPROVED';
+    res.json({ success: true, message: 'Return authorized. Courier reverse pickup scheduled.', return: ret });
+  }
+);
 
-v1Router.post('/seller/returns/:id/reject', (req, res) => {
-  const ret = dbSellerReturns.get(req.params.id);
-  if (!ret) return res.status(404).json({ error: 'Return request not found' });
+v1Router.post(
+  '/seller/returns/:id/reject',
+  requireSellerOwnership(req => dbSellerReturns.get(req.params.id)?.sellerId),
+  (req, res) => {
+    const ret = dbSellerReturns.get(req.params.id);
+    if (!ret) return res.status(404).json({ error: 'Return request not found' });
 
-  ret.status = 'REJECTED';
-  ret.rejectionReason = req.body.reason || 'Does not qualify under return policy terms';
-  res.json({ success: true, message: 'Return request rejected.', return: ret });
-});
+    ret.status = 'REJECTED';
+    ret.rejectionReason = req.body.reason || 'Does not qualify under return policy terms';
+    res.json({ success: true, message: 'Return request rejected.', return: ret });
+  }
+);
 
 // ==========================================
 // 6. SELLER WALLET, SETTLEMENTS & REPORTS
 // ==========================================
 
-v1Router.get('/seller/wallet', (req, res) => {
-  const sellerId = (req.query.sellerId as string) || 'seller-1';
-  let wallet = dbSellerWallets.get(sellerId);
-  if (!wallet) {
-    wallet = {
-      sellerId,
-      balance: 84200,
-      pendingSettlement: 18450,
-      lifetimeEarnings: 3036000,
-      totalWithdrawn: 2933350,
-      currency: 'INR',
-    };
-    dbSellerWallets.set(sellerId, wallet);
-  }
-  res.json({ success: true, wallet });
-});
-
-v1Router.get('/seller/transactions', (req, res) => {
-  const sellerId = (req.query.sellerId as string) || 'seller-1';
-  const txs = dbSellerTransactions.filter(t => t.sellerId === sellerId);
-  res.json({ success: true, count: txs.length, transactions: txs });
-});
-
-v1Router.get('/seller/settlements', (req, res) => {
-  const sellerId = (req.query.sellerId as string) || 'seller-1';
-  const sets = dbSettlements.filter(s => s.sellerId === sellerId);
-  res.json({ success: true, settlements: sets });
-});
-
-v1Router.get('/seller/reports/sales', (req, res) => {
-  const sellerId = (req.query.sellerId as string) || 'seller-1';
-  const seller = dbSellers.get(sellerId);
-  res.json({
-    success: true,
-    summary: {
-      totalRevenue: seller?.totalRevenue || 3450000,
-      totalOrders: seller?.totalOrders || 4210,
-      averageOrderValue: 820,
-      returnRate: '3.8%',
-      fulfillmentRate: '99.4%',
-    },
-    monthlyTrend: [
-      { month: 'Jun', sales: 480000, orders: 580 },
-      { month: 'Jul', sales: 520000, orders: 630 },
-      { month: 'Aug', sales: 610000, orders: 740 },
-      { month: 'Sep', sales: 590000, orders: 710 },
-      { month: 'Oct', sales: 680000, orders: 820 },
-      { month: 'Nov', sales: 570000, orders: 730 },
-    ]
-  });
-});
-
-v1Router.get('/seller/reports/earnings', (req, res) => {
-  const sellerId = (req.query.sellerId as string) || 'seller-1';
-  const wallet = dbSellerWallets.get(sellerId);
-  res.json({
-    success: true,
-    earnings: {
-      availableForWithdrawal: wallet?.balance || 84200,
-      pendingEscrow: wallet?.pendingSettlement || 18450,
-      totalPlatformCommissionPaid: 414000,
-      gstPaidOnCommission: 74520,
-      netDisbursed: wallet?.totalWithdrawn || 2933350,
+v1Router.get(
+  '/seller/wallet',
+  requireSellerOwnership(req => req.query.sellerId as string | undefined),
+  (req, res) => {
+    const sellerId = resolveEffectiveSellerId(req, req.query.sellerId as string | undefined);
+    let wallet = dbSellerWallets.get(sellerId);
+    if (!wallet) {
+      wallet = {
+        sellerId,
+        balance: 0,
+        pendingSettlement: 0,
+        lifetimeEarnings: 0,
+        totalWithdrawn: 0,
+        currency: 'INR',
+      };
+      dbSellerWallets.set(sellerId, wallet);
     }
-  });
-});
+    res.json({ success: true, wallet });
+  }
+);
+
+v1Router.get(
+  '/seller/transactions',
+  requireSellerOwnership(req => req.query.sellerId as string | undefined),
+  (req, res) => {
+    const sellerId = resolveEffectiveSellerId(req, req.query.sellerId as string | undefined);
+    const txs = dbSellerTransactions.filter(t => t.sellerId === sellerId);
+    res.json({ success: true, count: txs.length, transactions: txs });
+  }
+);
+
+v1Router.get(
+  '/seller/settlements',
+  requireSellerOwnership(req => req.query.sellerId as string | undefined),
+  (req, res) => {
+    const sellerId = resolveEffectiveSellerId(req, req.query.sellerId as string | undefined);
+    const sets = dbSettlements.filter(s => s.sellerId === sellerId);
+    res.json({ success: true, settlements: sets });
+  }
+);
+
+v1Router.get(
+  '/seller/reports/sales',
+  requireSellerOwnership(req => req.query.sellerId as string | undefined),
+  (req, res) => {
+    const sellerId = resolveEffectiveSellerId(req, req.query.sellerId as string | undefined);
+    const seller = dbSellers.get(sellerId);
+    res.json({
+      success: true,
+      summary: {
+        totalRevenue: seller?.totalRevenue || 0,
+        totalOrders: seller?.totalOrders || 0,
+        averageOrderValue: 820,
+        returnRate: '3.8%',
+        fulfillmentRate: '99.4%',
+      },
+      monthlyTrend: [
+        { month: 'Jun', sales: 480000, orders: 580 },
+        { month: 'Jul', sales: 520000, orders: 630 },
+        { month: 'Aug', sales: 610000, orders: 740 },
+        { month: 'Sep', sales: 590000, orders: 710 },
+        { month: 'Oct', sales: 680000, orders: 820 },
+        { month: 'Nov', sales: 570000, orders: 730 },
+      ]
+    });
+  }
+);
+
+v1Router.get(
+  '/seller/reports/earnings',
+  requireSellerOwnership(req => req.query.sellerId as string | undefined),
+  (req, res) => {
+    const sellerId = resolveEffectiveSellerId(req, req.query.sellerId as string | undefined);
+    const wallet = dbSellerWallets.get(sellerId);
+    res.json({
+      success: true,
+      earnings: {
+        availableForWithdrawal: wallet?.balance || 0,
+        pendingEscrow: wallet?.pendingSettlement || 0,
+        totalPlatformCommissionPaid: 414000,
+        gstPaidOnCommission: 74520,
+        netDisbursed: wallet?.totalWithdrawn || 0,
+      }
+    });
+  }
+);
 
 // ==========================================
 // 7. SUPER ADMIN CONTROL APIS (/api/v1/admin)
 // ==========================================
+
+// Strict server-side RBAC: Only ADMIN or SUPER_ADMIN roles can access /api/v1/admin/*
+v1Router.use('/admin', requireAuth, requireRole('ADMIN', 'SUPER_ADMIN'));
 
 v1Router.get('/admin/sellers', (req, res) => {
   res.json({
@@ -1493,8 +1777,8 @@ v1Router.post('/admin/sellers/:id/approve', (req, res) => {
   dbAuditLogs.push({
     id: `audit-${Date.now()}`,
     actorType: 'ADMIN',
-    actorId: 'admin-super',
-    actorName: 'Super Admin',
+    actorId: req.auth?.userId || 'admin-super',
+    actorName: req.auth?.name || req.auth?.email || 'Super Admin',
     action: 'SELLER_APPROVED',
     entityType: 'SELLER',
     entityId: seller.id,
@@ -1515,8 +1799,8 @@ v1Router.post('/admin/sellers/:id/reject', (req, res) => {
   dbAuditLogs.push({
     id: `audit-${Date.now()}`,
     actorType: 'ADMIN',
-    actorId: 'admin-super',
-    actorName: 'Super Admin',
+    actorId: req.auth?.userId || 'admin-super',
+    actorName: req.auth?.name || req.auth?.email || 'Super Admin',
     action: 'SELLER_REJECTED',
     entityType: 'SELLER',
     entityId: seller.id,
@@ -1536,8 +1820,8 @@ v1Router.post('/admin/sellers/:id/suspend', (req, res) => {
   dbAuditLogs.push({
     id: `audit-${Date.now()}`,
     actorType: 'ADMIN',
-    actorId: 'admin-super',
-    actorName: 'Super Admin',
+    actorId: req.auth?.userId || 'admin-super',
+    actorName: req.auth?.name || req.auth?.email || 'Super Admin',
     action: 'SELLER_SUSPENDED',
     entityType: 'SELLER',
     entityId: seller.id,
@@ -1557,8 +1841,8 @@ v1Router.post('/admin/sellers/:id/activate', (req, res) => {
   dbAuditLogs.push({
     id: `audit-${Date.now()}`,
     actorType: 'ADMIN',
-    actorId: 'admin-super',
-    actorName: 'Super Admin',
+    actorId: req.auth?.userId || 'admin-super',
+    actorName: req.auth?.name || req.auth?.email || 'Super Admin',
     action: 'SELLER_ACTIVATED',
     entityType: 'SELLER',
     entityId: seller.id,
@@ -1697,24 +1981,29 @@ v1Router.get('/live-sessions', (req, res) => {
   res.json({ success: true, count: dbLiveSessions.length, liveSessions: dbLiveSessions });
 });
 
-v1Router.post('/seller/live-sessions', (req, res) => {
-  const { sellerId, title, category, streamUrl, pinnedProductId } = req.body;
-  const newSession = {
-    id: `live-${Date.now()}`,
-    sellerId: sellerId || 'seller-1',
-    sellerName: dbSellers.get(sellerId)?.sellerName || 'Verified Seller',
-    sellerAvatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=200&q=80',
-    title: title || 'Live Fashion Showcase',
-    category: category || 'Ethnic Wear',
-    viewerCount: 1,
-    status: 'live',
-    streamUrl: streamUrl || 'https://assets.mixkit.co/videos/preview/mixkit-fashion-model-showing-off-her-clothes-34351-large.mp4',
-    pinnedProductId: pinnedProductId || 'prod-1',
-    scheduledTime: 'Now Streaming'
-  };
-  dbLiveSessions.unshift(newSession as any);
-  res.status(201).json({ success: true, liveSession: newSession });
-});
+v1Router.post(
+  '/seller/live-sessions',
+  requireSellerOwnership(req => req.body?.sellerId as string | undefined),
+  (req, res) => {
+    const sellerId = resolveEffectiveSellerId(req, req.body?.sellerId as string | undefined);
+    const { title, category, streamUrl, pinnedProductId } = req.body;
+    const newSession = {
+      id: `live-${Date.now()}`,
+      sellerId,
+      sellerName: dbSellers.get(sellerId)?.sellerName || 'Verified Seller',
+      sellerAvatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=200&q=80',
+      title: title || 'Live Fashion Showcase',
+      category: category || 'Ethnic Wear',
+      viewerCount: 1,
+      status: 'live',
+      streamUrl: streamUrl || 'https://assets.mixkit.co/videos/preview/mixkit-fashion-model-showing-off-her-clothes-34351-large.mp4',
+      pinnedProductId: pinnedProductId || 'prod-1',
+      scheduledTime: 'Now Streaming'
+    };
+    dbLiveSessions.unshift(newSession as any);
+    res.status(201).json({ success: true, liveSession: newSession });
+  }
+);
 
 v1Router.get('/buyer/chats', (req, res) => {
   res.json({
