@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { 
   Product, 
   CartItem, 
+  SavedCartItem,
   Order, 
   Reel, 
   Seller, 
@@ -45,6 +46,7 @@ interface MarketplaceContextType {
   updateProductStock: (productId: string, newStock: number) => void;
   bulkUploadProducts: (sellerId: string, products: Partial<Product>[]) => void;
   cart: CartItem[];
+  savedForLater: SavedCartItem[];
   addToCart: (product: Product, size: string, color: string, quantity?: number) => void;
   buyProductNow: (
     product: Product,
@@ -55,6 +57,10 @@ interface MarketplaceContextType {
   ) => void;
   updateCartQuantity: (cartItemId: string, quantity: number) => void;
   removeFromCart: (cartItemId: string) => void;
+  saveForLater: (cartItemId: string) => void;
+  moveSavedToCart: (savedItemId: string) => void;
+  removeSavedItem: (savedItemId: string) => void;
+  getVariantStock: (product: Product, size: string) => number;
   clearCart: () => void;
   cartTotal: number;
   cartDiscount: number;
@@ -148,6 +154,14 @@ interface MarketplaceContextType {
   setSearchQuery: (query: string) => void;
   selectedCategory: string;
   setSelectedCategory: (cat: string) => void;
+  selectedSubcategory: string | null;
+  setSelectedSubcategory: (sub: string | null) => void;
+  navigateCategory: (cat: string, sub?: string | null) => void;
+  recentlyViewed: string[];
+  recentlyViewedProducts: Product[];
+  isCatalogLoading: boolean;
+  catalogError: string | null;
+  retryCatalogSync: () => Promise<void>;
   theme: 'light' | 'dark';
   toggleTheme: () => void;
 
@@ -390,9 +404,41 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     localStorage.setItem('pb_products', JSON.stringify(products));
   }, [products]);
 
-  // Cart
+  // Cart & Saved For Later & Recently Viewed
+  const [storefrontSessionId] = useState<string>(() => {
+    const existing = localStorage.getItem('pb_storefront_session');
+    if (existing && existing.length >= 8) return existing;
+    const generated = `pb_sess_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+    localStorage.setItem('pb_storefront_session', generated);
+    return generated;
+  });
+
   const [cart, setCart] = useState<CartItem[]>(() => {
     const saved = localStorage.getItem('pb_cart');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  });
+
+  const [savedForLater, setSavedForLater] = useState<SavedCartItem[]>(() => {
+    const saved = localStorage.getItem('pb_saved_for_later');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  });
+
+  const [recentlyViewed, setRecentlyViewed] = useState<string[]>(() => {
+    const saved = localStorage.getItem('pb_recently_viewed');
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -406,6 +452,48 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
   useEffect(() => {
     localStorage.setItem('pb_cart', JSON.stringify(cart));
   }, [cart]);
+
+  useEffect(() => {
+    localStorage.setItem('pb_saved_for_later', JSON.stringify(savedForLater));
+  }, [savedForLater]);
+
+  useEffect(() => {
+    localStorage.setItem('pb_recently_viewed', JSON.stringify(recentlyViewed));
+  }, [recentlyViewed]);
+
+  // Hydrate storefront state from backend when signed in or session exists, then keep synced
+  const cartStateHydratedRef = React.useRef(false);
+  useEffect(() => {
+    api.storefront
+      .getCartState(storefrontSessionId)
+      .then(res => {
+        if (res?.success) {
+          if (Array.isArray(res.cart) && res.cart.length > 0) {
+            setCart(prev => (prev.length === 0 ? res.cart : prev));
+          }
+          if (Array.isArray(res.savedForLater) && res.savedForLater.length > 0) {
+            setSavedForLater(prev => (prev.length === 0 ? res.savedForLater : prev));
+          }
+          if (Array.isArray(res.recentlyViewed) && res.recentlyViewed.length > 0) {
+            setRecentlyViewed(prev => (prev.length === 0 ? res.recentlyViewed : prev));
+          }
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        cartStateHydratedRef.current = true;
+      });
+  }, [storefrontSessionId, user?.id]);
+
+  useEffect(() => {
+    if (!cartStateHydratedRef.current) return;
+    const timer = setTimeout(() => {
+      api.storefront
+        .saveCartState(storefrontSessionId, { cart, savedForLater, recentlyViewed })
+        .catch(() => {});
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [cart, savedForLater, recentlyViewed, storefrontSessionId]);
 
   // Wishlist
   const [wishlist, setWishlist] = useState<string[]>(() => {
@@ -589,7 +677,20 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   // Modals & Panels
   const [activePortal, setActivePortal] = useState<'customer' | 'seller' | 'admin'>('customer');
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [selectedProduct, setSelectedProductState] = useState<Product | null>(null);
+  const setSelectedProduct = (product: Product | null) => {
+    setSelectedProductState(product);
+    if (product?.id) {
+      setRecentlyViewed(prev => [product.id, ...prev.filter(id => id !== product.id)].slice(0, 12));
+    }
+  };
+  const recentlyViewedProducts = React.useMemo(
+    () =>
+      recentlyViewed
+        .map(id => products.find(p => p.id === id))
+        .filter((p): p is Product => Boolean(p)),
+    [recentlyViewed, products]
+  );
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isReelsOpen, setIsReelsOpen] = useState(false);
   const [activeReelIndex, setActiveReelIndex] = useState(0);
@@ -903,9 +1004,39 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     setIsTryOnOpen(true);
   };
 
-  // Filters & Search
+  // Filters, Hierarchy Navigation & Catalog Sync State
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [selectedCategory, setSelectedCategoryState] = useState('all');
+  const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null);
+  const [isCatalogLoading, setIsCatalogLoading] = useState(false);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+
+  const setSelectedCategory = (cat: string) => {
+    setSelectedCategoryState(cat);
+    setSelectedSubcategory(null);
+  };
+
+  const navigateCategory = (cat: string, sub: string | null = null) => {
+    setSelectedCategoryState(cat);
+    setSelectedSubcategory(sub);
+    setActivePortal('customer');
+  };
+
+  const retryCatalogSync = async () => {
+    setIsCatalogLoading(true);
+    setCatalogError(null);
+    try {
+      const res = await api.payments.getHealth();
+      if (!res) {
+        throw new Error('Catalog health check did not respond.');
+      }
+      await refreshPriceAlerts(false);
+    } catch (err: any) {
+      setCatalogError(err?.message || 'Unable to sync latest marketplace updates right now.');
+    } finally {
+      setIsCatalogLoading(false);
+    }
+  };
 
   const notify = (msg: string) => {
     setNotification(msg);
@@ -996,13 +1127,35 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     api.sellers.bulkUpload(seller.id, created).catch(() => {});
   };
 
+  const getVariantStock = (product: Product, size: string): number => {
+    const sizeObj = product.sizes?.find(s => s.size === size);
+    if (sizeObj) {
+      if (!sizeObj.available) return 0;
+      return Math.max(0, Number(sizeObj.stockCount ?? product.inStock ?? 0));
+    }
+    return Math.max(0, Number(product.inStock ?? 0));
+  };
+
   const addToCart = (product: Product, size: string, color: string, quantity: number = 1) => {
+    const availableStock = getVariantStock(product, size);
+    if (availableStock <= 0) {
+      notify(`Size ${size} is currently out of stock.`);
+      return;
+    }
+
     const cartItemId = `${product.id}-${size}-${color}`;
+    const existingItem = cart.find(item => item.id === cartItemId);
+    const desiredQty = (existingItem?.quantity || 0) + Math.max(1, quantity);
+    if (desiredQty > availableStock) {
+      notify(`Only ${availableStock} unit(s) available in stock for size ${size}.`);
+      return;
+    }
+
     setCart(prev => {
       const existing = prev.find(item => item.id === cartItemId);
       if (existing) {
         return prev.map(item =>
-          item.id === cartItemId ? { ...item, quantity: item.quantity + quantity } : item
+          item.id === cartItemId ? { ...item, quantity: Math.min(availableStock, item.quantity + quantity) } : item
         );
       }
       return [
@@ -1012,7 +1165,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
           productId: product.id,
           selectedColor: color,
           selectedSize: size,
-          quantity,
+          quantity: Math.min(availableStock, Math.max(1, quantity)),
           product
         }
       ];
@@ -1027,6 +1180,11 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     paymentMethod: CheckoutPaymentMethod = 'cashfree',
     quantity: number = 1
   ) => {
+    const availableStock = getVariantStock(product, size);
+    if (availableStock <= 0) {
+      notify(`Size ${size} is currently out of stock.`);
+      return;
+    }
     const cartItemId = `${product.id}-${size}-${color}`;
     setCart(prev => {
       const existing = prev.find(item => item.id === cartItemId);
@@ -1038,7 +1196,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
           productId: product.id,
           selectedColor: color,
           selectedSize: size,
-          quantity,
+          quantity: Math.min(availableStock, Math.max(1, quantity)),
           product
         }
       ];
@@ -1055,12 +1213,82 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
       removeFromCart(cartItemId);
       return;
     }
+    const target = cart.find(item => item.id === cartItemId);
+    if (target) {
+      const latestProduct = products.find(p => p.id === target.productId) || target.product;
+      const maxStock = getVariantStock(latestProduct, target.selectedSize);
+      if (maxStock > 0 && quantity > maxStock) {
+        notify(`Maximum ${maxStock} unit(s) available for ${latestProduct.title.slice(0, 22)}.`);
+        return;
+      }
+    }
     setCart(prev => prev.map(item => (item.id === cartItemId ? { ...item, quantity } : item)));
   };
 
   const removeFromCart = (cartItemId: string) => {
     setCart(prev => prev.filter(item => item.id !== cartItemId));
     notify('Item removed from shopping bag.');
+  };
+
+  const saveForLater = (cartItemId: string) => {
+    const target = cart.find(item => item.id === cartItemId);
+    if (!target) return;
+
+    setCart(prev => prev.filter(item => item.id !== cartItemId));
+    setSavedForLater(prev => {
+      const existing = prev.find(s => s.id === target.id);
+      if (existing) {
+        return prev.map(s =>
+          s.id === target.id
+            ? { ...s, quantity: Math.max(s.quantity, target.quantity), savedAt: new Date().toISOString() }
+            : s
+        );
+      }
+      return [{ ...target, savedAt: new Date().toISOString() }, ...prev];
+    });
+    notify(`Saved "${target.product.title.slice(0, 22)}..." for later.`);
+  };
+
+  const moveSavedToCart = (savedItemId: string) => {
+    const saved = savedForLater.find(s => s.id === savedItemId);
+    if (!saved) return;
+
+    const latestProduct = products.find(p => p.id === saved.productId) || saved.product;
+    const availableStock = getVariantStock(latestProduct, saved.selectedSize);
+    if (availableStock <= 0) {
+      notify(`Sorry, size ${saved.selectedSize} is currently out of stock.`);
+      return;
+    }
+
+    const existingInCart = cart.find(item => item.id === saved.id);
+    const mergedQuantity = Math.min(availableStock, (existingInCart?.quantity || 0) + saved.quantity);
+
+    setCart(prev => {
+      const exists = prev.find(item => item.id === saved.id);
+      if (exists) {
+        return prev.map(item =>
+          item.id === saved.id ? { ...item, quantity: mergedQuantity, product: latestProduct } : item
+        );
+      }
+      return [
+        ...prev,
+        {
+          id: saved.id,
+          productId: saved.productId,
+          selectedColor: saved.selectedColor,
+          selectedSize: saved.selectedSize,
+          quantity: Math.min(availableStock, saved.quantity),
+          product: latestProduct,
+        },
+      ];
+    });
+    setSavedForLater(prev => prev.filter(s => s.id !== savedItemId));
+    notify(`Moved "${latestProduct.title.slice(0, 22)}..." back to your bag!`);
+  };
+
+  const removeSavedItem = (savedItemId: string) => {
+    setSavedForLater(prev => prev.filter(s => s.id !== savedItemId));
+    notify('Removed item from Saved for Later.');
   };
 
   const clearCart = () => {
@@ -1508,10 +1736,15 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
         updateProductStock,
         bulkUploadProducts,
         cart,
+        savedForLater,
         addToCart,
         buyProductNow,
         updateCartQuantity,
         removeFromCart,
+        saveForLater,
+        moveSavedToCart,
+        removeSavedItem,
+        getVariantStock,
         clearCart,
         cartTotal: cartSubtotal,
         cartDiscount: couponDiscount,
@@ -1580,6 +1813,14 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
         setSearchQuery,
         selectedCategory,
         setSelectedCategory,
+        selectedSubcategory,
+        setSelectedSubcategory,
+        navigateCategory,
+        recentlyViewed,
+        recentlyViewedProducts,
+        isCatalogLoading,
+        catalogError,
+        retryCatalogSync,
         theme,
         toggleTheme,
 

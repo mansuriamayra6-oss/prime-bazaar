@@ -1,6 +1,8 @@
 import React from 'react';
 import { MarketplaceProvider, useMarketplace } from './context/MarketplaceContext';
 import { Header } from './components/Header';
+import { CategoryBar } from './components/CategoryBar';
+import { HeroBanner } from './components/HeroBanner';
 import { ProductCatalog } from './components/ProductCatalog';
 import { ProductDetailModal } from './components/ProductDetailModal';
 import { TrendStreamModal } from './components/TrendStreamModal';
@@ -105,6 +107,8 @@ const AppContent: React.FC = () => {
       <main className="flex-1 pb-20 md:pb-8">
         {activePortal === 'customer' && (
           <div>
+            <CategoryBar />
+            <HeroBanner />
             <ProductCatalog />
 
             {/* Video Shopping & Live Stream Teaser Ribbon */}

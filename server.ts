@@ -7,6 +7,7 @@ import crypto from 'crypto';
 import nodemailer from 'nodemailer';
 import { v1Router, splitOrderIntoSellerOrders, dbSellers, dbSellerPasswordHashes, dbAuditLogs } from './src/server/v1Router.ts';
 import { priceAlertRouter, startPriceAlertWorker } from './src/server/priceAlertWorker.ts';
+import { createStorefrontRouter } from './src/server/storefrontRouter.ts';
 import {
   UserRole,
   hashPassword,
@@ -39,14 +40,18 @@ app.set('trust proxy', 1);
 app.use(securityHeadersMiddleware);
 
 // Capture raw HTTP request body before JSON parsing so Cashfree webhook HMAC-SHA256 signatures verify accurately
-app.use(
-  express.json({
-    limit: '1mb',
-    verify: (req: express.Request, _res, buf) => {
-      req.rawBody = buf;
-    },
-  })
-);
+const defaultJsonParser = express.json({
+  limit: '1mb',
+  verify: (req: express.Request, _res, buf) => {
+    req.rawBody = buf;
+  },
+});
+app.use((req, res, next) => {
+  if (req.path === '/api/storefront/uploads/review-media' || req.path === '/api/v1/storefront/uploads/review-media') {
+    return next();
+  }
+  return defaultJsonParser(req, res, next);
+});
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 // Rate Limiters (Auth brute-force protection & general API protection)
@@ -70,6 +75,40 @@ app.use('/api', generalApiRateLimiter);
 app.use('/api/v1', v1Router);
 // Mount Price-Drop Alerts & Background Worker Router
 app.use('/api/price-alerts', priceAlertRouter);
+
+// Mount Phase 2 Storefront Discovery, Q&A, Photo/Video Reviews & Saved Cart Router
+const storefrontRouter = createStorefrontRouter({
+  hasUserPurchasedProduct: ({ userId, email, productId }) => {
+    const normalizedEmail = email ? normalizeEmail(email) : '';
+    for (const order of orders.values()) {
+      if (order.status === 'cancelled') continue;
+      const ownerMatches =
+        (order.userId && order.userId === userId) ||
+        (normalizedEmail && order.customerEmail && normalizeEmail(order.customerEmail) === normalizedEmail);
+      if (!ownerMatches) continue;
+      const containsProduct = (order.items || []).some(
+        (item: any) => item?.productId === productId || item?.product?.id === productId
+      );
+      if (containsProduct) return true;
+    }
+    return false;
+  },
+  onReportLogged: entry => {
+    dbAuditLogs.push({
+      id: `audit-${Date.now()}`,
+      actorType: 'SYSTEM',
+      actorId: entry.userId,
+      actorName: entry.userId,
+      action: 'REVIEW_REPORTED',
+      entityType: 'REVIEW',
+      entityId: entry.reviewId,
+      details: `Reported by ${entry.userId} on product ${entry.productId}: ${entry.reason}`,
+      timestamp: new Date().toISOString(),
+    });
+  },
+});
+app.use('/api/storefront', storefrontRouter);
+app.use('/api/v1/storefront', storefrontRouter);
 
 
 // ==========================================
@@ -436,6 +475,8 @@ function sanitizeUser(user: DBUser) {
 interface DBOrder {
   id: string;
   orderNumber: string;
+  userId?: string;
+  customerEmail?: string;
   date: string;
   items: any[];
   totalAmount: number;
@@ -538,6 +579,8 @@ let claimedAdminPasswordHash: string | null = null;
 const seedOrder: DBOrder = {
   id: 'ord-101',
   orderNumber: 'PB-ORD-92841',
+  userId: defaultDemoUser.id,
+  customerEmail: defaultDemoUser.email,
   date: '28 Oct 2026, 02:45 PM',
   items: [
     {
@@ -1539,9 +1582,12 @@ app.post('/api/orders', (req, res) => {
     minute: '2-digit',
   });
 
+  const authUser = getAuthenticatedUser(req);
   const newOrder: DBOrder = {
     id: orderId,
     orderNumber,
+    userId: authUser?.id,
+    customerEmail: authUser?.email,
     date: dateStr,
     items,
     totalAmount: Number(totalAmount) || 1899,

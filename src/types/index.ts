@@ -1,11 +1,58 @@
+export interface ReviewMedia {
+  id?: string;
+  type: 'image' | 'video';
+  url: string;
+  caption?: string;
+}
+
 export interface Review {
   id: string;
+  userId?: string;
   userName: string;
   rating: number;
   date: string;
   comment: string;
   verifiedPurchase: boolean;
   helpfulCount: number;
+  media?: ReviewMedia[];
+  reportCount?: number;
+}
+
+export interface ProductAnswer {
+  id: string;
+  userId: string;
+  userName: string;
+  responderRole: 'seller' | 'verified_buyer' | 'admin' | 'shopper';
+  answer: string;
+  createdAt: string;
+  helpfulCount: number;
+}
+
+export interface ProductQuestion {
+  id: string;
+  productId: string;
+  userId: string;
+  userName: string;
+  question: string;
+  createdAt: string;
+  answers: ProductAnswer[];
+}
+
+export interface CategorySubitem {
+  id: string;
+  label: string;
+  keywords: string[];
+  badge?: string;
+}
+
+export interface CategoryDepartment {
+  id: string;
+  label: string;
+  group: 'fashion' | 'more';
+  tagline: string;
+  promoTitle: string;
+  promoImage: string;
+  subcategories: CategorySubitem[];
 }
 
 export interface ProductColor {
@@ -108,6 +155,10 @@ export interface CartItem {
   selectedSize: string;
   quantity: number;
   product: Product;
+}
+
+export interface SavedCartItem extends CartItem {
+  savedAt: string;
 }
 
 export interface Address {

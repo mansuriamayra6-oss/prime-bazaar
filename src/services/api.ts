@@ -386,4 +386,74 @@ export const api = {
         body: JSON.stringify({ userId }),
       }),
   },
+
+  // Phase 2 Storefront: Q&A, Photo/Video Reviews, Uploads, Cart & Saved-for-Later Sync
+  storefront: {
+    getProductQA: async (productId: string) =>
+      apiRequest(`/api/storefront/products/${encodeURIComponent(productId)}/qa`),
+    askQuestion: async (productId: string, question: string) =>
+      apiRequest(`/api/storefront/products/${encodeURIComponent(productId)}/qa`, {
+        method: 'POST',
+        body: JSON.stringify({ question }),
+      }),
+    answerQuestion: async (productId: string, questionId: string, answer: string) =>
+      apiRequest(
+        `/api/storefront/products/${encodeURIComponent(productId)}/qa/${encodeURIComponent(questionId)}/answers`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ answer }),
+        }
+      ),
+    getProductReviews: async (
+      productId: string,
+      params?: { sort?: string; mediaOnly?: boolean; verifiedOnly?: boolean; minRating?: number }
+    ) => {
+      const qs = new URLSearchParams();
+      if (params?.sort) qs.set('sort', params.sort);
+      if (params?.mediaOnly) qs.set('mediaOnly', 'true');
+      if (params?.verifiedOnly) qs.set('verifiedOnly', 'true');
+      if (params?.minRating) qs.set('minRating', String(params.minRating));
+      const suffix = qs.toString() ? `?${qs.toString()}` : '';
+      return apiRequest(`/api/storefront/products/${encodeURIComponent(productId)}/reviews${suffix}`);
+    },
+    uploadReviewMedia: async (payload: { mimeType: string; dataBase64: string; caption?: string }) =>
+      apiRequest('/api/storefront/uploads/review-media', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    submitReview: async (
+      productId: string,
+      payload: { rating: number; comment: string; mediaIds?: string[] }
+    ) =>
+      apiRequest(`/api/storefront/products/${encodeURIComponent(productId)}/reviews`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    voteReviewHelpful: async (productId: string, reviewId: string) =>
+      apiRequest(
+        `/api/storefront/products/${encodeURIComponent(productId)}/reviews/${encodeURIComponent(reviewId)}/helpful`,
+        { method: 'POST' }
+      ),
+    reportReview: async (productId: string, reviewId: string, reason: string) =>
+      apiRequest(
+        `/api/storefront/products/${encodeURIComponent(productId)}/reviews/${encodeURIComponent(reviewId)}/report`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ reason }),
+        }
+      ),
+    getCartState: async (sessionId: string) =>
+      apiRequest('/api/storefront/cart-state', {
+        headers: { 'x-pb-session': sessionId },
+      }),
+    saveCartState: async (
+      sessionId: string,
+      payload: { cart: any[]; savedForLater: any[]; recentlyViewed: string[] }
+    ) =>
+      apiRequest('/api/storefront/cart-state', {
+        method: 'PUT',
+        headers: { 'x-pb-session': sessionId },
+        body: JSON.stringify(payload),
+      }),
+  },
 };
