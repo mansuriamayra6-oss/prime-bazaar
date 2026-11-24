@@ -1456,7 +1456,7 @@ app.get('/favicon.ico', (_req, res) => {
   const icoPath = path.resolve(__dirname, assetDir, 'favicon.ico');
   if (fs.existsSync(icoPath)) {
     res.setHeader('Content-Type', 'image/x-icon');
-    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
     return res.sendFile(icoPath);
   }
   return res.status(404).end();
@@ -1471,7 +1471,7 @@ app.get('/robots.txt', (req, res) => {
       'User-agent: *',
       'Allow: /',
       'Allow: /favicon.ico',
-      'Allow: /*.png$',
+      'Allow: /*.png',
       '',
       'User-agent: Googlebot',
       'Allow: /',
@@ -1498,7 +1498,7 @@ app.get('/sitemap.xml', (req, res) => {
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
     <image:image>
-      <image:loc>${origin}/pwa-512x512.png</image:loc>
+      <image:loc>${origin}/pwa-512x512.png?v=4</image:loc>
       <image:title>Prime Bazaar Logo</image:title>
     </image:image>
   </url>

@@ -1,11 +1,12 @@
-const CACHE_NAME = 'prime-bazaar-pwa-v2';
+const CACHE_NAME = 'prime-bazaar-pwa-v4';
 const PRECACHE_URLS = [
   '/',
-  '/manifest.webmanifest',
-  '/pwa-192x192.png',
-  '/pwa-512x512.png',
-  '/pwa-maskable-512x512.png',
-  '/apple-touch-icon.png',
+  '/manifest.webmanifest?v=4',
+  '/pwa-192x192.png?v=4',
+  '/pwa-512x512.png?v=4',
+  '/pwa-maskable-512x512.png?v=4',
+  '/apple-touch-icon.png?v=4',
+  '/favicon.ico?v=4',
 ];
 
 self.addEventListener('install', (event) => {
@@ -67,26 +68,24 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Static PWA assets & icons: network-first with cache fallback
+  // Static PWA assets & icons: true network-first with cache fallback
   if (
     url.pathname === '/manifest.webmanifest' ||
     url.pathname.startsWith('/pwa-') ||
+    url.pathname.startsWith('/favicon') ||
     url.pathname === '/apple-touch-icon.png' ||
     url.pathname.startsWith('/assets/')
   ) {
     event.respondWith(
-      caches.match(request).then((cached) => {
-        const networkFetch = fetch(request)
-          .then((response) => {
-            if (response && response.ok) {
-              const copy = response.clone();
-              caches.open(CACHE_NAME).then((cache) => cache.put(request, copy)).catch(() => {});
-            }
-            return response;
-          })
-          .catch(() => cached);
-        return cached || networkFetch;
-      })
+      fetch(request)
+        .then((response) => {
+          if (response && response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy)).catch(() => {});
+          }
+          return response;
+        })
+        .catch(() => caches.match(request))
     );
   }
 });

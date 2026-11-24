@@ -151,9 +151,9 @@ export const AndroidInstallSheet: React.FC<AndroidInstallSheetProps> = ({
         {/* App Title & Logo */}
         <div className="flex items-start gap-4">
           <img
-            src="/pwa-192x192.png"
+            src="/assets/aistudio/IMG_20261124_134619_98e88ce3.png"
             alt="Prime Bazaar App Icon"
-            className="w-16 h-16 rounded-2xl object-contain shadow-md bg-white p-1 border border-zinc-200 dark:border-zinc-700 shrink-0"
+            className="w-16 h-16 rounded-2xl object-contain shadow-md bg-white p-1.5 border border-zinc-200 dark:border-zinc-700 shrink-0"
           />
           <div className="flex-1 space-y-1">
             <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 font-display leading-tight">

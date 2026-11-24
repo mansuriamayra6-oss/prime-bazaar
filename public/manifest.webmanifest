@@ -17,19 +17,37 @@
   ],
   "icons": [
     {
-      "src": "/pwa-192x192.png",
+      "src": "/favicon-48x48.png?v=4",
+      "sizes": "48x48",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon-96x96.png?v=4",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon-144x144.png?v=4",
+      "sizes": "144x144",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-192x192.png?v=4",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/pwa-512x512.png",
+      "src": "/pwa-512x512.png?v=4",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/pwa-maskable-512x512.png",
+      "src": "/pwa-maskable-512x512.png?v=4",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
@@ -41,21 +59,21 @@
       "short_name": "Reels",
       "description": "Watch video reviews and shop trending looks",
       "url": "/?view=reels",
-      "icons": [{ "src": "/pwa-192x192.png", "sizes": "192x192", "type": "image/png" }]
+      "icons": [{ "src": "/pwa-192x192.png?v=4", "sizes": "192x192", "type": "image/png" }]
     },
     {
       "name": "Order Tracking",
       "short_name": "Orders",
       "description": "Track deliveries and invoices",
       "url": "/?view=orders",
-      "icons": [{ "src": "/pwa-192x192.png", "sizes": "192x192", "type": "image/png" }]
+      "icons": [{ "src": "/pwa-192x192.png?v=4", "sizes": "192x192", "type": "image/png" }]
     },
     {
       "name": "Seller Studio",
       "short_name": "Sell",
       "description": "Open merchant hub and analytics",
       "url": "/?portal=seller",
-      "icons": [{ "src": "/pwa-192x192.png", "sizes": "192x192", "type": "image/png" }]
+      "icons": [{ "src": "/pwa-192x192.png?v=4", "sizes": "192x192", "type": "image/png" }]
     }
   ]
 }
