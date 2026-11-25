@@ -1,25 +1,139 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useMarketplace } from '../context/MarketplaceContext';
-import { Order } from '../types';
-import { 
-  X, 
-  Package, 
-  Truck, 
-  CheckCircle, 
-  AlertCircle, 
-  RotateCcw, 
-  Receipt, 
-  ChevronRight,
-  Printer
+import { Order, ShipmentRecord, TaxInvoiceRecord } from '../types';
+import { api } from '../services/api';
+import {
+  X,
+  Package,
+  Truck,
+  CheckCircle2,
+  RotateCcw,
+  Receipt,
+  Printer,
+  Download,
+  RefreshCw,
+  KeyRound,
+  AlertTriangle,
 } from 'lucide-react';
 
 export const OrdersModal: React.FC = () => {
-  const { isOrdersOpen, setIsOrdersOpen, orders, cancelOrder, returnOrder } = useMarketplace();
+  const { isOrdersOpen, setIsOrdersOpen, orders, cancelOrder, returnOrder, notify, user } =
+    useMarketplace();
   const [selectedOrderForInvoice, setSelectedOrderForInvoice] = useState<Order | null>(null);
+  const [invoiceRecords, setInvoiceRecords] = useState<TaxInvoiceRecord[]>([]);
+  const [creditNoteRecords, setCreditNoteRecords] = useState<any[]>([]);
+  const [isLoadingInvoices, setIsLoadingInvoices] = useState(false);
+
+  const [shipmentsByOrder, setShipmentsByOrder] = useState<Record<string, ShipmentRecord[]>>({});
+  const [otpInputs, setOtpInputs] = useState<Record<string, string>>({});
+  const [verifyingShipmentId, setVerifyingShipmentId] = useState<string | null>(null);
+  const [retryingOrderId, setRetryingOrderId] = useState<string | null>(null);
+
   const [returnOrderId, setReturnOrderId] = useState<string | null>(null);
   const [returnReason, setReturnReason] = useState('Size does not fit properly');
 
+  useEffect(() => {
+    if (!isOrdersOpen || !user?.isLoggedIn || orders.length === 0) return;
+    let cancelled = false;
+
+    const loadShipments = async () => {
+      const results = await Promise.allSettled(
+        orders.slice(0, 10).map(async o => {
+          const res = await api.checkout.getOrderShipments(o.id);
+          return { orderId: o.id, shipments: (res.shipments || []) as ShipmentRecord[] };
+        })
+      );
+      if (cancelled) return;
+      const nextMap: Record<string, ShipmentRecord[]> = {};
+      for (const r of results) {
+        if (r.status === 'fulfilled') {
+          nextMap[r.value.orderId] = r.value.shipments;
+        }
+      }
+      setShipmentsByOrder(nextMap);
+    };
+
+    loadShipments().catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [isOrdersOpen, user?.isLoggedIn, orders]);
+
   if (!isOrdersOpen) return null;
+
+  const openInvoiceDialog = async (order: Order) => {
+    setSelectedOrderForInvoice(order);
+    setInvoiceRecords([]);
+    setCreditNoteRecords([]);
+    if (!user?.isLoggedIn) return;
+    setIsLoadingInvoices(true);
+    try {
+      const res = await api.checkout.getOrderInvoices(order.id);
+      setInvoiceRecords(res.invoices || []);
+      setCreditNoteRecords(res.creditNotes || []);
+    } catch {
+      // Fallback to local order metadata if offline/demo order
+    } finally {
+      setIsLoadingInvoices(false);
+    }
+  };
+
+  const handleDownloadHtmlInvoice = async (invoiceId: string, invoiceNumber: string) => {
+    try {
+      const blob = await api.checkout.downloadInvoiceBlob(invoiceId, 'html');
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${invoiceNumber.replace(/\//g, '_')}.html`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      notify(`Downloaded tax invoice ${invoiceNumber}`);
+    } catch (err: any) {
+      notify(err.message || 'Unable to download tax invoice.');
+    }
+  };
+
+  const handleVerifyDeliveryOtp = async (orderId: string, shipmentId: string) => {
+    const otp = (otpInputs[shipmentId] || '').trim();
+    if (!/^\d{4,8}$/.test(otp)) {
+      notify('Enter the numeric Delivery OTP received via email/SMS.');
+      return;
+    }
+    setVerifyingShipmentId(shipmentId);
+    try {
+      const res = await api.checkout.verifyDeliveryOtp(shipmentId, otp);
+      const updated = res.shipment as ShipmentRecord;
+      setShipmentsByOrder(prev => ({
+        ...prev,
+        [orderId]: (prev[orderId] || []).map(s => (s.id === shipmentId ? updated : s)),
+      }));
+      setOtpInputs(prev => ({ ...prev, [shipmentId]: '' }));
+      notify('Delivery OTP verified. Shipment marked delivered.');
+    } catch (err: any) {
+      notify(err.message || 'Invalid or expired Delivery OTP.');
+    } finally {
+      setVerifyingShipmentId(null);
+    }
+  };
+
+  const handleRetryPayment = async (order: Order) => {
+    setRetryingOrderId(order.id);
+    try {
+      const returnUrl = `${window.location.origin}/?cashfree_order_id={order_id}`;
+      const res = await api.checkout.retryPayment(order.id, 'cashfree', returnUrl);
+      notify(
+        res.cashfree?.configured
+          ? `Payment retry initialized (Attempt #${res.attemptNumber}). Complete checkout in Cashfree.`
+          : `Payment retry logged (Attempt #${res.attemptNumber}). Configure Cashfree keys for live gateway redirect.`
+      );
+    } catch (err: any) {
+      notify(err.message || 'Unable to initialize payment retry.');
+    } finally {
+      setRetryingOrderId(null);
+    }
+  };
 
   const handleReturnSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,8 +148,8 @@ export const OrdersModal: React.FC = () => {
       className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 animate-fadeIn"
       onClick={() => setIsOrdersOpen(false)}
     >
-      <div 
-        className="relative w-full max-w-3xl max-h-[90vh] bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden shadow-2xl border border-zinc-200 dark:border-zinc-800 flex flex-col"
+      <div
+        className="relative w-full max-w-3xl max-h-[90vh] bg-white dark:bg-zinc-900 rounded-2xl overflow-hidden shadow-2xl border border-zinc-200 dark:border-zinc-800 flex flex-col"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -43,12 +157,14 @@ export const OrdersModal: React.FC = () => {
           <div className="flex items-center gap-2.5">
             <Package className="w-5 h-5 text-rose-600" />
             <h2 className="text-lg font-bold text-zinc-900 dark:text-white font-display">
-              My Orders & Live Shipment Tracking
+              My Orders & Shipment Tracking
             </h2>
           </div>
           <button
+            type="button"
             onClick={() => setIsOrdersOpen(false)}
             className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+            aria-label="Close orders"
           >
             <X className="w-5 h-5" />
           </button>
@@ -57,129 +173,289 @@ export const OrdersModal: React.FC = () => {
         {/* Orders List */}
         <div className="flex-1 min-h-0 overflow-y-auto p-6 sm:p-8 space-y-6">
           {orders.length > 0 ? (
-            orders.map(order => (
-              <div
-                key={order.id}
-                className="p-5 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800 space-y-4"
-              >
-                {/* Order Top Bar */}
-                <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                  <div>
-                    <span className="font-bold font-mono text-zinc-900 dark:text-white text-sm">
-                      Order #{order.id}
-                    </span>
-                    <span className="text-zinc-400 ml-2">
-                      Placed on {new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider ${
-                      order.status === 'delivered'
-                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                        : order.status === 'cancelled'
-                        ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
-                        : order.status === 'returned'
-                        ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                        : 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300'
-                    }`}>
-                      {order.status.replace('_', ' ')}
-                    </span>
-                    <button
-                      onClick={() => setSelectedOrderForInvoice(order)}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 font-medium text-zinc-700 dark:text-zinc-200"
-                      title="Download GST Invoice"
-                    >
-                      <Receipt className="w-3.5 h-3.5 text-zinc-500" />
-                      <span>Invoice</span>
-                    </button>
-                  </div>
-                </div>
+            orders.map(order => {
+              const orderShipments = shipmentsByOrder[order.id] || [];
+              const canRetryPayment =
+                order.paymentMethod !== 'cod' &&
+                order.paymentMethod !== 'WALLET_ONLY' &&
+                (order.paymentStatus === 'FAILED' || order.paymentStatus === 'PENDING') &&
+                order.status !== 'cancelled' &&
+                Number(order.finalGatewayPayable ?? order.finalAmount) > 0;
 
-                {/* Items in order */}
-                <div className="divide-y divide-zinc-200 dark:divide-zinc-700/50">
-                  {order.items.map(item => (
-                    <div key={item.id} className="py-2.5 flex items-center gap-3">
-                      <img
-                        src={item.product.images[0]}
-                        alt={item.product.title}
-                        referrerPolicy="no-referrer"
-                        className="w-12 h-14 object-cover rounded-lg shrink-0"
-                      />
-                      <div className="flex-1 min-w-0 text-xs">
-                        <span className="text-[10px] uppercase font-bold text-zinc-400">{item.product.brand}</span>
-                        <h4 className="font-semibold text-zinc-900 dark:text-white truncate">{item.product.title}</h4>
-                        <span className="text-zinc-500 text-[11px]">
-                          Size: {item.selectedSize} · Color: {item.selectedColor} · Qty: {item.quantity}
-                        </span>
-                      </div>
-                      <div className="text-right text-xs font-mono font-bold text-zinc-900 dark:text-white">
-                        ₹{(item.product.price * item.quantity).toLocaleString('en-IN')}
-                      </div>
+              return (
+                <div
+                  key={order.id}
+                  className="p-5 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800 space-y-4"
+                >
+                  {/* Order Top Bar */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-bold font-mono text-zinc-900 dark:text-white text-sm tabular-nums">
+                        Order #{order.id}
+                      </span>
+                      <span className="text-zinc-400" aria-hidden="true">·</span>
+                      <span className="text-zinc-500 dark:text-zinc-400">
+                        {new Date(order.createdAt).toLocaleDateString('en-IN', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric',
+                        })}
+                      </span>
+                      {order.paymentStatus && (
+                        <>
+                          <span className="text-zinc-400" aria-hidden="true">·</span>
+                          <span
+                            className={`font-semibold ${
+                              order.paymentStatus === 'PAID'
+                                ? 'text-emerald-700 dark:text-emerald-400'
+                                : order.paymentStatus === 'FAILED'
+                                ? 'text-rose-600 dark:text-rose-400'
+                                : 'text-amber-700 dark:text-amber-400'
+                            }`}
+                          >
+                            Payment: {order.paymentStatus.replace('_', ' ')}
+                          </span>
+                        </>
+                      )}
                     </div>
-                  ))}
-                </div>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`text-xs font-semibold uppercase tracking-wide ${
+                          order.status === 'delivered'
+                            ? 'text-emerald-700 dark:text-emerald-400'
+                            : order.status === 'cancelled'
+                            ? 'text-rose-700 dark:text-rose-400'
+                            : order.status === 'returned'
+                            ? 'text-amber-700 dark:text-amber-400'
+                            : 'text-indigo-700 dark:text-indigo-400'
+                        }`}
+                      >
+                        {order.status.replace('_', ' ')}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => openInvoiceDialog(order)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 font-medium text-zinc-700 dark:text-zinc-200 whitespace-nowrap shrink-0"
+                        title="View GST Tax Invoice"
+                      >
+                        <Receipt className="w-3.5 h-3.5 text-zinc-500" />
+                        <span>Invoice</span>
+                      </button>
+                    </div>
+                  </div>
 
-                {/* Live Tracking Timeline Stepper */}
-                {order.status !== 'cancelled' && (
-                  <div className="pt-3 border-t border-zinc-200 dark:border-zinc-800">
-                    <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider block mb-3">
-                      Shipment Status & Milestones
-                    </span>
-                    <div className="relative pl-6 space-y-4 border-l-2 border-zinc-200 dark:border-zinc-700 ml-2">
-                      {order.trackingSteps.map((step, idx) => (
-                        <div key={idx} className="relative">
-                          {/* Dot */}
-                          <div className={`absolute -left-[31px] top-0.5 w-4 h-4 rounded-full border-2 ${
-                            step.completed
-                              ? 'bg-emerald-600 border-white dark:border-zinc-900 ring-2 ring-emerald-500/30'
-                              : 'bg-zinc-300 dark:bg-zinc-700 border-white dark:border-zinc-900'
-                          }`} />
-                          <div className="text-xs">
-                            <span className={`font-semibold block ${step.completed ? 'text-zinc-900 dark:text-white' : 'text-zinc-400'}`}>
-                              {step.step}
+                  {/* Financial & Split Warehouse Summary */}
+                  {(Number(order.taxAmount || 0) > 0 ||
+                    Number(order.giftCardAmount || 0) > 0 ||
+                    Number(order.storeCreditAmount || 0) > 0 ||
+                    (order.splitWarehousePlan && order.splitWarehousePlan.length > 0)) && (
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-zinc-600 dark:text-zinc-400 pb-2 border-b border-zinc-200 dark:border-zinc-700/60 tabular-nums">
+                      {Number(order.taxAmount || 0) > 0 && (
+                        <span>GST Included: ₹{Number(order.taxAmount).toLocaleString('en-IN')}</span>
+                      )}
+                      {Number(order.giftCardAmount || 0) > 0 && (
+                        <span className="text-emerald-700 dark:text-emerald-400">
+                          Gift Card: -₹{Number(order.giftCardAmount).toLocaleString('en-IN')}
+                        </span>
+                      )}
+                      {Number(order.storeCreditAmount || 0) > 0 && (
+                        <span className="text-emerald-700 dark:text-emerald-400">
+                          Store Credit: -₹{Number(order.storeCreditAmount).toLocaleString('en-IN')}
+                        </span>
+                      )}
+                      {order.splitWarehousePlan && order.splitWarehousePlan.length > 0 && (
+                        <span>
+                          Fulfillment Nodes:{' '}
+                          {order.splitWarehousePlan.map(w => `${w.warehouseName} (${w.warehouseState})`).join(', ')}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Items in order */}
+                  <div className="divide-y divide-zinc-200 dark:divide-zinc-700/50">
+                    {order.items.map(item => (
+                      <div key={item.id} className="py-2.5 flex items-center gap-3">
+                        <img
+                          src={item.product.images[0]}
+                          alt={item.product.title}
+                          referrerPolicy="no-referrer"
+                          className="w-12 h-14 object-cover rounded-lg shrink-0 bg-zinc-200 dark:bg-zinc-700"
+                        />
+                        <div className="flex-1 min-w-0 text-xs">
+                          <span className="text-[11px] uppercase font-semibold text-zinc-400">
+                            {item.product.brand}
+                          </span>
+                          <h4 className="font-semibold text-zinc-900 dark:text-white truncate">
+                            {item.product.title}
+                          </h4>
+                          <span className="text-zinc-500 text-[11px]">
+                            Size: {item.selectedSize} · Color: {item.selectedColor} · Qty: {item.quantity}
+                          </span>
+                        </div>
+                        <div className="text-right text-xs font-mono font-bold text-zinc-900 dark:text-white tabular-nums">
+                          ₹{(item.product.price * item.quantity).toLocaleString('en-IN')}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Live Carrier Shipments & Delivery OTP Verification */}
+                  {orderShipments.length > 0 && (
+                    <div className="pt-3 border-t border-zinc-200 dark:border-zinc-800 space-y-2.5">
+                      <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300 block">
+                        Carrier Shipments & Delivery Confirmation
+                      </span>
+                      {orderShipments.map(sh => (
+                        <div
+                          key={sh.id}
+                          className="p-3 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-xs space-y-2"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 font-mono">
+                              <Truck className="w-3.5 h-3.5 text-zinc-500" />
+                              <span className="font-semibold text-zinc-900 dark:text-white">
+                                {sh.courier || sh.providerName}
+                              </span>
+                              <span className="text-zinc-400" aria-hidden="true">·</span>
+                              <span className="text-zinc-600 dark:text-zinc-300 tabular-nums">
+                                AWB: {sh.trackingNumber || 'Pending'}
+                              </span>
+                            </div>
+                            <span className="font-semibold text-zinc-700 dark:text-zinc-200">
+                              {sh.status}
                             </span>
-                            <span className="text-[10px] text-zinc-400 font-mono">{step.timestamp}</span>
                           </div>
+
+                          {sh.failedAttempts > 0 && (
+                            <p className="text-[11px] text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
+                              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                              <span>
+                                Failed delivery attempts: {sh.failedAttempts}
+                                {sh.rtoReason ? ` · RTO: ${sh.rtoReason}` : ''}
+                              </span>
+                            </p>
+                          )}
+
+                          {sh.status === 'OUT_FOR_DELIVERY' && (
+                            <div className="flex flex-wrap items-center gap-2 pt-1">
+                              <KeyRound className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                maxLength={6}
+                                placeholder="Enter 6-digit Delivery OTP"
+                                value={otpInputs[sh.id] || ''}
+                                onChange={e =>
+                                  setOtpInputs(prev => ({
+                                    ...prev,
+                                    [sh.id]: e.target.value.replace(/\D/g, ''),
+                                  }))
+                                }
+                                className="px-2.5 py-1.5 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-xs font-mono text-zinc-900 dark:text-white w-44 tabular-nums"
+                              />
+                              <button
+                                type="button"
+                                disabled={verifyingShipmentId === sh.id}
+                                onClick={() => handleVerifyDeliveryOtp(order.id, sh.id)}
+                                className="px-3 py-1.5 rounded-lg bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 font-semibold text-xs hover:opacity-90 disabled:opacity-50 whitespace-nowrap shrink-0"
+                              >
+                                {verifyingShipmentId === sh.id ? 'Verifying...' : 'Confirm Delivery OTP'}
+                              </button>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
-                  </div>
-                )}
+                  )}
 
-                {/* Delivery address & Actions */}
-                <div className="pt-3 border-t border-zinc-200 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-3 text-xs">
-                  <div className="text-zinc-500">
-                    <span>Delivering to: <strong>{order.shippingAddress.fullName}</strong> ({order.shippingAddress.city} - {order.shippingAddress.pinCode})</span>
-                  </div>
+                  {/* Tracking Timeline Stepper (Clean Dot Connector, no thick left bar) */}
+                  {order.status !== 'cancelled' && (
+                    <div className="pt-3 border-t border-zinc-200 dark:border-zinc-800">
+                      <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300 block mb-3">
+                        Order Milestones
+                      </span>
+                      <div className="space-y-2.5">
+                        {order.trackingSteps.map((step, idx) => (
+                          <div key={idx} className="flex items-start gap-3">
+                            <div className="mt-0.5 shrink-0">
+                              <CheckCircle2
+                                className={`w-4 h-4 ${
+                                  step.completed
+                                    ? 'text-emerald-600 dark:text-emerald-400'
+                                    : 'text-zinc-300 dark:text-zinc-600'
+                                }`}
+                              />
+                            </div>
+                            <div className="flex-1 min-w-0 flex flex-wrap items-baseline justify-between gap-2 text-xs">
+                              <span
+                                className={`font-medium ${
+                                  step.completed
+                                    ? 'text-zinc-900 dark:text-white'
+                                    : 'text-zinc-400 dark:text-zinc-500'
+                                }`}
+                              >
+                                {step.step}
+                              </span>
+                              <span className="text-[11px] text-zinc-400 font-mono tabular-nums">
+                                {step.timestamp}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
-                  <div className="flex items-center gap-2">
-                    {/* Cancellation option if not yet shipped or delivered */}
-                    {(order.status === 'placed' || order.status === 'packed') && (
-                      <button
-                        onClick={() => cancelOrder(order.id)}
-                        className="px-3 py-1.5 rounded-lg border border-rose-300 text-rose-700 dark:border-rose-800 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 font-medium"
-                      >
-                        Cancel Order
-                      </button>
-                    )}
+                  {/* Delivery address & Actions */}
+                  <div className="pt-3 border-t border-zinc-200 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-3 text-xs">
+                    <div className="text-zinc-500 dark:text-zinc-400">
+                      <span>
+                        Delivering to: <strong className="text-zinc-800 dark:text-zinc-200">{order.shippingAddress.fullName}</strong> ({order.shippingAddress.city} - {order.shippingAddress.pinCode})
+                      </span>
+                    </div>
 
-                    {/* Return/Replacement option */}
-                    {(order.status === 'delivered' || order.status === 'shipped') && (
-                      <button
-                        onClick={() => setReturnOrderId(order.id)}
-                        className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 font-medium"
-                      >
-                        <RotateCcw className="w-3 h-3" />
-                        <span>Return / Replace</span>
-                      </button>
-                    )}
+                    <div className="flex flex-wrap items-center gap-2">
+                      {canRetryPayment && (
+                        <button
+                          type="button"
+                          disabled={retryingOrderId === order.id}
+                          onClick={() => handleRetryPayment(order)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 text-white hover:bg-rose-500 font-medium whitespace-nowrap shrink-0 disabled:opacity-50"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" />
+                          <span>{retryingOrderId === order.id ? 'Retrying...' : 'Retry Payment'}</span>
+                        </button>
+                      )}
+
+                      {(order.status === 'placed' || order.status === 'packed') && (
+                        <button
+                          type="button"
+                          onClick={() => cancelOrder(order.id)}
+                          className="px-3 py-1.5 rounded-lg border border-rose-300 text-rose-700 dark:border-rose-800 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 font-medium whitespace-nowrap shrink-0"
+                        >
+                          Cancel Order
+                        </button>
+                      )}
+
+                      {(order.status === 'delivered' || order.status === 'shipped') && (
+                        <button
+                          type="button"
+                          onClick={() => setReturnOrderId(order.id)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 font-medium whitespace-nowrap shrink-0"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          <span>Return / Replace</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           ) : (
             <div className="py-16 text-center text-zinc-500 text-xs">
-              You haven’t placed any orders yet.
+              You haven&rsquo;t placed any orders yet.
             </div>
           )}
         </div>
@@ -187,7 +463,10 @@ export const OrdersModal: React.FC = () => {
         {/* Return modal sheet */}
         {returnOrderId && (
           <div className="fixed inset-0 z-60 bg-black/60 flex items-center justify-center p-4">
-            <form onSubmit={handleReturnSubmit} className="bg-white dark:bg-zinc-900 p-6 rounded-2xl max-w-sm w-full space-y-4 shadow-xl border border-zinc-200 dark:border-zinc-800 text-xs">
+            <form
+              onSubmit={handleReturnSubmit}
+              className="bg-white dark:bg-zinc-900 p-6 rounded-2xl max-w-sm w-full space-y-4 shadow-xl border border-zinc-200 dark:border-zinc-800 text-xs"
+            >
               <h3 className="text-sm font-bold text-zinc-900 dark:text-white font-display">
                 Request Return or Exchange
               </h3>
@@ -208,7 +487,7 @@ export const OrdersModal: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setReturnOrderId(null)}
-                  className="px-3 py-1.5 text-zinc-600 hover:text-zinc-900"
+                  className="px-3 py-1.5 text-zinc-600 hover:text-zinc-900 dark:text-zinc-400"
                 >
                   Cancel
                 </button>
@@ -223,101 +502,180 @@ export const OrdersModal: React.FC = () => {
           </div>
         )}
 
-        {/* GST Invoice Dialog */}
+        {/* GST Tax Invoice Dialog */}
         {selectedOrderForInvoice && (
           <div className="fixed inset-0 z-60 bg-black/60 flex items-center justify-center p-4">
-            <div className="bg-white text-zinc-900 p-6 sm:p-8 rounded-3xl max-w-lg w-full space-y-4 shadow-2xl relative text-xs">
+            <div className="bg-white text-zinc-900 p-6 sm:p-8 rounded-2xl max-w-xl w-full max-h-[88vh] overflow-y-auto space-y-4 shadow-2xl relative text-xs border border-zinc-200">
               <button
+                type="button"
                 onClick={() => setSelectedOrderForInvoice(null)}
-                className="absolute top-4 right-4 p-1 rounded-full text-zinc-400 hover:text-zinc-900"
+                className="absolute top-4 right-4 p-1 rounded-lg text-zinc-400 hover:text-zinc-900"
+                aria-label="Close invoice"
               >
                 <X className="w-5 h-5" />
               </button>
 
-              <div className="flex items-center justify-between border-b pb-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-1.5 rounded-2xl bg-white border border-zinc-200 shadow-xs flex items-center">
-                    <img
-                      src="/assets/aistudio/IMG_20261124_134619_98e88ce3.png"
-                      alt="Prime Bazaar"
-                      className="h-11 w-11 object-contain"
-                    />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold font-display">Prime Bazaar Marketplace</h3>
-                    <span className="text-[10px] text-zinc-500">GSTIN: 27AABCT9942M1ZQ</span>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <span className="font-bold text-sm font-mono">INVOICE #{selectedOrderForInvoice.id}</span>
-                  <span className="block text-[10px] text-zinc-500">Date: {new Date(selectedOrderForInvoice.createdAt).toLocaleDateString()}</span>
-                </div>
-              </div>
+              {isLoadingInvoices ? (
+                <div className="py-12 text-center text-zinc-500">Loading GST tax invoice records...</div>
+              ) : invoiceRecords.length > 0 ? (
+                <div className="space-y-5">
+                  {invoiceRecords.map(inv => (
+                    <div key={inv.id} className="space-y-3 border-b border-zinc-200 pb-4 last:border-b-0">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                          <h3 className="text-sm font-bold font-display">Tax Invoice #{inv.invoiceNumber}</h3>
+                          <p className="text-[11px] text-zinc-500">
+                            Sold By: {inv.sellerName} · GSTIN: {inv.sellerGstin}
+                          </p>
+                          <p className="text-[11px] text-zinc-500">
+                            Supply Type: {inv.isInterState ? 'Inter-State (IGST)' : 'Intra-State (CGST + SGST)'} ·{' '}
+                            {inv.warehouseState} → {inv.buyerState}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleDownloadHtmlInvoice(inv.id, inv.invoiceNumber)}
+                          className="px-3 py-1.5 rounded-lg bg-zinc-900 text-white font-semibold flex items-center gap-1.5 whitespace-nowrap shrink-0"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span>Download HTML</span>
+                        </button>
+                      </div>
 
-              <div className="grid grid-cols-2 gap-4 py-2 text-[11px]">
-                <div>
-                  <span className="font-bold text-zinc-500 block">Sold By:</span>
-                  <span className="font-semibold block">{selectedOrderForInvoice.items[0]?.product.sellerName || 'Varanasi Weavers Co.'}</span>
-                  <span className="text-zinc-500">Authorized Marketplace Merchant</span>
-                </div>
-                <div>
-                  <span className="font-bold text-zinc-500 block">Billed & Shipped To:</span>
-                  <span className="font-semibold block">{selectedOrderForInvoice.shippingAddress.fullName}</span>
-                  <span className="text-zinc-500">{selectedOrderForInvoice.shippingAddress.street}, {selectedOrderForInvoice.shippingAddress.city}</span>
-                </div>
-              </div>
-
-              {/* Items Table */}
-              <table className="w-full text-left border-t border-b py-2">
-                <thead>
-                  <tr className="border-b text-zinc-500">
-                    <th className="py-1">Description</th>
-                    <th className="py-1 text-center">Qty</th>
-                    <th className="py-1 text-right">Price</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y font-mono">
-                  {selectedOrderForInvoice.items.map(item => (
-                    <tr key={item.id}>
-                      <td className="py-1.5 font-sans">
-                        <span className="font-semibold block">{item.product.title}</span>
-                        <span className="text-[10px] text-zinc-500">Size: {item.selectedSize} | Color: {item.selectedColor}</span>
-                      </td>
-                      <td className="py-1.5 text-center">{item.quantity}</td>
-                      <td className="py-1.5 text-right">₹{(item.product.price * item.quantity).toLocaleString('en-IN')}</td>
-                    </tr>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-3 rounded-lg bg-zinc-50 border border-zinc-200 font-mono tabular-nums">
+                        <div>
+                          <span className="text-[10px] text-zinc-500 block">Taxable</span>
+                          <span className="font-semibold">₹{inv.taxableSubtotal.toLocaleString('en-IN')}</span>
+                        </div>
+                        {inv.isInterState ? (
+                          <div>
+                            <span className="text-[10px] text-zinc-500 block">IGST</span>
+                            <span className="font-semibold">₹{inv.igstAmount.toLocaleString('en-IN')}</span>
+                          </div>
+                        ) : (
+                          <>
+                            <div>
+                              <span className="text-[10px] text-zinc-500 block">CGST</span>
+                              <span className="font-semibold">₹{inv.cgstAmount.toLocaleString('en-IN')}</span>
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-zinc-500 block">SGST</span>
+                              <span className="font-semibold">₹{inv.sgstAmount.toLocaleString('en-IN')}</span>
+                            </div>
+                          </>
+                        )}
+                        <div>
+                          <span className="text-[10px] text-zinc-500 block">Grand Total</span>
+                          <span className="font-bold">₹{inv.grandTotal.toLocaleString('en-IN')}</span>
+                        </div>
+                      </div>
+                    </div>
                   ))}
-                </tbody>
-              </table>
 
-              {/* Totals */}
-              <div className="space-y-1 text-right font-mono">
-                <div className="flex justify-between">
-                  <span>Subtotal:</span>
-                  <span>₹{selectedOrderForInvoice.totalAmount.toLocaleString('en-IN')}</span>
-                </div>
-                {selectedOrderForInvoice.discountAmount > 0 && (
-                  <div className="flex justify-between text-emerald-600">
-                    <span>Discount:</span>
-                    <span>-₹{selectedOrderForInvoice.discountAmount.toLocaleString('en-IN')}</span>
+                  {creditNoteRecords.length > 0 && (
+                    <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 space-y-1">
+                      <span className="font-bold text-amber-900 block">Issued Credit Notes</span>
+                      {creditNoteRecords.map((cn: any) => (
+                        <div key={cn.id} className="flex justify-between font-mono text-[11px] text-amber-800 tabular-nums">
+                          <span>
+                            {cn.creditNoteNumber} ({cn.reason})
+                          </span>
+                          <span>-₹{Number(cn.totalCreditAmount).toLocaleString('en-IN')}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => window.print()}
+                      className="px-3 py-1.5 rounded-lg border border-zinc-300 text-zinc-800 font-semibold flex items-center gap-1.5"
+                    >
+                      <Printer className="w-3.5 h-3.5" />
+                      <span>Print View</span>
+                    </button>
                   </div>
-                )}
-                <div className="flex justify-between font-bold text-sm pt-2 border-t text-zinc-900">
-                  <span>Grand Total (Incl. 5% GST):</span>
-                  <span>₹{selectedOrderForInvoice.finalAmount.toLocaleString('en-IN')}</span>
                 </div>
-              </div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between border-b pb-4">
+                    <div>
+                      <h3 className="text-sm font-bold font-display">Prime Bazaar Marketplace</h3>
+                      <span className="text-[11px] text-zinc-500">Order Receipt</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-bold text-sm font-mono tabular-nums">
+                        {selectedOrderForInvoice.invoiceNumber || `INV-${selectedOrderForInvoice.id}`}
+                      </span>
+                      <span className="block text-[10px] text-zinc-500">
+                        Date: {new Date(selectedOrderForInvoice.createdAt).toLocaleDateString('en-IN')}
+                      </span>
+                    </div>
+                  </div>
 
-              <div className="pt-4 flex justify-between items-center text-zinc-400 text-[10px]">
-                <span>This is a computer-generated GST tax invoice.</span>
-                <button
-                  onClick={() => window.print()}
-                  className="px-3 py-1.5 rounded-lg bg-zinc-900 text-white font-semibold flex items-center gap-1.5"
-                >
-                  <Printer className="w-3.5 h-3.5" />
-                  <span>Print Receipt</span>
-                </button>
-              </div>
+                  <table className="w-full text-left border-t border-b py-2">
+                    <thead>
+                      <tr className="border-b text-zinc-500">
+                        <th className="py-1.5">Description</th>
+                        <th className="py-1.5 text-center">Qty</th>
+                        <th className="py-1.5 text-right">Price</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y font-mono tabular-nums">
+                      {selectedOrderForInvoice.items.map(item => (
+                        <tr key={item.id}>
+                          <td className="py-1.5 font-sans">
+                            <span className="font-semibold block">{item.product.title}</span>
+                            <span className="text-[10px] text-zinc-500">
+                              Size: {item.selectedSize} · Color: {item.selectedColor}
+                            </span>
+                          </td>
+                          <td className="py-1.5 text-center">{item.quantity}</td>
+                          <td className="py-1.5 text-right">
+                            ₹{(item.product.price * item.quantity).toLocaleString('en-IN')}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+
+                  <div className="space-y-1 text-right font-mono tabular-nums">
+                    <div className="flex justify-between">
+                      <span>Subtotal:</span>
+                      <span>₹{selectedOrderForInvoice.totalAmount.toLocaleString('en-IN')}</span>
+                    </div>
+                    {selectedOrderForInvoice.discountAmount > 0 && (
+                      <div className="flex justify-between text-emerald-600">
+                        <span>Discount:</span>
+                        <span>-₹{selectedOrderForInvoice.discountAmount.toLocaleString('en-IN')}</span>
+                      </div>
+                    )}
+                    {Number(selectedOrderForInvoice.taxAmount || 0) > 0 && (
+                      <div className="flex justify-between text-zinc-600">
+                        <span>GST:</span>
+                        <span>₹{Number(selectedOrderForInvoice.taxAmount).toLocaleString('en-IN')}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between font-bold text-sm pt-2 border-t text-zinc-900">
+                      <span>Total Payable:</span>
+                      <span>₹{selectedOrderForInvoice.finalAmount.toLocaleString('en-IN')}</span>
+                    </div>
+                  </div>
+
+                  <div className="pt-4 flex justify-between items-center text-zinc-500 text-[11px]">
+                    <span>Computer-generated order summary.</span>
+                    <button
+                      type="button"
+                      onClick={() => window.print()}
+                      className="px-3 py-1.5 rounded-lg bg-zinc-900 text-white font-semibold flex items-center gap-1.5"
+                    >
+                      <Printer className="w-3.5 h-3.5" />
+                      <span>Print Receipt</span>
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         )}

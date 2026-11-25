@@ -1362,6 +1362,7 @@ app.post('/api/payments/verify', async (req, res) => {
   // Update matching PaymentRecord if one exists for this Cashfree/order reference
   const resolvedCfRef = cashfreeOrderState?.order_id || intent?.cashfreeOrderId || cashfreeOrderId;
   if (resolvedCfRef) {
+    let matchedPayOrderId: string | undefined;
     for (const p of payments.values()) {
       if (p.gatewayReference === resolvedCfRef) {
         p.status = 'PAID';
@@ -1369,11 +1370,20 @@ app.post('/api/payments/verify', async (req, res) => {
         p.rawProviderStatus = cashfreeOrderState?.order_status || 'PAID';
         p.verifiedAt = new Date().toISOString();
         p.updatedAt = p.verifiedAt;
+        matchedPayOrderId = p.orderId;
         const linkedOrder = orders.get(p.orderId);
         if (linkedOrder && linkedOrder.paymentStatus !== 'PAID') {
           linkedOrder.paymentStatus = 'PAID';
           linkedOrder.transactionId = p.cfPaymentId ? `CF-${p.cfPaymentId}` : p.gatewayReference;
           await commitOrderReservations(linkedOrder.id);
+        }
+      }
+    }
+    if (matchedPayOrderId) {
+      for (const p of payments.values()) {
+        if (p.orderId === matchedPayOrderId && p.gatewayReference !== resolvedCfRef && p.status === 'PENDING') {
+          p.status = 'CANCELLED';
+          p.updatedAt = new Date().toISOString();
         }
       }
     }
@@ -1533,10 +1543,23 @@ app.post('/api/payments/cashfree-webhook', async (req, res) => {
 
   let matchedOrder: DBOrder | undefined;
   if (cfOrderId) {
-    for (const ord of orders.values()) {
-      if (ord.id === cfOrderId || ord.orderNumber === cfOrderId || ord.transactionId === cfOrderId || ord.transactionId === `CF-${cfOrderId}`) {
-        matchedOrder = ord;
-        break;
+    if ((matchedIntent as any)?.orderId) {
+      matchedOrder = orders.get((matchedIntent as any).orderId);
+    }
+    if (!matchedOrder) {
+      for (const p of payments.values()) {
+        if (p.gatewayReference === cfOrderId) {
+          matchedOrder = orders.get(p.orderId);
+          if (matchedOrder) break;
+        }
+      }
+    }
+    if (!matchedOrder) {
+      for (const ord of orders.values()) {
+        if (ord.id === cfOrderId || ord.orderNumber === cfOrderId || ord.transactionId === cfOrderId || ord.transactionId === `CF-${cfOrderId}`) {
+          matchedOrder = ord;
+          break;
+        }
       }
     }
   }
@@ -1580,13 +1603,35 @@ app.post('/api/payments/cashfree-webhook', async (req, res) => {
         });
       }
     }
+    let exactPaymentMatched = false;
     for (const p of payments.values()) {
-      if (p.gatewayReference === cfOrderId || (matchedOrder && p.orderId === matchedOrder.id)) {
+      if (p.gatewayReference === cfOrderId) {
+        exactPaymentMatched = true;
         p.status = 'PAID';
         if (paymentId) p.cfPaymentId = paymentId;
         p.rawProviderStatus = reportedStatus || 'SUCCESS';
         p.verifiedAt = new Date().toISOString();
         p.updatedAt = p.verifiedAt;
+      }
+    }
+    if (matchedOrder) {
+      const orderPayments = Array.from(payments.values()).filter((p) => p.orderId === matchedOrder!.id);
+      if (!exactPaymentMatched) {
+        const latestPending = orderPayments.filter((p) => p.status === 'PENDING').pop();
+        if (latestPending) {
+          latestPending.status = 'PAID';
+          if (paymentId) latestPending.cfPaymentId = paymentId;
+          latestPending.rawProviderStatus = reportedStatus || 'SUCCESS';
+          latestPending.verifiedAt = new Date().toISOString();
+          latestPending.updatedAt = latestPending.verifiedAt;
+        }
+      }
+      // Close superseded pending attempts so retries never inflate captured totals
+      for (const p of orderPayments) {
+        if (p.gatewayReference !== cfOrderId && p.status === 'PENDING') {
+          p.status = 'CANCELLED';
+          p.updatedAt = new Date().toISOString();
+        }
       }
     }
   } else if (isFailedEvent || isDroppedOrCancelled) {

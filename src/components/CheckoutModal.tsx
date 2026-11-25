@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useMarketplace } from '../context/MarketplaceContext';
-import { Address, Order } from '../types';
+import { Address, Order, CheckoutQuote } from '../types';
 import { api } from '../services/api';
 import { 
   X, 
@@ -22,7 +22,9 @@ import {
   Lock,
   ArrowRight,
   AlertCircle,
-  RefreshCw
+  RefreshCw,
+  Gift,
+  Wallet
 } from 'lucide-react';
 
 const PENDING_CF_STORAGE_KEY = 'pb_pending_cashfree_checkout';
@@ -80,14 +82,28 @@ export const CheckoutModal: React.FC = () => {
     skipAddressOnCheckoutOpen,
     setSkipAddressOnCheckoutOpen,
     user,
+    storeCreditBalance,
+    refreshStoreCredit,
     notify
   } = useMarketplace();
 
   const [step, setStep] = useState<'address' | 'payment' | 'otp_challenge' | 'success'>('address');
   const [selectedAddressId, setSelectedAddressId] = useState<string>(addresses[0]?.id || '');
-  const [paymentMethod, setPaymentMethod] = useState<'cashfree' | 'upi' | 'card' | 'cod' | 'netbanking'>('cashfree');
+  const [paymentMethod, setPaymentMethod] = useState<'cashfree' | 'upi' | 'card' | 'cod' | 'netbanking' | 'WALLET_ONLY'>('cashfree');
   const [completedOrder, setCompletedOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Authoritative Quote, Gift Card, Store Credit & Idempotency
+  const [idempotencyKey, setIdempotencyKey] = useState<string>(() => `pb_chk_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`);
+  const [quote, setQuote] = useState<CheckoutQuote | null>(null);
+  const [quoteLoading, setQuoteLoading] = useState(false);
+  const [giftCardInput, setGiftCardInput] = useState('');
+  const [appliedGiftCardCode, setAppliedGiftCardCode] = useState<string | null>(null);
+  const [giftCardNotice, setGiftCardNotice] = useState<string | null>(null);
+  const [giftCardError, setGiftCardError] = useState<string | null>(null);
+  const [validatingGiftCard, setValidatingGiftCard] = useState(false);
+  const [useStoreCredit, setUseStoreCredit] = useState(false);
+  const [buyerGstin, setBuyerGstin] = useState('');
 
   // Backend Payment Intent
   const [paymentIntent, setPaymentIntent] = useState<any>(null);
@@ -118,8 +134,50 @@ export const CheckoutModal: React.FC = () => {
   const [newType, setNewType] = useState<'home' | 'work'>('home');
 
   const currentAddress = addresses.find(a => a.id === selectedAddressId) || addresses[0];
-  const deliveryFee = cartTotal > 999 ? 0 : 49;
-  const finalAmount = Math.max(0, cartTotal - cartDiscount + deliveryFee);
+  const fallbackDeliveryFee = cartTotal > 999 ? 0 : 49;
+  const fallbackGross = Math.max(0, cartTotal - cartDiscount + fallbackDeliveryFee);
+  const finalAmount = quote ? quote.finalGatewayPayable : fallbackGross;
+  const effectiveStoreCreditAvail = Number(quote?.storeCreditBalance ?? storeCreditBalance ?? 0);
+
+  const quoteItemsPayload = useMemo(
+    () =>
+      cart.map(c => ({
+        productId: c.productId,
+        quantity: c.quantity,
+        selectedSize: c.selectedSize,
+        selectedColor: c.selectedColor,
+      })),
+    [cart]
+  );
+
+  // Refresh authoritative backend checkout quote whenever cart/coupon/giftcard/storeCredit changes
+  useEffect(() => {
+    if (!isCheckoutOpen || cart.length === 0) return;
+    let cancelled = false;
+    setQuoteLoading(true);
+    api.checkout
+      .getQuote({
+        items: quoteItemsPayload,
+        couponCode: activeCoupon?.code,
+        giftCardCode: appliedGiftCardCode || undefined,
+        useStoreCredit,
+        userId: user?.id,
+      })
+      .then(res => {
+        if (!cancelled && res?.quote) {
+          setQuote(res.quote);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setQuote(null);
+      })
+      .finally(() => {
+        if (!cancelled) setQuoteLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isCheckoutOpen, quoteItemsPayload, activeCoupon?.code, appliedGiftCardCode, useStoreCredit, user?.id]);
 
   const initializePaymentIntent = async () => {
     if (finalAmount <= 0) return null;
@@ -155,7 +213,9 @@ export const CheckoutModal: React.FC = () => {
     if (isCheckoutOpen) {
       setCashfreeError(null);
       setIntentError(null);
+      refreshStoreCredit();
       if (completedOrder && step === 'success') return;
+      setIdempotencyKey(`pb_chk_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`);
       setPaymentMethod(preferredPaymentMethod || 'cashfree');
       if (skipAddressOnCheckoutOpen && currentAddress) {
         setStep('payment');
@@ -167,6 +227,12 @@ export const CheckoutModal: React.FC = () => {
       setCompletedOrder(null);
       setCashfreeError(null);
       setIntentError(null);
+      setAppliedGiftCardCode(null);
+      setGiftCardInput('');
+      setGiftCardNotice(null);
+      setGiftCardError(null);
+      setUseStoreCredit(false);
+      setQuote(null);
     }
   }, [isCheckoutOpen, preferredPaymentMethod, skipAddressOnCheckoutOpen]);
 
@@ -210,16 +276,22 @@ export const CheckoutModal: React.FC = () => {
         paymentMethod: 'cashfree',
         amount: pending.amount || finalAmount || 999,
       })
-      .then((receipt) => {
-        const order = placeOrder({
+      .then(async (receipt) => {
+        const order = await placeOrder({
           address: pending.address || currentAddress,
           paymentMethod: 'cashfree',
           couponCode: pending.couponCode || activeCoupon?.code,
+          giftCardCode: pending.giftCardCode || undefined,
+          useStoreCredit: Boolean(pending.useStoreCredit),
           coinsUsed: 0,
+          idempotencyKey: pending.idempotencyKey || idempotencyKey,
+          intentId: pending.intentId,
+          cashfreeOrderId: returnedCfOrderId,
+          quote,
         });
         setCompletedOrder({
           ...order,
-          invoiceNumber: receipt.invoiceNumber || order.invoiceNumber,
+          invoiceNumber: order.invoiceNumber || receipt.invoiceNumber,
         });
         setStep('success');
         notify('Cashfree payment verified & order placed successfully!');
@@ -301,6 +373,9 @@ export const CheckoutModal: React.FC = () => {
               cashfreeOrderId: activeIntent.cashfree.orderId,
               address: currentAddress,
               couponCode: activeCoupon?.code,
+              giftCardCode: appliedGiftCardCode,
+              useStoreCredit,
+              idempotencyKey,
               amount: finalAmount,
             })
           );
@@ -339,7 +414,35 @@ export const CheckoutModal: React.FC = () => {
     }
   };
 
+  const handleApplyGiftCard = async () => {
+    const code = giftCardInput.trim();
+    if (!code) return;
+    setValidatingGiftCard(true);
+    setGiftCardError(null);
+    setGiftCardNotice(null);
+    try {
+      const res = await api.checkout.validateGiftCard(code, cartTotal);
+      if (res?.giftCard?.valid) {
+        setAppliedGiftCardCode(code.toUpperCase());
+        setGiftCardNotice(
+          `Applied! Deducts ₹${Number(res.giftCard.applicableAmount || 0).toLocaleString('en-IN')} (Avail balance: ₹${Number(res.giftCard.remainingBalance || 0).toLocaleString('en-IN')})`
+        );
+        notify('Gift card applied to checkout.');
+      }
+    } catch (err: any) {
+      setAppliedGiftCardCode(null);
+      setGiftCardError(err?.message || 'Gift card could not be validated.');
+    } finally {
+      setValidatingGiftCard(false);
+    }
+  };
+
   const handleTriggerPaymentVerification = async () => {
+    if (finalAmount === 0) {
+      await executeFinalOrderPlacement('Covered 100% via Gift Card / Store Credit', null, 'WALLET_ONLY');
+      return;
+    }
+
     if (paymentMethod === 'cashfree') {
       await triggerCashfreeSdkCheckout('_modal');
       return;
@@ -359,39 +462,51 @@ export const CheckoutModal: React.FC = () => {
     await executeFinalOrderPlacement('Verified via NPCI UPI Gateway');
   };
 
-  const executeFinalOrderPlacement = async (authNote?: string, intentOverride?: any) => {
+  const executeFinalOrderPlacement = async (
+    authNote?: string,
+    intentOverride?: any,
+    methodOverride?: 'cashfree' | 'upi' | 'card' | 'cod' | 'netbanking' | 'WALLET_ONLY'
+  ) => {
     const activeIntent = intentOverride || paymentIntent;
+    const effectiveMethod = methodOverride || (finalAmount === 0 ? 'WALLET_ONLY' : paymentMethod);
     setLoading(true);
     try {
-      // 1. Verify with Backend Payment API
-      const paymentReceipt = await api.payments.verify({
+      let paymentReceipt: any = null;
+      if (effectiveMethod !== 'WALLET_ONLY' && finalAmount > 0) {
+        paymentReceipt = await api.payments.verify({
+          intentId: activeIntent?.intentId,
+          cashfreeOrderId: activeIntent?.cashfree?.orderId,
+          paymentMethod: effectiveMethod,
+          upiRefNumber: upiUtr || 'UTR' + Math.floor(100000000000 + Math.random() * 900000000000),
+          cardNumber: effectiveMethod === 'card' ? cardNumber.slice(-4) : undefined,
+          cardOtp: bankOtp,
+          amount: finalAmount,
+        });
+      }
+
+      const order = await placeOrder({
+        address: currentAddress,
+        paymentMethod: effectiveMethod,
+        couponCode: activeCoupon?.code,
+        giftCardCode: appliedGiftCardCode || undefined,
+        useStoreCredit,
+        coinsUsed: 0,
+        idempotencyKey,
         intentId: activeIntent?.intentId,
         cashfreeOrderId: activeIntent?.cashfree?.orderId,
-        paymentMethod,
-        upiRefNumber: upiUtr || 'UTR' + Math.floor(100000000000 + Math.random() * 900000000000),
-        cardNumber: paymentMethod === 'card' ? cardNumber.slice(-4) : undefined,
-        cardOtp: bankOtp,
-        amount: finalAmount,
-      });
-
-      // 2. Submit order to backend & client store
-      const order = placeOrder({
-        address: currentAddress,
-        paymentMethod,
-        couponCode: activeCoupon?.code,
-        coinsUsed: 0
+        buyerGstin: buyerGstin.trim() || undefined,
+        quote,
       });
 
       setCompletedOrder({
         ...order,
-        id: paymentReceipt.invoiceNumber ? paymentReceipt.invoiceNumber.replace('PB-INV-2026-', 'PB-') : order.id,
-        invoiceNumber: paymentReceipt.invoiceNumber || order.invoiceNumber,
+        invoiceNumber: order.invoiceNumber || paymentReceipt?.invoiceNumber,
       });
       setStep('success');
       notify(authNote ? `${authNote} · Order placed!` : 'Payment authorized & order placed successfully!');
     } catch (err: any) {
       const msg = err?.message || 'Payment verification failed.';
-      if (paymentMethod === 'cashfree') {
+      if (effectiveMethod === 'cashfree') {
         setCashfreeError(msg);
       }
       notify(msg);
@@ -635,6 +750,124 @@ export const CheckoutModal: React.FC = () => {
                 </button>
               </div>
             )}
+
+            {/* Gift Card, Store Credit & Authoritative Price Breakdown */}
+            <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800 space-y-3 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Gift Card Redemption */}
+                <div>
+                  <label className="flex items-center gap-1.5 font-semibold text-zinc-700 dark:text-zinc-300 mb-1.5">
+                    <Gift className="w-3.5 h-3.5 text-rose-500" />
+                    <span>Gift Card Code</span>
+                  </label>
+                  <div className="flex gap-1.5">
+                    <input
+                      type="text"
+                      placeholder="PBGC-XXXX-XXXX"
+                      value={giftCardInput}
+                      onChange={e => setGiftCardInput(e.target.value.toUpperCase())}
+                      className="flex-1 min-w-0 px-2.5 py-1.5 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 font-mono text-xs"
+                    />
+                    {appliedGiftCardCode ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAppliedGiftCardCode(null);
+                          setGiftCardNotice(null);
+                          setGiftCardError(null);
+                        }}
+                        className="px-2.5 py-1.5 rounded-lg border border-zinc-300 dark:border-zinc-700 text-xs font-semibold whitespace-nowrap shrink-0"
+                      >
+                        Remove
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={validatingGiftCard || !giftCardInput.trim()}
+                        onClick={handleApplyGiftCard}
+                        className="px-3 py-1.5 rounded-lg bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 font-semibold whitespace-nowrap shrink-0 disabled:opacity-50"
+                      >
+                        {validatingGiftCard ? '...' : 'Apply'}
+                      </button>
+                    )}
+                  </div>
+                  {giftCardNotice && <p className="text-[11px] text-emerald-600 mt-1">{giftCardNotice}</p>}
+                  {giftCardError && <p className="text-[11px] text-rose-600 mt-1">{giftCardError}</p>}
+                </div>
+
+                {/* Store Credit Wallet & Optional Buyer GSTIN */}
+                <div className="space-y-2">
+                  <label className="flex items-center justify-between p-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 cursor-pointer">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={useStoreCredit}
+                        disabled={effectiveStoreCreditAvail <= 0}
+                        onChange={e => setUseStoreCredit(e.target.checked)}
+                        className="accent-emerald-600 w-4 h-4 cursor-pointer"
+                      />
+                      <div>
+                        <span className="font-semibold text-zinc-900 dark:text-white flex items-center gap-1">
+                          <Wallet className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>Use Store Credit</span>
+                        </span>
+                        <span className="text-[11px] text-zinc-500 font-mono tabular-nums">
+                          Balance: ₹{effectiveStoreCreditAvail.toLocaleString('en-IN')}
+                        </span>
+                      </div>
+                    </div>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Optional Buyer GSTIN (for B2B input tax credit)"
+                    maxLength={15}
+                    value={buyerGstin}
+                    onChange={e => setBuyerGstin(e.target.value.toUpperCase())}
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 font-mono text-[11px]"
+                  />
+                </div>
+              </div>
+
+              {/* Authoritative Totals Breakdown */}
+              <div className="pt-2.5 border-t border-zinc-200 dark:border-zinc-700 space-y-1 font-mono tabular-nums text-[11px]">
+                <div className="flex justify-between text-zinc-600 dark:text-zinc-400">
+                  <span className="font-sans">Items Subtotal</span>
+                  <span>₹{(quote?.subtotal ?? cartTotal).toLocaleString('en-IN')}</span>
+                </div>
+                {(quote?.couponDiscount ?? cartDiscount) > 0 && (
+                  <div className="flex justify-between text-emerald-600">
+                    <span className="font-sans">Coupon Discount</span>
+                    <span>-₹{(quote?.couponDiscount ?? cartDiscount).toLocaleString('en-IN')}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-zinc-600 dark:text-zinc-400">
+                  <span className="font-sans">Delivery Fee</span>
+                  <span>{(quote?.deliveryFee ?? fallbackDeliveryFee) === 0 ? 'FREE' : `₹${quote?.deliveryFee ?? fallbackDeliveryFee}`}</span>
+                </div>
+                {quote && quote.taxAmount > 0 && (
+                  <div className="flex justify-between text-zinc-500">
+                    <span className="font-sans">Included GST (HSN-wise)</span>
+                    <span>₹{quote.taxAmount.toLocaleString('en-IN')}</span>
+                  </div>
+                )}
+                {quote && quote.giftCardAmount > 0 && (
+                  <div className="flex justify-between text-emerald-600">
+                    <span className="font-sans">Gift Card ({appliedGiftCardCode})</span>
+                    <span>-₹{quote.giftCardAmount.toLocaleString('en-IN')}</span>
+                  </div>
+                )}
+                {quote && quote.storeCreditAmount > 0 && (
+                  <div className="flex justify-between text-emerald-600">
+                    <span className="font-sans">Store Credit Applied</span>
+                    <span>-₹{quote.storeCreditAmount.toLocaleString('en-IN')}</span>
+                  </div>
+                )}
+                <div className="flex justify-between font-bold text-xs pt-1.5 border-t border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-white">
+                  <span className="font-sans">Net Gateway Payable {quoteLoading ? '(updating...)' : ''}</span>
+                  <span className="text-emerald-600 dark:text-emerald-400">₹{finalAmount.toLocaleString('en-IN')}</span>
+                </div>
+              </div>
+            </div>
 
             <div className="space-y-3">
               {/* Option 0: Cashfree Sandbox Payment Gateway */}
@@ -1040,25 +1273,29 @@ export const CheckoutModal: React.FC = () => {
             </div>
 
             {/* Total & Action Button */}
-            <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800 flex justify-between items-center">
+            <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800 flex justify-between items-center gap-3">
               <div>
-                <span className="text-[11px] text-zinc-400 block">Total Payable</span>
-                <span className="text-base font-bold font-mono text-emerald-600 dark:text-emerald-400">
+                <span className="text-[11px] text-zinc-400 block">
+                  {finalAmount === 0 ? 'Covered via Gift Card / Store Credit' : 'Total Gateway Payable'}
+                </span>
+                <span className="text-base font-bold font-mono tabular-nums text-emerald-600 dark:text-emerald-400">
                   ₹{finalAmount.toLocaleString('en-IN')}
                 </span>
               </div>
               <button
                 onClick={handleTriggerPaymentVerification}
-                disabled={loading}
-                className="px-6 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs flex items-center gap-2 shadow-lg shadow-emerald-600/25 active:scale-95 transition-all"
+                disabled={loading || quoteLoading}
+                className="px-6 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs flex items-center gap-2 shadow-lg shadow-emerald-600/25 active:scale-95 transition-all whitespace-nowrap shrink-0"
               >
                 <Check className="w-4 h-4" />
                 <span>
                   {loading
                     ? 'Processing...'
-                    : paymentMethod === 'cod'
-                      ? 'Confirm Cash on Delivery Order (₹' + finalAmount.toLocaleString('en-IN') + ')'
-                      : 'Authorize & Pay ₹' + finalAmount.toLocaleString('en-IN')}
+                    : finalAmount === 0
+                      ? 'Confirm Wallet / Gift Card Order'
+                      : paymentMethod === 'cod'
+                        ? `Confirm Cash on Delivery (₹${finalAmount.toLocaleString('en-IN')})`
+                        : `Authorize & Pay ₹${finalAmount.toLocaleString('en-IN')}`}
                 </span>
               </button>
             </div>
@@ -1128,30 +1365,50 @@ export const CheckoutModal: React.FC = () => {
             </div>
 
             {/* Official GST Tax Receipt Summary */}
-            <div className="text-left p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800 text-xs space-y-2 max-w-md mx-auto">
+            <div className="text-left p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800 text-xs space-y-2 max-w-md mx-auto font-mono tabular-nums">
               <div className="flex justify-between pb-2 border-b border-zinc-200 dark:border-zinc-700 font-bold">
-                <span className="text-zinc-700 dark:text-zinc-300">GST Tax Invoice</span>
-                <span className="font-mono text-emerald-600">{completedOrder.invoiceNumber || `PB-INV-${completedOrder.id}`}</span>
+                <span className="font-sans text-zinc-700 dark:text-zinc-300">GST Tax Invoice</span>
+                <span className="text-emerald-600">{completedOrder.invoiceNumber || `PB-INV-${completedOrder.id}`}</span>
               </div>
               <div className="flex justify-between">
-                <span>Seller GSTIN</span>
-                <span className="font-mono font-bold">27AABCP1384L1ZV</span>
+                <span className="font-sans">Items Subtotal ({completedOrder.items.length})</span>
+                <span>₹{completedOrder.totalAmount.toLocaleString('en-IN')}</span>
               </div>
+              {Number(completedOrder.taxAmount || 0) > 0 && (
+                <div className="flex justify-between text-zinc-500">
+                  <span className="font-sans">Included GST (CGST/SGST or IGST)</span>
+                  <span>₹{Number(completedOrder.taxAmount).toLocaleString('en-IN')}</span>
+                </div>
+              )}
+              {Number(completedOrder.giftCardAmount || 0) > 0 && (
+                <div className="flex justify-between text-emerald-600">
+                  <span className="font-sans">Gift Card Redeemed</span>
+                  <span>-₹{Number(completedOrder.giftCardAmount).toLocaleString('en-IN')}</span>
+                </div>
+              )}
+              {Number(completedOrder.storeCreditAmount || 0) > 0 && (
+                <div className="flex justify-between text-emerald-600">
+                  <span className="font-sans">Store Credit Redeemed</span>
+                  <span>-₹{Number(completedOrder.storeCreditAmount).toLocaleString('en-IN')}</span>
+                </div>
+              )}
+              {completedOrder.splitWarehousePlan && completedOrder.splitWarehousePlan.length > 0 && (
+                <div className="pt-1 text-[11px] font-sans text-zinc-600 dark:text-zinc-400">
+                  Fulfillment Hubs:{' '}
+                  <strong className="text-zinc-900 dark:text-white">
+                    {completedOrder.splitWarehousePlan.map(w => `${w.warehouseName} (${w.warehouseState})`).join(' · ')}
+                  </strong>
+                </div>
+              )}
               <div className="flex justify-between">
-                <span>Items ({completedOrder.items.length})</span>
-                <span className="font-mono">₹{completedOrder.totalAmount.toLocaleString('en-IN')}</span>
-              </div>
-              <div className="flex justify-between text-zinc-500">
-                <span>CGST (9%) + SGST (9%)</span>
-                <span className="font-mono">₹{Math.round(completedOrder.totalAmount * 0.18).toLocaleString('en-IN')}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Payment Mode</span>
+                <span className="font-sans">Payment Mode</span>
                 <span className="uppercase font-semibold text-emerald-600">{completedOrder.paymentMethod}</span>
               </div>
               <div className="flex justify-between pt-2 border-t border-zinc-200 dark:border-zinc-700 font-bold text-sm">
-                <span>Amount Paid</span>
-                <span className="font-mono text-emerald-600">₹{completedOrder.finalAmount.toLocaleString('en-IN')}</span>
+                <span className="font-sans">Gateway / Net Paid</span>
+                <span className="text-emerald-600">
+                  ₹{Number(completedOrder.finalGatewayPayable ?? completedOrder.finalAmount).toLocaleString('en-IN')}
+                </span>
               </div>
             </div>
 
@@ -1163,7 +1420,7 @@ export const CheckoutModal: React.FC = () => {
                 }}
                 className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 font-bold text-xs shadow-md hover:scale-105 transition-all"
               >
-                Track Live Order on BlueDart
+                Track Live Order & Download GST Invoice
               </button>
               <button
                 onClick={() => {

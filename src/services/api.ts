@@ -256,8 +256,11 @@ export const api = {
         if (res.token) setAuthToken(res.token);
         return res;
       },
-      adminLogin: async (password: string) => {
-        const res = await apiRequest('/api/auth/admin/login', { method: 'POST', body: JSON.stringify({ password }) });
+      adminLogin: async (password: string, email?: string) => {
+        const res = await apiRequest('/api/auth/admin/login', {
+          method: 'POST',
+          body: JSON.stringify({ password, ...(email ? { email } : {}) }),
+        });
         if (res.token) setAuthToken(res.token);
         return res;
       },
@@ -455,5 +458,309 @@ export const api = {
         headers: { 'x-pb-session': sessionId },
         body: JSON.stringify(payload),
       }),
+    getModerationQueue: async () => apiRequest('/api/storefront/moderation/queue'),
+  },
+
+  // Phase 4 Customer Checkout, Gift Cards, Store Credits, Invoices & Shipments
+  checkout: {
+    getQuote: async (payload: {
+      items: any[];
+      couponCode?: string;
+      giftCardCode?: string;
+      useStoreCredit?: boolean;
+      requestedStoreCreditAmount?: number;
+      coinsUsed?: number;
+      userId?: string;
+    }) =>
+      apiRequest('/api/checkout/quote', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    validateGiftCard: async (code: string, orderSubtotal: number) =>
+      apiRequest('/api/gift-cards/validate', {
+        method: 'POST',
+        body: JSON.stringify({ code, orderSubtotal }),
+      }),
+    getMyStoreCredit: async () => apiRequest('/api/store-credits/me'),
+    retryPayment: async (orderId: string, paymentMethod: string = 'cashfree', returnUrl?: string) =>
+      apiRequest('/api/payments/retry', {
+        method: 'POST',
+        body: JSON.stringify({ orderId, paymentMethod, returnUrl }),
+      }),
+    getOrderInvoices: async (orderId: string) =>
+      apiRequest(`/api/orders/${encodeURIComponent(orderId)}/invoices`),
+    downloadInvoiceBlob: async (invoiceId: string, format: 'html' | 'json' = 'html') => {
+      const token = getAuthToken();
+      const res = await fetch(
+        `/api/invoices/${encodeURIComponent(invoiceId)}/download?format=${format}`,
+        { headers: token ? { Authorization: `Bearer ${token}` } : {} }
+      );
+      if (!res.ok) throw new Error('Unable to download invoice');
+      return res.blob();
+    },
+    getOrderShipments: async (orderId: string) =>
+      apiRequest(`/api/orders/${encodeURIComponent(orderId)}/shipments`),
+    verifyDeliveryOtp: async (shipmentId: string, otp: string) =>
+      apiRequest(`/api/shipments/${encodeURIComponent(shipmentId)}/delivery-otp/verify`, {
+        method: 'POST',
+        body: JSON.stringify({ otp }),
+      }),
+  },
+
+  // Phase 5 Public CMS & Sponsored Ads
+  cms: {
+    getBanners: async (placement?: string) =>
+      apiRequest(`/api/cms/banners${placement ? `?placement=${encodeURIComponent(placement)}` : ''}`),
+    getCategories: async () => apiRequest('/api/cms/categories'),
+    getBrands: async () => apiRequest('/api/cms/brands'),
+    getSponsoredAds: async (params?: { placement?: string; category?: string; q?: string; limit?: number }) => {
+      const qs = new URLSearchParams();
+      if (params?.placement) qs.set('placement', params.placement);
+      if (params?.category) qs.set('category', params.category);
+      if (params?.q) qs.set('q', params.q);
+      if (params?.limit) qs.set('limit', String(params.limit));
+      const suffix = qs.toString() ? `?${qs.toString()}` : '';
+      return apiRequest(`/api/ads/sponsored${suffix}`);
+    },
+    recordAdEvent: async (payload: {
+      campaignId: string;
+      productId: string;
+      eventType: 'IMPRESSION' | 'CLICK' | 'CONVERSION';
+      sessionKey?: string;
+      orderId?: string;
+      attributedRevenue?: number;
+    }) =>
+      apiRequest('/api/ads/events', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+  },
+
+  // Phase 4 Multi-Warehouse & Shipping (Seller / Admin)
+  warehouses: {
+    list: async (sellerId?: string) =>
+      apiRequest(`/api/v1/warehouses${sellerId ? `?sellerId=${encodeURIComponent(sellerId)}` : ''}`),
+    create: async (payload: any) =>
+      apiRequest('/api/v1/warehouses', { method: 'POST', body: JSON.stringify(payload) }),
+    getInventory: async (params?: { warehouseId?: string; sellerId?: string; lowStockOnly?: boolean }) => {
+      const qs = new URLSearchParams();
+      if (params?.warehouseId) qs.set('warehouseId', params.warehouseId);
+      if (params?.sellerId) qs.set('sellerId', params.sellerId);
+      if (params?.lowStockOnly) qs.set('lowStockOnly', 'true');
+      const suffix = qs.toString() ? `?${qs.toString()}` : '';
+      return apiRequest(`/api/v1/warehouses/inventory${suffix}`);
+    },
+    updateInventory: async (warehouseId: string, payload: any) =>
+      apiRequest(`/api/v1/warehouses/${encodeURIComponent(warehouseId)}/inventory`, {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      }),
+    listTransfers: async () => apiRequest('/api/v1/warehouses/transfers'),
+    createTransfer: async (payload: { fromWarehouseId: string; toWarehouseId: string; variantId: string; quantity: number; notes?: string }) =>
+      apiRequest('/api/v1/warehouses/transfers', { method: 'POST', body: JSON.stringify(payload) }),
+    completeTransfer: async (transferId: string) =>
+      apiRequest(`/api/v1/warehouses/transfers/${encodeURIComponent(transferId)}/complete`, { method: 'POST' }),
+  },
+
+  shipments: {
+    create: async (payload: { suborderId?: string; orderId?: string; sellerId?: string; warehouseId?: string }) =>
+      apiRequest('/api/v1/shipments/create', { method: 'POST', body: JSON.stringify(payload) }),
+    sync: async (shipmentId: string) =>
+      apiRequest(`/api/v1/shipments/${encodeURIComponent(shipmentId)}/sync`, { method: 'POST' }),
+    updateStatus: async (shipmentId: string, action: 'FAILED_ATTEMPT' | 'RTO_INITIATED' | 'RTO_DELIVERED', reason: string) =>
+      apiRequest(`/api/v1/shipments/${encodeURIComponent(shipmentId)}/status`, {
+        method: 'POST',
+        body: JSON.stringify({ action, reason }),
+      }),
+    generateDeliveryOtp: async (shipmentId: string, payload?: { email?: string; phone?: string }) =>
+      apiRequest(`/api/v1/shipments/${encodeURIComponent(shipmentId)}/delivery-otp/generate`, {
+        method: 'POST',
+        body: JSON.stringify(payload || {}),
+      }),
+    overrideDeliveryOtp: async (shipmentId: string, reason: string) =>
+      apiRequest(`/api/v1/shipments/${encodeURIComponent(shipmentId)}/delivery-otp/override`, {
+        method: 'POST',
+        body: JSON.stringify({ reason }),
+      }),
+  },
+
+  // Phase 5 Seller Operations
+  sellerOps: {
+    acceptTerms: async (sellerId: string, version: string = 'v2026.2') =>
+      apiRequest('/api/v1/seller/onboarding/terms', {
+        method: 'POST',
+        body: JSON.stringify({ sellerId, version }),
+      }),
+    resubmitOnboarding: async (payload: any) =>
+      apiRequest('/api/v1/seller/onboarding/resubmit', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    getNotifications: async (sellerId?: string) =>
+      apiRequest(`/api/v1/seller/notifications${sellerId ? `?sellerId=${encodeURIComponent(sellerId)}` : ''}`),
+    markNotificationRead: async (id: string) =>
+      apiRequest(`/api/v1/seller/notifications/${encodeURIComponent(id)}/read`, { method: 'POST' }),
+    getStaff: async (sellerId?: string) =>
+      apiRequest(`/api/v1/seller/staff${sellerId ? `?sellerId=${encodeURIComponent(sellerId)}` : ''}`),
+    addStaff: async (payload: { sellerId?: string; name: string; email: string; staffRole: string }) =>
+      apiRequest('/api/v1/seller/staff', { method: 'POST', body: JSON.stringify(payload) }),
+    requestSettlement: async (payload: { sellerId?: string; amount: number; idempotencyKey?: string }) =>
+      apiRequest('/api/v1/seller/settlements/request', { method: 'POST', body: JSON.stringify(payload) }),
+    submitProduct: async (productId: string, notes?: string) =>
+      apiRequest(`/api/v1/seller/products/${encodeURIComponent(productId)}/submit`, {
+        method: 'POST',
+        body: JSON.stringify({ notes }),
+      }),
+    deliverOrder: async (orderId: string) =>
+      apiRequest(`/api/v1/seller/orders/${encodeURIComponent(orderId)}/deliver`, { method: 'POST' }),
+    getAdCampaigns: async (sellerId?: string) =>
+      apiRequest(`/api/v1/seller/ads/campaigns${sellerId ? `?sellerId=${encodeURIComponent(sellerId)}` : ''}`),
+    createAdCampaign: async (payload: any) =>
+      apiRequest('/api/v1/seller/ads/campaigns', { method: 'POST', body: JSON.stringify(payload) }),
+    pauseAdCampaign: async (id: string) =>
+      apiRequest(`/api/v1/seller/ads/campaigns/${encodeURIComponent(id)}/pause`, { method: 'POST' }),
+  },
+
+  // Phase 4 & 5 Admin Console Operations
+  adminOps: {
+    getGiftCards: async () => apiRequest('/api/v1/admin/gift-cards'),
+    createGiftCard: async (payload: { initialAmount: number; expiresAt?: string; minOrderAmount?: number; recipientEmail?: string; notes?: string }) =>
+      apiRequest('/api/v1/admin/gift-cards', { method: 'POST', body: JSON.stringify(payload) }),
+    toggleGiftCard: async (id: string, isActive: boolean, reason?: string) =>
+      apiRequest(`/api/v1/admin/gift-cards/${encodeURIComponent(id)}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ isActive, reason }),
+      }),
+    getStoreCredit: async (userId: string) =>
+      apiRequest(`/api/v1/admin/store-credits/${encodeURIComponent(userId)}`),
+    issueStoreCredit: async (payload: { userId: string; amount: number; reason: string }) =>
+      apiRequest('/api/v1/admin/store-credits/issue', { method: 'POST', body: JSON.stringify(payload) }),
+    getLedger: async (params?: { sellerId?: string; orderId?: string }) => {
+      const qs = new URLSearchParams();
+      if (params?.sellerId) qs.set('sellerId', params.sellerId);
+      if (params?.orderId) qs.set('orderId', params.orderId);
+      return apiRequest(`/api/v1/admin/ledger${qs.toString() ? `?${qs.toString()}` : ''}`);
+    },
+    reverseLedger: async (entryGroupId: string, reason: string) =>
+      apiRequest('/api/v1/admin/ledger/reverse', { method: 'POST', body: JSON.stringify({ entryGroupId, reason }) }),
+    runReconciliation: async (payload?: { fromDate?: string; toDate?: string; providerRecords?: any[] }) =>
+      apiRequest('/api/v1/admin/reconciliation/run', { method: 'POST', body: JSON.stringify(payload || {}) }),
+    getReconciliationRuns: async () => apiRequest('/api/v1/admin/reconciliation/runs'),
+    downloadExport: async (reportType: string, format: 'csv' | 'xlsx') => {
+      const token = getAuthToken();
+      const res = await fetch(
+        `/api/v1/admin/finance/export?reportType=${encodeURIComponent(reportType)}&format=${format}`,
+        { headers: token ? { Authorization: `Bearer ${token}` } : {} }
+      );
+      if (!res.ok) throw new Error('Export failed');
+      return res.blob();
+    },
+    getExportAudits: async () => apiRequest('/api/v1/admin/finance/export-audits'),
+    getInvoices: async () => apiRequest('/api/v1/admin/invoices'),
+    issueCreditNote: async (invoiceId: string, payload: { refundAmount: number; reason: string }) =>
+      apiRequest(`/api/v1/admin/invoices/${encodeURIComponent(invoiceId)}/credit-note`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    initiateRefund: async (orderId: string, payload: { amount: number; refundMode: 'ORIGINAL_METHOD' | 'STORE_CREDIT'; reason: string; idempotencyKey?: string }) =>
+      apiRequest(`/api/v1/orders/${encodeURIComponent(orderId)}/refunds`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    syncRefund: async (refundId: string) =>
+      apiRequest(`/api/v1/refunds/${encodeURIComponent(refundId)}/sync`, { method: 'POST' }),
+    disburseSettlement: async (settlementId: string, utrNumber?: string) =>
+      apiRequest(`/api/v1/admin/settlements/${encodeURIComponent(settlementId)}/disburse`, {
+        method: 'POST',
+        body: JSON.stringify({ utrNumber }),
+      }),
+    reviewSeller: async (sellerId: string, toStatus: string, reason?: string) =>
+      apiRequest(`/api/v1/admin/sellers/${encodeURIComponent(sellerId)}/review`, {
+        method: 'POST',
+        body: JSON.stringify({ toStatus, reason }),
+      }),
+    getAllProducts: async () => apiRequest('/api/v1/admin/products/all'),
+    moderateProduct: async (productId: string, toStatus: string, reason?: string) =>
+      apiRequest(`/api/v1/admin/products/${encodeURIComponent(productId)}/moderate`, {
+        method: 'POST',
+        body: JSON.stringify({ toStatus, reason }),
+      }),
+    moderateContent: async (payload: { targetType: 'REVIEW' | 'QUESTION'; targetId: string; productId: string; status: string; reason?: string }) =>
+      apiRequest('/api/v1/admin/moderation/content', { method: 'POST', body: JSON.stringify(payload) }),
+    getCmsBanners: async () => apiRequest('/api/v1/admin/cms/banners'),
+    saveCmsBanner: async (payload: any) =>
+      apiRequest(payload.id ? `/api/v1/admin/cms/banners/${encodeURIComponent(payload.id)}` : '/api/v1/admin/cms/banners', {
+        method: payload.id ? 'PUT' : 'POST',
+        body: JSON.stringify(payload),
+      }),
+    saveCmsCategory: async (payload: any) =>
+      apiRequest(payload.id ? `/api/v1/admin/cms/categories/${encodeURIComponent(payload.id)}` : '/api/v1/admin/cms/categories', {
+        method: payload.id ? 'PUT' : 'POST',
+        body: JSON.stringify(payload),
+      }),
+    saveCmsBrand: async (payload: any) =>
+      apiRequest(payload.id ? `/api/v1/admin/cms/brands/${encodeURIComponent(payload.id)}` : '/api/v1/admin/cms/brands', {
+        method: payload.id ? 'PUT' : 'POST',
+        body: JSON.stringify(payload),
+      }),
+    getAdCampaigns: async () => apiRequest('/api/v1/admin/ads/campaigns'),
+    moderateAdCampaign: async (id: string, action: 'APPROVE' | 'REJECT' | 'PAUSE', reason?: string) =>
+      apiRequest(`/api/v1/admin/ads/campaigns/${encodeURIComponent(id)}/moderate`, {
+        method: 'POST',
+        body: JSON.stringify({ action, reason }),
+      }),
+    getSuppliers: async () => apiRequest('/api/v1/admin/suppliers'),
+    createSupplier: async (payload: any) =>
+      apiRequest('/api/v1/admin/suppliers', { method: 'POST', body: JSON.stringify(payload) }),
+    getPurchaseOrders: async () => apiRequest('/api/v1/admin/purchase-orders'),
+    createPurchaseOrder: async (payload: any) =>
+      apiRequest('/api/v1/admin/purchase-orders', { method: 'POST', body: JSON.stringify(payload) }),
+    updatePoStatus: async (poId: string, toStatus: string, reason?: string) =>
+      apiRequest(`/api/v1/admin/purchase-orders/${encodeURIComponent(poId)}/status`, {
+        method: 'POST',
+        body: JSON.stringify({ toStatus, reason }),
+      }),
+    getGoodsReceipts: async () => apiRequest('/api/v1/admin/goods-receipts'),
+    receiveGrn: async (poId: string, payload: any) =>
+      apiRequest(`/api/v1/admin/purchase-orders/${encodeURIComponent(poId)}/grn`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    getSupplierInvoices: async () => apiRequest('/api/v1/admin/supplier-invoices'),
+    getStaffRoles: async () => apiRequest('/api/v1/admin/staff/roles'),
+    getStaff: async () => apiRequest('/api/v1/admin/staff'),
+    createStaff: async (payload: { name: string; email: string; password: string; roleName: string }) =>
+      apiRequest('/api/v1/admin/staff', { method: 'POST', body: JSON.stringify(payload) }),
+    toggleStaffStatus: async (id: string, isActive: boolean) =>
+      apiRequest(`/api/v1/admin/staff/${encodeURIComponent(id)}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ isActive }),
+      }),
+    searchAuditLogs: async (params?: { entityType?: string; action?: string; actorRole?: string; search?: string; page?: number; limit?: number }) => {
+      const qs = new URLSearchParams();
+      if (params?.entityType) qs.set('entityType', params.entityType);
+      if (params?.action) qs.set('action', params.action);
+      if (params?.actorRole) qs.set('actorRole', params.actorRole);
+      if (params?.search) qs.set('search', params.search);
+      if (params?.page) qs.set('page', String(params.page));
+      if (params?.limit) qs.set('limit', String(params.limit));
+      return apiRequest(`/api/v1/admin/audit-logs/search${qs.toString() ? `?${qs.toString()}` : ''}`);
+    },
+    getAnalytics: async (params?: { fromDate?: string; toDate?: string; sellerId?: string }) => {
+      const qs = new URLSearchParams();
+      if (params?.fromDate) qs.set('fromDate', params.fromDate);
+      if (params?.toDate) qs.set('toDate', params.toDate);
+      if (params?.sellerId) qs.set('sellerId', params.sellerId);
+      return apiRequest(`/api/v1/admin/analytics${qs.toString() ? `?${qs.toString()}` : ''}`);
+    },
+    downloadAnalyticsExport: async (format: 'csv' | 'xlsx') => {
+      const token = getAuthToken();
+      const res = await fetch(`/api/v1/admin/analytics/export?format=${format}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error('Analytics export failed');
+      return res.blob();
+    },
   },
 };
+

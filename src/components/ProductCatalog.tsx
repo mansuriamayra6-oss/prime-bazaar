@@ -1,8 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useMarketplace } from '../context/MarketplaceContext';
 import { ProductCard } from './ProductCard';
 import { Breadcrumbs } from './Breadcrumbs';
 import { matchesProductSearch } from '../utils/productSearch';
+import { api } from '../services/api';
+import { SponsoredAdHighlight } from '../types';
 import {
   buildBreadcrumbs,
   findDepartmentById,
@@ -50,6 +52,59 @@ export const ProductCatalog: React.FC = () => {
   const [codOnly, setCodOnly] = useState<boolean>(false);
   const [showWishlistOnly, setShowWishlistOnly] = useState<boolean>(false);
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState<boolean>(false);
+
+  const [sponsoredAds, setSponsoredAds] = useState<SponsoredAdHighlight[]>([]);
+  const impressedAdsRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadAds = async () => {
+      try {
+        const res = await api.cms.getSponsoredAds({
+          placement: 'SEARCH_TOP',
+          category: selectedCategory !== 'all' ? selectedCategory : undefined,
+          q: searchQuery || undefined,
+          limit: 3,
+        });
+        if (cancelled) return;
+        const list = (res.sponsored || []) as SponsoredAdHighlight[];
+        setSponsoredAds(list);
+        for (const ad of list) {
+          const key = `${ad.campaignId}:${ad.product.id}`;
+          if (!impressedAdsRef.current.has(key)) {
+            impressedAdsRef.current.add(key);
+            api.cms
+              .recordAdEvent({
+                campaignId: ad.campaignId,
+                productId: ad.product.id,
+                eventType: 'IMPRESSION',
+              })
+              .catch(() => undefined);
+          }
+        }
+      } catch {
+        if (!cancelled) setSponsoredAds([]);
+      }
+    };
+    loadAds();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedCategory, searchQuery]);
+
+  const handleSponsoredClick = (ad: SponsoredAdHighlight) => {
+    api.cms
+      .recordAdEvent({
+        campaignId: ad.campaignId,
+        productId: ad.product.id,
+        eventType: 'CLICK',
+      })
+      .catch(() => undefined);
+    const matched = products.find(p => p.id === ad.product.id);
+    if (matched) {
+      setSelectedProduct(matched);
+    }
+  };
 
   const popularKeywords = [
     'Raw Silk Kurti',
@@ -169,7 +224,7 @@ export const ProductCatalog: React.FC = () => {
         </div>
       )}
 
-      {/* Subcategory Pill Filter Bar when browsing a Department */}
+      {/* Subcategory Filter Bar when browsing a Department */}
       {activeDepartment && activeDepartment.subcategories.length > 0 && (
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-3 mb-2">
           <button
@@ -246,6 +301,58 @@ export const ProductCatalog: React.FC = () => {
         ))}
       </div>
 
+      {/* Dedicated Sponsored Highlights Strip (never mixed into organic grid) */}
+      {sponsoredAds.length > 0 && !showWishlistOnly && (
+        <div className="my-3 p-4 rounded-xl bg-zinc-50 dark:bg-zinc-900/70 border border-zinc-200 dark:border-zinc-800 space-y-2.5">
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-bold text-zinc-900 dark:text-white">Sponsored Highlights</span>
+            <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
+              Sponsored · Verified Merchants
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {sponsoredAds.map(ad => (
+              <button
+                key={`${ad.campaignId}-${ad.product.id}`}
+                type="button"
+                onClick={() => handleSponsoredClick(ad)}
+                className="flex items-center gap-3 p-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 hover:border-rose-400 text-left transition-colors"
+              >
+                <img
+                  src={ad.product.image}
+                  alt={ad.product.title}
+                  referrerPolicy="no-referrer"
+                  className="w-14 h-16 rounded-md object-cover shrink-0 bg-zinc-100 dark:bg-zinc-800"
+                />
+                <div className="min-w-0 flex-1 text-xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] font-semibold text-zinc-400 uppercase truncate">
+                      {ad.product.brand}
+                    </span>
+                    <span className="text-[10px] font-semibold text-zinc-500 shrink-0">
+                      {ad.label}
+                    </span>
+                  </div>
+                  <p className="font-semibold text-zinc-900 dark:text-white truncate mt-0.5">
+                    {ad.product.title}
+                  </p>
+                  <div className="flex items-baseline gap-2 mt-1 font-mono tabular-nums">
+                    <span className="font-bold text-rose-600 dark:text-rose-400">
+                      {formatPrice(ad.product.price)}
+                    </span>
+                    {ad.product.mrp > ad.product.price && (
+                      <span className="text-[10px] text-zinc-400 line-through">
+                        {formatPrice(ad.product.mrp)}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Catalog Error State */}
       {catalogError && (
         <div
@@ -259,7 +366,7 @@ export const ProductCatalog: React.FC = () => {
           <button
             type="button"
             onClick={() => retryCatalogSync()}
-            className="px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold flex items-center gap-1.5 shrink-0 self-start sm:self-auto"
+            className="px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold flex items-center gap-1.5 shrink-0 self-start sm:self-auto whitespace-nowrap"
           >
             <RefreshCw className="w-3.5 h-3.5" />
             <span>Retry Sync</span>
@@ -294,8 +401,8 @@ export const ProductCatalog: React.FC = () => {
             <Heart className={`w-3.5 h-3.5 ${showWishlistOnly ? 'fill-rose-600 text-rose-600' : 'text-zinc-500'}`} />
             <span>Wishlist</span>
             {wishlist.length > 0 && (
-              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 tabular-nums">
-                {wishlist.length}
+              <span className="text-[11px] font-mono tabular-nums text-zinc-500 dark:text-zinc-400">
+                ({wishlist.length})
               </span>
             )}
           </button>
@@ -312,8 +419,8 @@ export const ProductCatalog: React.FC = () => {
             <SlidersHorizontal className="w-3.5 h-3.5" />
             <span>Filters</span>
             {activeFiltersCount > 0 && (
-              <span className="w-4 h-4 rounded-full bg-rose-600 text-white text-[10px] font-bold flex items-center justify-center">
-                {activeFiltersCount}
+              <span className="text-[11px] font-mono tabular-nums text-rose-600 dark:text-rose-400">
+                ({activeFiltersCount})
               </span>
             )}
           </button>
@@ -355,7 +462,7 @@ export const ProductCatalog: React.FC = () => {
               onChange={e => setMaxPrice(parseInt(e.target.value, 10))}
               className="w-full accent-rose-600 cursor-pointer"
             />
-            <div className="flex justify-between text-[10px] text-zinc-400 font-mono mt-1">
+            <div className="flex justify-between text-[10px] text-zinc-400 font-mono mt-1 tabular-nums">
               <span>₹500</span>
               <span>₹5,000</span>
             </div>

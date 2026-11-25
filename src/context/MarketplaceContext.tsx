@@ -18,7 +18,9 @@ import {
   SellerSupportTicket,
   PriceAlert,
   PriceDropNotification,
-  PriceWorkerStatus
+  PriceWorkerStatus,
+  CmsBannerItem,
+  CheckoutQuote
 } from '../types';
 import { 
   INITIAL_PRODUCTS, 
@@ -36,7 +38,7 @@ import { api } from '../services/api';
 
 export type SupportedLanguage = 'en' | 'hi' | 'mr' | 'ta';
 export type SupportedCurrency = 'INR' | 'USD' | 'EUR';
-export type CheckoutPaymentMethod = 'cashfree' | 'upi' | 'card' | 'netbanking' | 'cod';
+export type CheckoutPaymentMethod = 'cashfree' | 'upi' | 'card' | 'netbanking' | 'cod' | 'WALLET_ONLY';
 
 interface MarketplaceContextType {
   products: Product[];
@@ -72,8 +74,16 @@ interface MarketplaceContextType {
     address: Address;
     paymentMethod: CheckoutPaymentMethod;
     couponCode?: string;
+    giftCardCode?: string;
+    useStoreCredit?: boolean;
+    requestedStoreCreditAmount?: number;
     coinsUsed: number;
-  }) => Order;
+    idempotencyKey?: string;
+    intentId?: string;
+    cashfreeOrderId?: string;
+    buyerGstin?: string;
+    quote?: CheckoutQuote | null;
+  }) => Promise<Order>;
   cancelOrder: (orderId: string) => void;
   returnOrder: (orderId: string, reason: string) => void;
   updateOrderStatus: (orderId: string, status: OrderStatus) => void;
@@ -259,6 +269,12 @@ interface MarketplaceContextType {
   runPriceDropWorkerCheck: (simulateDropProductId?: string, dropPercent?: number) => Promise<void>;
   markPriceDropRead: (notificationId: string) => Promise<void>;
   markAllPriceDropsRead: () => Promise<void>;
+
+  // Phase 4 & 5 Wallet & CMS
+  storeCreditBalance: number;
+  refreshStoreCredit: () => Promise<void>;
+  cmsBanners: CmsBannerItem[];
+  refreshCmsData: () => Promise<void>;
 }
 
 
@@ -1038,6 +1054,43 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     }
   };
 
+  // Store Credit Balance & CMS Banners (Phase 4 & 5)
+  const [storeCreditBalance, setStoreCreditBalance] = useState<number>(0);
+  const [cmsBanners, setCmsBanners] = useState<CmsBannerItem[]>([]);
+
+  const refreshStoreCredit = async () => {
+    const token = localStorage.getItem('pb_auth_token');
+    if (!token) {
+      setStoreCreditBalance(0);
+      return;
+    }
+    try {
+      const res = await api.checkout.getMyStoreCredit();
+      setStoreCreditBalance(Number(res?.balance || 0));
+    } catch {
+      // Keep existing balance when offline
+    }
+  };
+
+  const refreshCmsData = async () => {
+    try {
+      const res = await api.cms.getBanners('HERO');
+      if (Array.isArray(res?.banners)) {
+        setCmsBanners(res.banners);
+      }
+    } catch {
+      // Graceful fallback
+    }
+  };
+
+  useEffect(() => {
+    refreshStoreCredit();
+  }, [user?.id, user?.email]);
+
+  useEffect(() => {
+    refreshCmsData();
+  }, []);
+
   const notify = (msg: string) => {
     setNotification(msg);
     setTimeout(() => {
@@ -1433,8 +1486,12 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
       }
       if (action === 'dispatch') {
         const partner = details?.courierPartner || 'BlueDart Express';
-        const awb = details?.trackingNumber || `AWB-BD-${Math.floor(100000000 + Math.random() * 900000000)}`;
-        notify(`Order #${orderId} dispatched via ${partner} (AWB: ${awb})!`);
+        const awb = details?.trackingNumber || ord.trackingNumber || 'PENDING_CARRIER';
+        notify(
+          awb === 'PENDING_CARRIER'
+            ? `Order #${orderId} marked Dispatched (${partner}) — generate carrier AWB in Shipping tab.`
+            : `Order #${orderId} dispatched via ${partner} (AWB: ${awb})!`
+        );
         return {
           ...ord,
           status: 'shipped',
@@ -1611,61 +1668,128 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     }
   }
 
-  const placeOrder = (details: {
+  const placeOrder = async (details: {
     address: Address;
-    paymentMethod: 'cod' | 'upi' | 'card' | 'netbanking' | 'cashfree';
+    paymentMethod: CheckoutPaymentMethod;
     couponCode?: string;
+    giftCardCode?: string;
+    useStoreCredit?: boolean;
+    requestedStoreCreditAmount?: number;
     coinsUsed: number;
-  }): Order => {
+    idempotencyKey?: string;
+    intentId?: string;
+    cashfreeOrderId?: string;
+    buyerGstin?: string;
+    quote?: CheckoutQuote | null;
+  }): Promise<Order> => {
+    const snapshotCart = [...cart];
     const subtotal = cartSubtotal;
-    const discount = couponDiscount;
-    const coinsDiscount = details.coinsUsed;
-    const deliveryFee = subtotal > 999 ? 0 : 49;
-    const finalAmt = Math.max(0, subtotal - discount - coinsDiscount + deliveryFee);
+    const discount = details.quote ? details.quote.couponDiscount : couponDiscount;
+    const coinsDiscount = details.quote ? details.quote.coinsDiscount : details.coinsUsed;
+    const deliveryFee = details.quote ? details.quote.deliveryFee : (subtotal > 999 ? 0 : 49);
+    const giftCardAmount = details.quote ? details.quote.giftCardAmount : 0;
+    const storeCreditAmount = details.quote ? details.quote.storeCreditAmount : 0;
+    const taxAmount = details.quote ? details.quote.taxAmount : 0;
+    const grossTotal = details.quote
+      ? details.quote.grossPayableBeforeWallet
+      : Math.max(0, subtotal - discount - coinsDiscount + deliveryFee);
+    const gatewayPayable = details.quote
+      ? details.quote.finalGatewayPayable
+      : Math.max(0, grossTotal - giftCardAmount - storeCreditAmount);
+
+    let backendOrder: any = null;
+    let backendInvoices: any[] = [];
+    let backendQuote: CheckoutQuote | null = details.quote || null;
+    let splitWarehousePlan: any[] | undefined = undefined;
+    let backendEarnedCoins: number | null = null;
+
+    try {
+      const res = await api.orders.create({
+        items: snapshotCart.map(it => ({
+          productId: it.productId,
+          title: it.product.title,
+          selectedSize: it.selectedSize,
+          selectedColor: it.selectedColor,
+          quantity: it.quantity,
+          price: it.product.price,
+          sellerId: it.product.sellerId,
+        })),
+        address: details.address,
+        paymentMethod: details.paymentMethod,
+        couponCode: details.couponCode,
+        giftCardCode: details.giftCardCode,
+        useStoreCredit: Boolean(details.useStoreCredit),
+        requestedStoreCreditAmount: details.requestedStoreCreditAmount,
+        coinsUsed: details.coinsUsed,
+        idempotencyKey: details.idempotencyKey,
+        intentId: details.intentId,
+        cashfreeOrderId: details.cashfreeOrderId,
+        buyerGstin: details.buyerGstin,
+      });
+
+      if (res?.order) {
+        backendOrder = res.order;
+        backendInvoices = Array.isArray(res.invoices) ? res.invoices : [];
+        backendQuote = res.quote || backendQuote;
+        splitWarehousePlan = res.splitWarehousePlan || res.order.splitWarehousePlan;
+        if (typeof res.earnedCoins === 'number') {
+          backendEarnedCoins = res.earnedCoins;
+        }
+      }
+    } catch (err: any) {
+      // If user explicitly provided a gift card or store credit and backend rejected it, surface the error cleanly
+      if (details.giftCardCode || details.useStoreCredit) {
+        throw err;
+      }
+      console.warn('Backend order persist fallback:', err?.message || err);
+    }
+
+    const orderId = backendOrder?.id || `PB-${Math.floor(10000 + Math.random() * 90000)}`;
+    const resolvedFinalAmount = Number(backendOrder?.totalAmount ?? grossTotal);
+    const resolvedGatewayPayable = Number(backendOrder?.finalGatewayPayable ?? gatewayPayable);
+    const resolvedGiftCardAmt = Number(backendOrder?.giftCardAmount ?? backendQuote?.giftCardAmount ?? giftCardAmount);
+    const resolvedStoreCreditAmt = Number(backendOrder?.storeCreditAmount ?? backendQuote?.storeCreditAmount ?? storeCreditAmount);
+    const resolvedTaxAmt = Number(backendOrder?.taxAmount ?? backendQuote?.taxAmount ?? taxAmount);
 
     const newOrder: Order = {
-      id: `PB-${Math.floor(10000 + Math.random() * 90000)}`,
-      items: [...cart],
-      totalAmount: subtotal,
-      discountAmount: discount + coinsDiscount,
+      id: orderId,
+      items: snapshotCart,
+      totalAmount: Number(backendOrder?.subtotalAmount ?? subtotal),
+      discountAmount: Number(backendOrder?.discountAmount ?? discount + coinsDiscount),
       couponCode: details.couponCode,
       coinsUsed: details.coinsUsed,
-      deliveryFee,
-      finalAmount: finalAmt,
+      deliveryFee: Number(backendOrder?.deliveryFee ?? deliveryFee),
+      finalAmount: resolvedFinalAmount,
+      taxAmount: resolvedTaxAmt,
+      giftCardAmount: resolvedGiftCardAmt,
+      storeCreditAmount: resolvedStoreCreditAmt,
+      finalGatewayPayable: resolvedGatewayPayable,
+      paymentStatus: backendOrder?.paymentStatus || (details.paymentMethod === 'cod' ? 'PENDING' : 'PAID'),
+      splitWarehousePlan,
+      invoiceNumber: backendInvoices[0]?.invoiceNumber || backendOrder?.invoiceNumber,
       shippingAddress: details.address,
       paymentMethod: details.paymentMethod,
       status: 'placed',
       trackingSteps: [
-        { step: 'Order Placed & Payment Verified', timestamp: 'Just now', completed: true, current: true },
-        { step: 'Seller Dispatching Package', timestamp: 'Estimated in 24 hours', completed: false },
+        { step: 'Order Placed & Stock Reserved', timestamp: 'Just now', completed: true, current: true },
+        { step: 'Packed & Carrier Label Assigned', timestamp: 'Estimated in 24 hours', completed: false },
         { step: 'In Transit with Express Logistics', timestamp: 'Pending', completed: false },
         { step: 'Out for Delivery to Your Doorstep', timestamp: 'Pending', completed: false },
         { step: 'Delivered', timestamp: 'Expected in 3-4 days', completed: false }
       ],
-      createdAt: new Date().toISOString(),
+      createdAt: backendOrder?.createdAt || new Date().toISOString(),
       estimatedDelivery: 'In 3-4 business days'
     };
 
-    setOrders(prev => [newOrder, ...prev]);
+    setOrders(prev => [newOrder, ...prev.filter(o => o.id !== newOrder.id)]);
     if (details.coinsUsed > 0) {
       setCoins(prev => Math.max(0, prev - details.coinsUsed));
     }
-    earnCoins(Math.round(finalAmt * 0.05), 'Order cash reward');
+    earnCoins(backendEarnedCoins ?? Math.round(resolvedFinalAmount * 0.05), 'Order cash reward');
     clearCart();
     setActiveCoupon(null);
-    notify(`Order #${newOrder.id} confirmed successfully! 🎉`);
-
-    // Persist order to Express backend
-    api.orders.create({
-      items: cart,
-      address: details.address,
-      paymentMethod: details.paymentMethod,
-      couponCode: details.couponCode,
-      coinsUsed: details.coinsUsed,
-      totalAmount: finalAmt,
-      discountAmount: discount + coinsDiscount
-    }).catch(err => console.warn('Backend order persist:', err));
-
+    refreshStoreCredit();
+    notify(`Order #${newOrder.id} confirmed successfully!`);
     return newOrder;
   };
 
@@ -1684,7 +1808,10 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
           : ord
       )
     );
-    api.orders.cancel(orderId, 'Cancelled by customer').catch(() => {});
+    api.orders
+      .cancel(orderId, 'Cancelled by customer')
+      .then(() => refreshStoreCredit())
+      .catch(() => {});
     notify(`Order #${orderId} has been cancelled.`);
   };
 
@@ -1899,7 +2026,12 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
         togglePriceAlert,
         runPriceDropWorkerCheck,
         markPriceDropRead,
-        markAllPriceDropsRead
+        markAllPriceDropsRead,
+
+        storeCreditBalance,
+        refreshStoreCredit,
+        cmsBanners,
+        refreshCmsData
       }}
     >
       {children}

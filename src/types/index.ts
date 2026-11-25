@@ -192,7 +192,7 @@ export interface Order {
   deliveryFee: number;
   finalAmount: number;
   shippingAddress: Address;
-  paymentMethod: 'cod' | 'upi' | 'card' | 'netbanking' | 'cashfree';
+  paymentMethod: 'cod' | 'upi' | 'card' | 'netbanking' | 'cashfree' | 'WALLET_ONLY';
   status: OrderStatus;
   trackingSteps: TrackingStep[];
   createdAt: string;
@@ -204,6 +204,17 @@ export interface Order {
   cancelReason?: string;
   shippingLabelGenerated?: boolean;
   invoiceNumber?: string;
+  taxAmount?: number;
+  giftCardAmount?: number;
+  storeCreditAmount?: number;
+  finalGatewayPayable?: number;
+  paymentStatus?: 'PENDING' | 'PAID' | 'FAILED' | 'PARTIAL_REFUND' | 'REFUNDED';
+  splitWarehousePlan?: Array<{
+    warehouseId: string;
+    warehouseName: string;
+    warehouseState: string;
+    items: Array<{ productId: string; variantId: string; sku: string; quantity: number }>;
+  }>;
 }
 
 export interface Reel {
@@ -474,3 +485,124 @@ export interface PriceWorkerStatus {
   alertsTriggeredCount: number;
   activeAlertsCount: number;
 }
+
+export interface CheckoutQuote {
+  subtotal: number;
+  couponDiscount: number;
+  coinsDiscount: number;
+  taxAmount: number;
+  deliveryFee: number;
+  giftCardAmount: number;
+  storeCreditAmount: number;
+  grossPayableBeforeWallet: number;
+  finalGatewayPayable: number;
+  appliedCouponCode?: string | null;
+  giftCardValid?: boolean;
+  storeCreditBalance?: number;
+}
+
+export interface TaxInvoiceRecord {
+  id: string;
+  invoiceNumber: string;
+  orderId: string;
+  sellerOrderId: string;
+  sellerId: string;
+  sellerName: string;
+  sellerGstin: string;
+  buyerName: string;
+  buyerState: string;
+  warehouseState: string;
+  isInterState: boolean;
+  missingGstFlag: boolean;
+  taxableSubtotal: number;
+  cgstAmount: number;
+  sgstAmount: number;
+  igstAmount: number;
+  totalTaxAmount: number;
+  shippingFee: number;
+  grandTotal: number;
+  issuedAt: string;
+}
+
+export interface ShipmentRecord {
+  id: string;
+  orderId: string;
+  sellerOrderId?: string;
+  sellerId: string;
+  warehouseId?: string;
+  providerName: string;
+  courier: string;
+  trackingNumber: string;
+  labelUrl?: string;
+  shippingCost: number;
+  status: string;
+  failedAttempts: number;
+  rtoReason?: string;
+  deliveredAt?: string;
+  events: Array<{ id: string; event: string; location: string; eventDate: string }>;
+}
+
+export interface CmsBannerItem {
+  id: string;
+  title: string;
+  eyebrow?: string;
+  subtitle?: string;
+  ctaLabel?: string;
+  targetCategory?: string;
+  targetSubcategory?: string | null;
+  imageUrl: string;
+  mobileImageUrl?: string;
+  linkUrl?: string;
+  placement: string;
+  priority: number;
+  status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
+  startAt?: string;
+  endAt?: string;
+}
+
+export interface SponsoredAdHighlight {
+  campaignId: string;
+  campaignName: string;
+  sellerId: string;
+  sellerName: string;
+  placement: string;
+  label: 'Sponsored';
+  cpcBid: number;
+  product: {
+    id: string;
+    title: string;
+    brand: string;
+    category: string;
+    price: number;
+    mrp: number;
+    image: string;
+    sellerId: string;
+    sellerName: string;
+    inStock: number;
+  };
+}
+
+export interface RealPlatformAnalytics {
+  grossMerchandiseValue: number;
+  totalOrders: number;
+  totalSuborders: number;
+  averageOrderValue: number;
+  commissionRevenue: number;
+  gstOnCommission: number;
+  platformTakeRate: string;
+  disbursedToVendors: number;
+  activeSellers: number;
+  totalSellers: number;
+  pendingKYCSellers: number;
+  activeListings: number;
+  pendingProducts: number;
+  lowStockCount: number;
+  returnCount: number;
+  returnRate: string;
+  fulfillmentRate: string;
+  totalAdSpend: number;
+  totalAdRevenue: number;
+  ledgerBalanced: boolean;
+  monthlyTrend: Array<{ month: string; sales: number; orders: number }>;
+}
+

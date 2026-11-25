@@ -49,12 +49,19 @@ import {
   RefreshCw,
   CheckCheck,
   Key,
-  Shield
+  Shield,
+  Megaphone,
+  SendHorizontal
 } from 'lucide-react';
 import { ShippingLabelModal } from './ShippingLabelModal';
 import { ProductUploadModal } from './ProductUploadModal';
 import { BulkUploadModal } from './BulkUploadModal';
 import { SellerRegistrationModal } from './SellerRegistrationModal';
+import {
+  SellerWarehouseOpsPanel,
+  SellerSponsoredAdsPanel,
+  SellerGovernancePanel,
+} from './SellerOpsPanels';
 
 type SellerTab = 
   | 'dashboard'
@@ -66,6 +73,7 @@ type SellerTab =
   | 'returns'
   | 'payments'
   | 'cashfree'
+  | 'ads'
   | 'offers'
   | 'analytics'
   | 'support'
@@ -172,10 +180,29 @@ export const SellerDashboard: React.FC = () => {
     setNewCouponCode('');
   };
 
-  const handlePayoutSubmit = (e: React.FormEvent) => {
+  const handlePayoutSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    requestSellerPayout(currentSeller.id, Number(payoutAmountInput));
+    const amt = Number(payoutAmountInput);
+    try {
+      await api.sellerOps.requestSettlement({
+        sellerId: currentSeller.id,
+        amount: amt,
+        idempotencyKey: `stl_${currentSeller.id}_${Date.now()}`,
+      });
+    } catch {
+      // Fallback to local state dispatch when unauthenticated preview mode
+    }
+    requestSellerPayout(currentSeller.id, amt);
     setIsPayoutModalOpen(false);
+  };
+
+  const handleSubmitProductForApproval = async (productId: string) => {
+    try {
+      await api.sellerOps.submitProduct(productId, 'Submitted by seller for admin approval');
+      notify('Product submitted for admin moderation review.');
+    } catch (err: any) {
+      notify(err.message || 'Sign in as Seller to submit products for approval.');
+    }
   };
 
   const handleTicketReplySubmit = (ticketId: string) => {
@@ -183,6 +210,20 @@ export const SellerDashboard: React.FC = () => {
     replyToSellerTicket(ticketId, replyText.trim(), 'seller');
     setReplyText('');
   };
+
+  const [backendSalesReport, setBackendSalesReport] = useState<any>(null);
+  const [backendEarningsReport, setBackendEarningsReport] = useState<any>(null);
+
+  React.useEffect(() => {
+    if (activeTab !== 'analytics' && activeTab !== 'dashboard') return;
+    Promise.allSettled([
+      api.v1.finance.getSalesReport(currentSeller.id),
+      api.v1.finance.getEarningsReport(currentSeller.id),
+    ]).then(([sRes, eRes]) => {
+      if (sRes.status === 'fulfilled') setBackendSalesReport(sRes.value);
+      if (eRes.status === 'fulfilled') setBackendEarningsReport(eRes.value);
+    });
+  }, [activeTab, currentSeller.id]);
 
   // Cashfree Payouts ID & Settlement State
   const [cashfreeBeneficiaryId, setCashfreeBeneficiaryId] = useState<string>(
@@ -427,8 +468,9 @@ export const SellerDashboard: React.FC = () => {
                 { id: 'returns', label: 'Returns & Refunds', icon: RotateCcw, badge: myReturns.filter(r => r.status === 'pending').length || null },
                 { id: 'payments', label: 'Payments & Payouts', icon: Wallet, badge: `₹${(currentSeller.walletBalance / 1000).toFixed(0)}k` },
                 { id: 'cashfree', label: 'Cashfree Payouts ID', icon: Landmark, badge: currentSeller.cashfreeStatus === 'verified' ? 'Active' : 'Setup' },
+                { id: 'ads', label: 'Sponsored Ads', icon: Megaphone, badge: null },
                 { id: 'offers', label: 'Offers & Discounts', icon: Tag, badge: `${myCoupons.length}` },
-                { id: 'analytics', label: 'Analytics & Reports', icon: BarChart3, badge: '+18%' },
+                { id: 'analytics', label: 'Analytics & Reports', icon: BarChart3, badge: null },
                 { id: 'support', label: 'Customer Support', icon: HelpCircle, badge: myTickets.filter(t => t.status === 'open').length || null },
                 { id: 'settings', label: 'Store Settings', icon: Settings, badge: null }
               ].map(item => {
@@ -480,11 +522,11 @@ export const SellerDashboard: React.FC = () => {
                     <span className="text-xs font-semibold uppercase">Total Sales Revenue</span>
                     <TrendingUp className="w-4 h-4 text-emerald-500" />
                   </div>
-                  <span className="text-2xl font-bold font-mono text-zinc-900 dark:text-white">
+                  <span className="text-2xl font-bold font-mono text-zinc-900 dark:text-white tabular-nums">
                     ₹{totalGrossSales.toLocaleString('en-IN')}
                   </span>
-                  <span className="block text-[11px] text-emerald-600 mt-1 font-semibold">
-                    +24.2% MoM growth rate
+                  <span className="block text-[11px] text-zinc-500 mt-1 tabular-nums">
+                    From {sellerOrders.length} active store orders
                   </span>
                 </div>
 
@@ -493,11 +535,11 @@ export const SellerDashboard: React.FC = () => {
                     <span className="text-xs font-semibold uppercase">Total Orders</span>
                     <ShoppingCart className="w-4 h-4 text-indigo-500" />
                   </div>
-                  <span className="text-2xl font-bold font-mono text-zinc-900 dark:text-white">
+                  <span className="text-2xl font-bold font-mono text-zinc-900 dark:text-white tabular-nums">
                     {(currentSeller.totalOrders + sellerOrders.length).toLocaleString('en-IN')}
                   </span>
-                  <span className="block text-[11px] text-zinc-400 mt-1">
-                    99.4% on-time dispatch SLA
+                  <span className="block text-[11px] text-zinc-500 mt-1 tabular-nums">
+                    {sellerOrders.filter(o => o.status === 'delivered').length} delivered this cycle
                   </span>
                 </div>
 
@@ -689,6 +731,8 @@ export const SellerDashboard: React.FC = () => {
                   </div>
                 </div>
               </div>
+
+              <SellerGovernancePanel seller={currentSeller} notify={notify} />
             </div>
           )}
 
@@ -788,6 +832,15 @@ export const SellerDashboard: React.FC = () => {
                           </td>
                           <td className="p-4 text-right">
                             <div className="flex items-center justify-end gap-1">
+                              <button
+                                type="button"
+                                onClick={() => handleSubmitProductForApproval(prod.id)}
+                                className="px-2 py-1 rounded-lg border border-zinc-300 dark:border-zinc-700 text-[11px] font-semibold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center gap-1 whitespace-nowrap"
+                                title="Submit for Admin Approval"
+                              >
+                                <SendHorizontal className="w-3 h-3" />
+                                <span>Submit</span>
+                              </button>
                               <button
                                 onClick={() => {
                                   setEditingProduct(prod);
@@ -917,6 +970,12 @@ export const SellerDashboard: React.FC = () => {
                   </tbody>
                 </table>
               </div>
+
+              <SellerWarehouseOpsPanel
+                seller={currentSeller}
+                sellerProducts={sellerProducts}
+                notify={notify}
+              />
             </div>
           )}
 
@@ -1119,8 +1178,8 @@ export const SellerDashboard: React.FC = () => {
                         <tr key={order.id}>
                           <td className="p-3 font-mono font-bold text-zinc-900 dark:text-white">#{order.id}</td>
                           <td className="p-3">{order.courierPartner || 'BlueDart Express'}</td>
-                          <td className="p-3 font-mono text-[11px] text-zinc-500">
-                            {order.trackingNumber || `AWB-BD-89240182`}
+                          <td className="p-3 font-mono text-[11px] text-zinc-500 tabular-nums">
+                            {order.trackingNumber || 'Pending Carrier Manifest'}
                           </td>
                           <td className="p-3">
                             <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-zinc-100 dark:bg-zinc-800">
@@ -1231,7 +1290,7 @@ export const SellerDashboard: React.FC = () => {
                   ))}
                 </div>
               ) : (
-                <p className="text-zinc-500 text-xs py-4">No active return requests. Your return rate is a stellar 1.2%!</p>
+                <p className="text-zinc-500 text-xs py-4">No active return requests for this store.</p>
               )}
             </div>
           )}
@@ -1271,8 +1330,8 @@ export const SellerDashboard: React.FC = () => {
 
                 <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800 space-y-1">
                   <span className="text-[11px] font-semibold text-zinc-500 uppercase">Pending Settlement</span>
-                  <span className="text-2xl font-bold font-mono text-zinc-900 dark:text-white block">
-                    ₹{(currentSeller.pendingSettlement || 18450).toLocaleString('en-IN')}
+                  <span className="text-2xl font-bold font-mono text-zinc-900 dark:text-white block tabular-nums">
+                    ₹{(currentSeller.pendingSettlement || 0).toLocaleString('en-IN')}
                   </span>
                   <span className="text-[10px] text-zinc-400">Orders in transit (releases on delivery)</span>
                 </div>
@@ -1424,7 +1483,6 @@ export const SellerDashboard: React.FC = () => {
                       <ShieldCheck className="w-4 h-4 text-emerald-600" />
                       Beneficiary ID Status
                     </span>
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="font-mono font-bold text-sm text-zinc-900 dark:text-white truncate">
@@ -1490,8 +1548,8 @@ export const SellerDashboard: React.FC = () => {
                       T+0 Instant
                     </span>
                   </div>
-                  <span className="text-[10px] text-zinc-500">
-                    Pending In-Transit: ₹{(currentSeller.pendingSettlement || 18450).toLocaleString('en-IN')}
+                  <span className="text-[10px] text-zinc-500 tabular-nums">
+                    Pending In-Transit: ₹{(currentSeller.pendingSettlement || 0).toLocaleString('en-IN')}
                   </span>
                 </div>
               </div>
@@ -1818,14 +1876,14 @@ export const SellerDashboard: React.FC = () => {
                 </div>
               </div>
 
-              {/* Developer & API Info Footnote */}
               <div className="p-4 rounded-2xl bg-zinc-900 text-zinc-300 text-xs space-y-2 border border-zinc-800">
                 <div className="flex items-center justify-between">
-                  <span className="font-mono text-xs font-bold text-emerald-400 flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <span className="font-mono text-xs font-bold text-emerald-400">
                     Cashfree Payouts API v2025-01-01 · Webhook Endpoint
                   </span>
-                  <span className="text-[10px] font-mono text-zinc-500">200 OK Live</span>
+                  <span className="text-[10px] font-mono text-zinc-400">
+                    {cashfreeServerStatus?.configured ? 'Configured' : 'Sandbox Unconfigured'}
+                  </span>
                 </div>
                 <div className="bg-black/50 p-2.5 rounded-xl font-mono text-[11px] text-zinc-400 overflow-x-auto">
                   <code>POST https://sandbox.cashfree.com/payout/transfers</code>
@@ -1834,6 +1892,14 @@ export const SellerDashboard: React.FC = () => {
                 </div>
               </div>
             </div>
+          )}
+
+          {activeTab === 'ads' && (
+            <SellerSponsoredAdsPanel
+              seller={currentSeller}
+              sellerProducts={sellerProducts}
+              notify={notify}
+            />
           )}
 
           {/* ============================================================== */}
@@ -1902,75 +1968,120 @@ export const SellerDashboard: React.FC = () => {
           {/* ============================================================== */}
           {/* 10. ANALYTICS & REPORTS */}
           {/* ============================================================== */}
-          {activeTab === 'analytics' && (
-            <div className="bg-white dark:bg-zinc-900 rounded-3xl p-6 border border-zinc-200 dark:border-zinc-800 shadow-xs space-y-6">
-              <div className="border-b border-zinc-200 dark:border-zinc-800 pb-4">
-                <h3 className="text-base font-bold text-zinc-900 dark:text-white font-display">
-                  Store Sales Intelligence & Performance
-                </h3>
-                <p className="text-xs text-zinc-500">
-                  Data updated in real time from Prime Bazaar checkout events
-                </p>
-              </div>
+          {activeTab === 'analytics' && (() => {
+            const avgOrderValue =
+              backendSalesReport?.report?.averageOrderValue ??
+              (sellerOrders.length > 0 ? Math.round(totalGrossSales / sellerOrders.length) : 0);
+            const returnRatePercent =
+              sellerOrders.length > 0
+                ? ((myReturns.length / sellerOrders.length) * 100).toFixed(1)
+                : '0.0';
+            const totalReviews = sellerProducts.reduce((s, p) => s + (p.reviewCount || 0), 0);
+            const avgRating =
+              sellerProducts.length > 0
+                ? (
+                    sellerProducts.reduce((s, p) => s + (p.rating || 0), 0) / sellerProducts.length
+                  ).toFixed(1)
+                : currentSeller.rating.toFixed(1);
 
-              {/* Conversion KPIs */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
-                <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
-                  <span className="text-zinc-500 block mb-1">Conversion Rate</span>
-                  <span className="text-xl font-bold font-mono text-zinc-900 dark:text-white">3.82%</span>
-                  <span className="text-emerald-600 text-[10px] block mt-1">+0.4% vs platform avg</span>
-                </div>
-                <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
-                  <span className="text-zinc-500 block mb-1">Average Order Value</span>
-                  <span className="text-xl font-bold font-mono text-zinc-900 dark:text-white">₹1,740</span>
-                  <span className="text-emerald-600 text-[10px] block mt-1">+12% basket size</span>
-                </div>
-                <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
-                  <span className="text-zinc-500 block mb-1">Store Return Rate</span>
-                  <span className="text-xl font-bold font-mono text-zinc-900 dark:text-white">2.1%</span>
-                  <span className="text-emerald-600 text-[10px] block mt-1">Excellent quality rating</span>
-                </div>
-                <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
-                  <span className="text-zinc-500 block mb-1">Customer Rating</span>
-                  <span className="text-xl font-bold font-mono text-amber-500">4.9 ★</span>
-                  <span className="text-zinc-400 text-[10px] block mt-1">From 1,420 reviews</span>
-                </div>
-              </div>
+            const productStatsMap = new Map<string, { units: number; revenue: number }>();
+            for (const o of sellerOrders) {
+              for (const item of o.items) {
+                if (item.product.sellerId === currentSeller.id || (!item.product.sellerId && currentSeller.id === 'seller-1')) {
+                  const prev = productStatsMap.get(item.product.id) || { units: 0, revenue: 0 };
+                  productStatsMap.set(item.product.id, {
+                    units: prev.units + item.quantity,
+                    revenue: prev.revenue + item.quantity * item.product.price,
+                  });
+                }
+              }
+            }
 
-              {/* Best Selling SKUs */}
-              <div className="space-y-3">
-                <span className="font-bold text-xs uppercase tracking-wider text-zinc-500 block">
-                  Top Performing SKUs by Revenue
-                </span>
-                <div className="border border-zinc-200 dark:border-zinc-800 rounded-2xl overflow-hidden text-xs">
-                  <table className="w-full text-left">
-                    <thead className="bg-zinc-50 dark:bg-zinc-800/60 font-semibold text-zinc-500">
-                      <tr>
-                        <th className="p-3">Rank</th>
-                        <th className="p-3">Product Name</th>
-                        <th className="p-3">Category</th>
-                        <th className="p-3 font-mono">Units Sold</th>
-                        <th className="p-3 font-mono text-right">Gross GMV</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
-                      {sellerProducts.slice(0, 5).map((p, idx) => (
-                        <tr key={p.id}>
-                          <td className="p-3 font-bold text-rose-600 font-mono">0{idx + 1}</td>
-                          <td className="p-3 font-medium text-zinc-900 dark:text-white">{p.title}</td>
-                          <td className="p-3 uppercase text-[10px] text-zinc-500">{p.category}</td>
-                          <td className="p-3 font-mono">{180 - idx * 25} units</td>
-                          <td className="p-3 font-mono font-bold text-right text-zinc-900 dark:text-white">
-                            ₹{((180 - idx * 25) * p.price).toLocaleString('en-IN')}
-                          </td>
+            return (
+              <div className="bg-white dark:bg-zinc-900 rounded-3xl p-6 border border-zinc-200 dark:border-zinc-800 shadow-xs space-y-6">
+                <div className="border-b border-zinc-200 dark:border-zinc-800 pb-4">
+                  <h3 className="text-base font-bold text-zinc-900 dark:text-white font-display">
+                    Store Sales Intelligence & Performance
+                  </h3>
+                  <p className="text-xs text-zinc-500">
+                    Computed from real order, return, review, and settlement records
+                  </p>
+                </div>
+
+                {/* Live KPIs */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs tabular-nums">
+                  <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
+                    <span className="text-zinc-500 block mb-1">Gross Store GMV</span>
+                    <span className="text-xl font-bold font-mono text-zinc-900 dark:text-white">
+                      ₹{(backendEarningsReport?.report?.grossSales ?? totalGrossSales).toLocaleString('en-IN')}
+                    </span>
+                    <span className="text-zinc-500 text-[10px] block mt-1">
+                      {sellerOrders.length} active orders
+                    </span>
+                  </div>
+                  <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
+                    <span className="text-zinc-500 block mb-1">Average Order Value</span>
+                    <span className="text-xl font-bold font-mono text-zinc-900 dark:text-white">
+                      ₹{Number(avgOrderValue).toLocaleString('en-IN')}
+                    </span>
+                    <span className="text-zinc-500 text-[10px] block mt-1">Across verified orders</span>
+                  </div>
+                  <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
+                    <span className="text-zinc-500 block mb-1">Store Return Rate</span>
+                    <span className="text-xl font-bold font-mono text-zinc-900 dark:text-white">
+                      {returnRatePercent}%
+                    </span>
+                    <span className="text-zinc-500 text-[10px] block mt-1">
+                      {myReturns.length} return requests
+                    </span>
+                  </div>
+                  <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
+                    <span className="text-zinc-500 block mb-1">Customer Rating</span>
+                    <span className="text-xl font-bold font-mono text-amber-500">{avgRating} ★</span>
+                    <span className="text-zinc-400 text-[10px] block mt-1">
+                      From {totalReviews.toLocaleString('en-IN')} reviews
+                    </span>
+                  </div>
+                </div>
+
+                {/* SKU Revenue Breakdown */}
+                <div className="space-y-3">
+                  <span className="font-bold text-xs uppercase tracking-wider text-zinc-500 block">
+                    Catalog SKU Sales Summary
+                  </span>
+                  <div className="border border-zinc-200 dark:border-zinc-800 rounded-2xl overflow-hidden text-xs">
+                    <table className="w-full text-left">
+                      <thead className="bg-zinc-50 dark:bg-zinc-800/60 font-semibold text-zinc-500">
+                        <tr>
+                          <th className="p-3">Rank</th>
+                          <th className="p-3">Product Name</th>
+                          <th className="p-3">Category</th>
+                          <th className="p-3 font-mono">Units Ordered</th>
+                          <th className="p-3 font-mono text-right">Order GMV</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800 tabular-nums">
+                        {sellerProducts.slice(0, 8).map((p, idx) => {
+                          const stat = productStatsMap.get(p.id) || { units: 0, revenue: 0 };
+                          return (
+                            <tr key={p.id}>
+                              <td className="p-3 font-bold text-rose-600 font-mono">0{idx + 1}</td>
+                              <td className="p-3 font-medium text-zinc-900 dark:text-white">{p.title}</td>
+                              <td className="p-3 uppercase text-[10px] text-zinc-500">{p.category}</td>
+                              <td className="p-3 font-mono">{stat.units} units</td>
+                              <td className="p-3 font-mono font-bold text-right text-zinc-900 dark:text-white">
+                                ₹{stat.revenue.toLocaleString('en-IN')}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* ============================================================== */}
           {/* 11. CUSTOMER SUPPORT & TICKETS */}

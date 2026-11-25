@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useMarketplace } from '../context/MarketplaceContext';
 import {
   Play,
@@ -21,6 +21,7 @@ interface CampaignSlide {
   targetCategory: string;
   targetSubcategory?: string | null;
   image: string;
+  linkUrl?: string;
 }
 
 const CAMPAIGN_SLIDES: CampaignSlide[] = [
@@ -56,13 +57,49 @@ const CAMPAIGN_SLIDES: CampaignSlide[] = [
   },
 ];
 
+function isSafeLinkUrl(url?: string): boolean {
+  if (!url) return false;
+  const trimmed = url.trim();
+  if (trimmed.startsWith('/') && !trimmed.startsWith('//')) return true;
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 export const HeroBanner: React.FC = () => {
-  const { navigateCategory, setIsReelsOpen, setIsRewardsOpen } = useMarketplace();
+  const { navigateCategory, setIsReelsOpen, setIsRewardsOpen, cmsBanners } = useMarketplace();
   const [activeSlideIdx, setActiveSlideIdx] = useState(0);
 
-  const slide = CAMPAIGN_SLIDES[activeSlideIdx];
+  const slides: CampaignSlide[] = useMemo(() => {
+    const heroCms = (cmsBanners || []).filter(
+      b => b.status === 'PUBLISHED' && (b.placement === 'HERO' || !b.placement)
+    );
+    if (heroCms.length === 0) return CAMPAIGN_SLIDES;
 
-  const handleCampaignClick = (cat: string, sub?: string | null) => {
+    return heroCms.map((b, i) => ({
+      id: b.id || `cms-hero-${i}`,
+      eyebrow: b.eyebrow || 'Curated Fashion Drop',
+      headline: b.title,
+      subcopy: b.subtitle || 'Verified GST merchants and pan-India courier fulfillment.',
+      ctaLabel: b.ctaLabel || 'Explore Collection',
+      targetCategory: b.targetCategory || 'all',
+      targetSubcategory: b.targetSubcategory ?? null,
+      image: b.imageUrl || CAMPAIGN_SLIDES[i % CAMPAIGN_SLIDES.length].image,
+      linkUrl: isSafeLinkUrl(b.linkUrl) ? b.linkUrl : undefined,
+    }));
+  }, [cmsBanners]);
+
+  const safeIdx = activeSlideIdx < slides.length ? activeSlideIdx : 0;
+  const slide = slides[safeIdx] || CAMPAIGN_SLIDES[0];
+
+  const handleCampaignClick = (cat: string, sub?: string | null, linkUrl?: string) => {
+    if (linkUrl && isSafeLinkUrl(linkUrl) && linkUrl.startsWith('http')) {
+      window.location.assign(linkUrl);
+      return;
+    }
     navigateCategory(cat, sub ?? null);
     const el = document.getElementById('catalog-section');
     el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -79,7 +116,7 @@ export const HeroBanner: React.FC = () => {
               <p className="text-[11px] font-bold uppercase tracking-widest text-rose-400">
                 {slide.eyebrow}
               </p>
-              <h1 className="mt-2 text-2xl sm:text-3xl lg:text-[2.15rem] font-extrabold tracking-tight font-display leading-tight text-white">
+              <h1 className="mt-2 text-2xl sm:text-3xl lg:text-[2.15rem] font-extrabold tracking-tight font-display leading-tight text-white max-w-2xl">
                 {slide.headline}
               </h1>
               <p className="mt-2.5 text-xs sm:text-sm text-zinc-300 max-w-xl leading-relaxed">
@@ -89,7 +126,7 @@ export const HeroBanner: React.FC = () => {
               <div className="mt-5 flex flex-wrap items-center gap-3">
                 <button
                   type="button"
-                  onClick={() => handleCampaignClick(slide.targetCategory, slide.targetSubcategory)}
+                  onClick={() => handleCampaignClick(slide.targetCategory, slide.targetSubcategory, slide.linkUrl)}
                   className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs sm:text-sm flex items-center gap-2 transition-all active:scale-95 whitespace-nowrap shrink-0 shadow-md shadow-rose-600/25"
                 >
                   <span>{slide.ctaLabel}</span>
@@ -123,37 +160,39 @@ export const HeroBanner: React.FC = () => {
                 </span>
               </div>
 
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  aria-label="Previous campaign"
-                  onClick={() =>
-                    setActiveSlideIdx(prev => (prev - 1 + CAMPAIGN_SLIDES.length) % CAMPAIGN_SLIDES.length)
-                  }
-                  className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition-colors"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-                {CAMPAIGN_SLIDES.map((s, idx) => (
+              {slides.length > 1 && (
+                <div className="flex items-center gap-1.5">
                   <button
-                    key={s.id}
                     type="button"
-                    aria-label={`View campaign: ${s.eyebrow}`}
-                    onClick={() => setActiveSlideIdx(idx)}
-                    className={`h-1.5 rounded-full transition-all ${
-                      idx === activeSlideIdx ? 'w-6 bg-rose-500' : 'w-2 bg-zinc-700 hover:bg-zinc-500'
-                    }`}
-                  />
-                ))}
-                <button
-                  type="button"
-                  aria-label="Next campaign"
-                  onClick={() => setActiveSlideIdx(prev => (prev + 1) % CAMPAIGN_SLIDES.length)}
-                  className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition-colors"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
+                    aria-label="Previous campaign"
+                    onClick={() =>
+                      setActiveSlideIdx(prev => (prev - 1 + slides.length) % slides.length)
+                    }
+                    className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition-colors"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  {slides.map((s, idx) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      aria-label={`View campaign: ${s.eyebrow}`}
+                      onClick={() => setActiveSlideIdx(idx)}
+                      className={`h-1.5 rounded-full transition-all ${
+                        idx === safeIdx ? 'w-6 bg-rose-500' : 'w-2 bg-zinc-700 hover:bg-zinc-500'
+                      }`}
+                    />
+                  ))}
+                  <button
+                    type="button"
+                    aria-label="Next campaign"
+                    onClick={() => setActiveSlideIdx(prev => (prev + 1) % slides.length)}
+                    className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition-colors"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -180,6 +219,7 @@ export const HeroBanner: React.FC = () => {
           <img
             src="/src/assets/images/collection_ethnic_wear_1793466539838.jpg"
             alt="Festive Ethnic Fashion"
+            referrerPolicy="no-referrer"
             className="w-14 h-14 rounded-lg object-cover shrink-0"
           />
           <div className="min-w-0 flex-1">
@@ -204,6 +244,7 @@ export const HeroBanner: React.FC = () => {
           <img
             src="/src/assets/images/collection_footwear_1793466541533.jpg"
             alt="Bags & Footwear"
+            referrerPolicy="no-referrer"
             className="w-14 h-14 rounded-lg object-cover shrink-0"
           />
           <div className="min-w-0 flex-1">
