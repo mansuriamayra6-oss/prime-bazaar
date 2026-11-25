@@ -24,6 +24,7 @@ import {
 import { getInvoicesForOrder } from './gstInvoiceService.ts';
 import { sanitizeSellerForApi, computeRealPlatformAnalytics } from './marketplaceOpsService.ts';
 import { listWarehouses, upsertWarehouseStock } from './warehouseAndShipping.ts';
+import { MASTER_34_CATEGORIES, MASTER_34_COMMISSION_RULES } from '../data/categoriesMaster.ts';
 
 export const v1Router = express.Router();
 
@@ -86,6 +87,20 @@ export interface DBCategory {
   name: string;
   slug: string;
   parentId?: string;
+  group?: 'fashion' | 'more';
+  sector?: string;
+  displayOrder?: number;
+  isActive?: boolean;
+  isFashionPriority?: boolean;
+  level?: number;
+  tagline?: string;
+  promoTitle?: string;
+  imageUrl?: string;
+  bannerUrl?: string;
+  seoTitle?: string;
+  seoDescription?: string;
+  attributes?: Array<{ key: string; label: string; options: string[] }>;
+  subcategories?: Array<{ id: string; label: string; keywords: string[]; children?: string[]; badge?: string }>;
 }
 
 export interface DBBrand {
@@ -149,6 +164,7 @@ export interface DBSellerOrder {
   sellerName: string;
   items: {
     productId: string;
+    offerId?: string;
     variantId?: string;
     title: string;
     sku?: string;
@@ -160,11 +176,14 @@ export interface DBSellerOrder {
     image: string;
   }[];
   subtotal: number;
+  shippingFee?: number;
+  taxAmount?: number;
+  fulfillmentGroup?: string;
   commissionRate: number; // e.g. 10 or 12%
   commissionAmount: number;
   gstOnCommission: number;
   sellerPayout: number;
-  fulfillmentStatus: 'NEW' | 'ACCEPTED' | 'PACKED' | 'DISPATCHED' | 'DELIVERED' | 'CANCELLED';
+  fulfillmentStatus: 'NEW' | 'ACCEPTED' | 'PACKED' | 'DISPATCHED' | 'DELIVERED' | 'CANCELLED' | 'RETURNED';
   settlementStatus: 'HOLD' | 'READY' | 'SETTLED';
   shippingAddress: any;
   customerName: string;
@@ -175,6 +194,7 @@ export interface DBSellerOrder {
   invoiceNumber: string;
   pickupDate?: string;
   cancellationReason?: string;
+  returnReason?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -263,14 +283,26 @@ export const dbSellerTransactions: DBSellerTransaction[] = [];
 export const dbSettlements: DBSettlement[] = [];
 export const dbSellerReturns = new Map<string, DBSellerReturn>();
 export const dbAuditLogs: DBAuditLog[] = [];
-export const dbCategories: DBCategory[] = [
-  { id: 'cat-ethnic', name: 'Ethnic Wear', slug: 'ethnic' },
-  { id: 'cat-western', name: 'Western Wear', slug: 'western' },
-  { id: 'cat-streetwear', name: 'Streetwear & Denim', slug: 'streetwear' },
-  { id: 'cat-footwear', name: 'Footwear & Sneakers', slug: 'footwear' },
-  { id: 'cat-accessories', name: 'Handbags & Accessories', slug: 'accessories' },
-  { id: 'cat-beauty', name: 'Beauty & Fragrances', slug: 'beauty' }
-];
+export const dbCategories: DBCategory[] = MASTER_34_CATEGORIES.map(c => ({
+  id: c.id,
+  name: c.name,
+  slug: c.slug,
+  parentId: c.parentId || undefined,
+  group: c.group,
+  sector: c.sector,
+  displayOrder: c.displayOrder,
+  isActive: c.isActive,
+  isFashionPriority: c.isFashionPriority,
+  level: c.level,
+  tagline: c.tagline,
+  promoTitle: c.promoTitle,
+  imageUrl: c.imageUrl,
+  bannerUrl: c.bannerUrl,
+  seoTitle: c.seoTitle,
+  seoDescription: c.seoDescription,
+  attributes: c.attributes,
+  subcategories: c.subcategories,
+}));
 export const dbBrands: DBBrand[] = [
   { id: 'br-1', name: 'Anouk Heritage', slug: 'anouk-heritage', verified: true },
   { id: 'br-2', name: 'Metropolis Core', slug: 'metropolis-core', verified: true },
@@ -278,14 +310,19 @@ export const dbBrands: DBBrand[] = [
   { id: 'br-4', name: 'Khadi Artisans', slug: 'khadi-artisans', verified: true },
   { id: 'br-5', name: 'Prime Bazaar Essentials', slug: 'prime-bazaar-essentials', verified: true }
 ];
-export const dbCommissionRules = new Map<string, DBCommissionRule>([
-  ['ethnic', { id: 'cr-1', categorySlug: 'ethnic', categoryName: 'Ethnic Wear', commissionPercent: 10, minCommissionAmount: 50, updatedAt: '2026-10-01' }],
-  ['western', { id: 'cr-2', categorySlug: 'western', categoryName: 'Western Wear', commissionPercent: 12, minCommissionAmount: 60, updatedAt: '2026-10-01' }],
-  ['streetwear', { id: 'cr-3', categorySlug: 'streetwear', categoryName: 'Streetwear & Denim', commissionPercent: 12, minCommissionAmount: 60, updatedAt: '2026-10-01' }],
-  ['footwear', { id: 'cr-4', categorySlug: 'footwear', categoryName: 'Footwear & Sneakers', commissionPercent: 14, minCommissionAmount: 80, updatedAt: '2026-10-01' }],
-  ['accessories', { id: 'cr-5', categorySlug: 'accessories', categoryName: 'Handbags & Accessories', commissionPercent: 12, minCommissionAmount: 50, updatedAt: '2026-10-01' }],
-  ['beauty', { id: 'cr-6', categorySlug: 'beauty', categoryName: 'Beauty & Fragrances', commissionPercent: 8, minCommissionAmount: 30, updatedAt: '2026-10-01' }]
-]);
+export const dbCommissionRules = new Map<string, DBCommissionRule>(
+  MASTER_34_COMMISSION_RULES.map(rule => [
+    rule.categorySlug,
+    {
+      id: rule.id,
+      categorySlug: rule.categorySlug,
+      categoryName: rule.categoryName,
+      commissionPercent: rule.commissionPercent,
+      minCommissionAmount: rule.minCommissionAmount,
+      updatedAt: rule.updatedAt,
+    },
+  ])
+);
 
 // Initialize Seeds
 const initSeedData = () => {
@@ -552,8 +589,14 @@ export function splitOrderIntoSellerOrders(orderPayload: {
   shippingAddress: any;
   customerName?: string;
   customerPhone?: string;
+  sellerGroups?: Array<{
+    sellerId: string;
+    shippingFee: number;
+    taxAmount: number;
+    netSubtotal: number;
+  }>;
 }) {
-  const { orderId, orderNumber, items, shippingAddress, customerName, customerPhone } = orderPayload;
+  const { orderId, orderNumber, items, shippingAddress, customerName, customerPhone, sellerGroups } = orderPayload;
   
   // Group items by sellerId
   const groupedBySeller: Record<string, any[]> = {};
@@ -582,6 +625,7 @@ export function splitOrderIntoSellerOrders(orderPayload: {
       subtotal += price * qty;
       return {
         productId: si.product?.id || si.productId || 'prod-custom',
+        offerId: si.offerId,
         variantId: si.variantId,
         title: si.product?.title || si.product?.name || si.title || 'Product Item',
         sku: si.product?.sku || `SKU-${sellerId.slice(-3)}-${Math.floor(1000 + Math.random() * 9000)}`,
@@ -600,9 +644,11 @@ export function splitOrderIntoSellerOrders(orderPayload: {
       sellerItems[0]?.categorySlug ||
       'western';
 
+    const matchedGroup = sellerGroups?.find((sg) => sg.sellerId === sellerId);
+    const subSuffix = suffixLetters[suffixIndex % suffixLetters.length];
     const escrowBreakdown = recordSellerEscrowForOrder({
       orderId,
-      suborderNumber: `${orderNumber}-${suffixLetters[suffixIndex % suffixLetters.length]}`,
+      suborderNumber: `${orderNumber}-${subSuffix}`,
       sellerId,
       grossSubtotal: subtotal,
       categorySlug,
@@ -614,13 +660,24 @@ export function splitOrderIntoSellerOrders(orderPayload: {
     const gstOnCommission = escrowBreakdown.gstOnCommission;
     const sellerPayout = escrowBreakdown.netSellerEarnings;
 
-    const subSuffix = suffixLetters[suffixIndex % suffixLetters.length];
     suffixIndex++;
 
     const suborderId = `so-${orderId.replace(/^ord-?/, '')}-${subSuffix.toLowerCase()}`;
     const suborderNumber = `${orderNumber}-${subSuffix}`;
     const trackingNumber = `PENDING_CARRIER`;
     const invoiceNumber = `PB-INV-${new Date().getFullYear()}-${orderNumber.replace(/[^\d]/g, '') || Date.now().toString().slice(-5)}-${subSuffix}`;
+
+    const computedTax =
+      matchedGroup?.taxAmount ??
+      Number(
+        formattedItems
+          .reduce((acc, fi) => {
+            const lineTotal = fi.unitPrice * fi.quantity;
+            const taxable = lineTotal / (1 + (fi.taxRate || 12) / 100);
+            return acc + (lineTotal - taxable);
+          }, 0)
+          .toFixed(2)
+      );
 
     const newSuborder: DBSellerOrder = {
       id: suborderId,
@@ -630,6 +687,9 @@ export function splitOrderIntoSellerOrders(orderPayload: {
       sellerName: seller.businessName,
       items: formattedItems,
       subtotal,
+      shippingFee: matchedGroup?.shippingFee ?? 0,
+      taxAmount: computedTax,
+      fulfillmentGroup: `FULFILL-${subSuffix}`,
       commissionRate: commissionPercent,
       commissionAmount,
       gstOnCommission,

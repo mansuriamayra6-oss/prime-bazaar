@@ -20,8 +20,11 @@ import {
   PriceDropNotification,
   PriceWorkerStatus,
   CmsBannerItem,
-  CheckoutQuote
+  CheckoutQuote,
+  CategoryDepartment,
+  SellerOffer
 } from '../types';
+import { ALL_DEPARTMENTS, mapRawCategoryToDepartment } from '../data/categories';
 import { 
   INITIAL_PRODUCTS, 
   INITIAL_REELS, 
@@ -49,13 +52,14 @@ interface MarketplaceContextType {
   bulkUploadProducts: (sellerId: string, products: Partial<Product>[]) => void;
   cart: CartItem[];
   savedForLater: SavedCartItem[];
-  addToCart: (product: Product, size: string, color: string, quantity?: number) => void;
+  addToCart: (product: Product, size: string, color: string, quantity?: number, offer?: SellerOffer) => void;
   buyProductNow: (
     product: Product,
     size: string,
     color: string,
     paymentMethod?: CheckoutPaymentMethod,
-    quantity?: number
+    quantity?: number,
+    offer?: SellerOffer
   ) => void;
   updateCartQuantity: (cartItemId: string, quantity: number) => void;
   removeFromCart: (cartItemId: string) => void;
@@ -270,10 +274,14 @@ interface MarketplaceContextType {
   markPriceDropRead: (notificationId: string) => Promise<void>;
   markAllPriceDropsRead: () => Promise<void>;
 
-  // Phase 4 & 5 Wallet & CMS
+  // Phase 4, 5 & 6 Wallet, CMS & Dynamic Categories
   storeCreditBalance: number;
   refreshStoreCredit: () => Promise<void>;
   cmsBanners: CmsBannerItem[];
+  categories: CategoryDepartment[];
+  fashionDepartments: CategoryDepartment[];
+  moreDepartments: CategoryDepartment[];
+  refreshCategories: () => Promise<void>;
   refreshCmsData: () => Promise<void>;
 }
 
@@ -1054,9 +1062,34 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     }
   };
 
-  // Store Credit Balance & CMS Banners (Phase 4 & 5)
+  // Store Credit Balance, CMS Banners & Dynamic 34 Categories (Phase 4, 5 & 6)
   const [storeCreditBalance, setStoreCreditBalance] = useState<number>(0);
   const [cmsBanners, setCmsBanners] = useState<CmsBannerItem[]>([]);
+  const [categories, setCategories] = useState<CategoryDepartment[]>(ALL_DEPARTMENTS);
+
+  const fashionDepartments = React.useMemo(
+    () => categories.filter(c => c.isActive !== false && c.group === 'fashion'),
+    [categories]
+  );
+
+  const moreDepartments = React.useMemo(
+    () => categories.filter(c => c.isActive !== false && c.group !== 'fashion'),
+    [categories]
+  );
+
+  const refreshCategories = async () => {
+    try {
+      const res = await api.cms.getCategories();
+      if (Array.isArray(res?.categories) && res.categories.length > 0) {
+        const mapped = res.categories
+          .map((c: any) => mapRawCategoryToDepartment(c))
+          .sort((a: CategoryDepartment, b: CategoryDepartment) => (a.displayOrder ?? 999) - (b.displayOrder ?? 999));
+        setCategories(mapped);
+      }
+    } catch {
+      // Keep fallback 34 categories when offline
+    }
+  };
 
   const refreshStoreCredit = async () => {
     const token = localStorage.getItem('pb_auth_token');
@@ -1074,9 +1107,12 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   const refreshCmsData = async () => {
     try {
-      const res = await api.cms.getBanners('HERO');
-      if (Array.isArray(res?.banners)) {
-        setCmsBanners(res.banners);
+      const [bannerRes] = await Promise.all([
+        api.cms.getBanners('HERO'),
+        refreshCategories(),
+      ]);
+      if (Array.isArray(bannerRes?.banners)) {
+        setCmsBanners(bannerRes.banners);
       }
     } catch {
       // Graceful fallback
@@ -1189,20 +1225,37 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     return Math.max(0, Number(product.inStock ?? 0));
   };
 
-  const addToCart = (product: Product, size: string, color: string, quantity: number = 1) => {
-    const availableStock = getVariantStock(product, size);
+  const addToCart = (
+    product: Product,
+    size: string,
+    color: string,
+    quantity: number = 1,
+    offer?: SellerOffer
+  ) => {
+    const availableStock = offer ? offer.stock : getVariantStock(product, size);
     if (availableStock <= 0) {
-      notify(`Size ${size} is currently out of stock.`);
+      notify(offer ? `Selected offer from ${offer.sellerName} is out of stock.` : `Size ${size} is currently out of stock.`);
       return;
     }
 
-    const cartItemId = `${product.id}-${size}-${color}`;
+    const cartItemId = offer ? `${product.id}-${size}-${color}-${offer.id}` : `${product.id}-${size}-${color}`;
     const existingItem = cart.find(item => item.id === cartItemId);
     const desiredQty = (existingItem?.quantity || 0) + Math.max(1, quantity);
     if (desiredQty > availableStock) {
-      notify(`Only ${availableStock} unit(s) available in stock for size ${size}.`);
+      notify(`Only ${availableStock} unit(s) available in stock for this selection.`);
       return;
     }
+
+    const effectiveProduct: Product = offer
+      ? {
+          ...product,
+          price: offer.price,
+          originalPrice: offer.mrp,
+          sellerId: offer.sellerId,
+          sellerName: offer.sellerName,
+          sellerRating: offer.sellerRating,
+        }
+      : product;
 
     setCart(prev => {
       const existing = prev.find(item => item.id === cartItemId);
@@ -1216,14 +1269,22 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
         {
           id: cartItemId,
           productId: product.id,
+          offerId: offer?.id,
+          offerSellerId: offer?.sellerId,
+          offerSellerName: offer?.sellerName,
+          offerPrice: offer?.price,
           selectedColor: color,
           selectedSize: size,
           quantity: Math.min(availableStock, Math.max(1, quantity)),
-          product
+          product: effectiveProduct,
         }
       ];
     });
-    notify(`Added ${product.title.slice(0, 24)}... to bag!`);
+    notify(
+      offer
+        ? `Added ${product.title.slice(0, 22)}... from ${offer.sellerName} to bag!`
+        : `Added ${product.title.slice(0, 24)}... to bag!`
+    );
   };
 
   const buyProductNow = (
@@ -1231,14 +1292,26 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     size: string,
     color: string,
     paymentMethod: CheckoutPaymentMethod = 'cashfree',
-    quantity: number = 1
+    quantity: number = 1,
+    offer?: SellerOffer
   ) => {
-    const availableStock = getVariantStock(product, size);
+    const availableStock = offer ? offer.stock : getVariantStock(product, size);
     if (availableStock <= 0) {
-      notify(`Size ${size} is currently out of stock.`);
+      notify(offer ? `Selected offer from ${offer.sellerName} is out of stock.` : `Size ${size} is currently out of stock.`);
       return;
     }
-    const cartItemId = `${product.id}-${size}-${color}`;
+    const cartItemId = offer ? `${product.id}-${size}-${color}-${offer.id}` : `${product.id}-${size}-${color}`;
+    const effectiveProduct: Product = offer
+      ? {
+          ...product,
+          price: offer.price,
+          originalPrice: offer.mrp,
+          sellerId: offer.sellerId,
+          sellerName: offer.sellerName,
+          sellerRating: offer.sellerRating,
+        }
+      : product;
+
     setCart(prev => {
       const existing = prev.find(item => item.id === cartItemId);
       if (existing) return prev;
@@ -1247,10 +1320,14 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
         {
           id: cartItemId,
           productId: product.id,
+          offerId: offer?.id,
+          offerSellerId: offer?.sellerId,
+          offerSellerName: offer?.sellerName,
+          offerPrice: offer?.price,
           selectedColor: color,
           selectedSize: size,
           quantity: Math.min(availableStock, Math.max(1, quantity)),
-          product
+          product: effectiveProduct,
         }
       ];
     });
@@ -1703,16 +1780,18 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     let splitWarehousePlan: any[] | undefined = undefined;
     let backendEarnedCoins: number | null = null;
 
+    let backendSellerSuborders: any[] | undefined = undefined;
     try {
       const res = await api.orders.create({
         items: snapshotCart.map(it => ({
           productId: it.productId,
+          offerId: it.offerId,
           title: it.product.title,
           selectedSize: it.selectedSize,
           selectedColor: it.selectedColor,
           quantity: it.quantity,
-          price: it.product.price,
-          sellerId: it.product.sellerId,
+          price: it.offerPrice ?? it.product.price,
+          sellerId: it.offerSellerId ?? it.product.sellerId,
         })),
         address: details.address,
         paymentMethod: details.paymentMethod,
@@ -1730,6 +1809,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
       if (res?.order) {
         backendOrder = res.order;
         backendInvoices = Array.isArray(res.invoices) ? res.invoices : [];
+        backendSellerSuborders = Array.isArray(res.sellerSuborders) ? res.sellerSuborders : undefined;
         backendQuote = res.quote || backendQuote;
         splitWarehousePlan = res.splitWarehousePlan || res.order.splitWarehousePlan;
         if (typeof res.earnedCoins === 'number') {
@@ -1766,6 +1846,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
       finalGatewayPayable: resolvedGatewayPayable,
       paymentStatus: backendOrder?.paymentStatus || (details.paymentMethod === 'cod' ? 'PENDING' : 'PAID'),
       splitWarehousePlan,
+      sellerSuborders: backendSellerSuborders,
       invoiceNumber: backendInvoices[0]?.invoiceNumber || backendOrder?.invoiceNumber,
       shippingAddress: details.address,
       paymentMethod: details.paymentMethod,
@@ -2031,6 +2112,10 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
         storeCreditBalance,
         refreshStoreCredit,
         cmsBanners,
+        categories,
+        fashionDepartments,
+        moreDepartments,
+        refreshCategories,
         refreshCmsData
       }}
     >

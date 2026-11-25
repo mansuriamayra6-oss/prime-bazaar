@@ -23,6 +23,7 @@ import {
   getActivePublishedBanners,
   upsertCmsBanner,
   manageCategoryCms,
+  reorderCategoriesCms,
   manageBrandCms,
   moderateReviewOrQa,
   adCampaigns,
@@ -59,9 +60,14 @@ export function createPhase5Router(deps: Phase5RouterDeps) {
   });
 
   router.get('/cms/categories', (_req, res) => {
+    const active = dbCategories
+      .filter((c: any) => c.isActive !== false)
+      .slice()
+      .sort((a: any, b: any) => (a.displayOrder ?? 999) - (b.displayOrder ?? 999));
     res.json({
       success: true,
-      categories: dbCategories.filter((c: any) => c.isActive !== false),
+      categories: active,
+      totalCount: active.length,
     });
   });
 
@@ -336,6 +342,17 @@ export function createPhase5Router(deps: Phase5RouterDeps) {
     }
   });
 
+  router.get('/admin/cms/categories', requireAuth, requirePermission('cms.manage'), (_req, res) => {
+    const sorted = dbCategories
+      .slice()
+      .sort((a: any, b: any) => (a.displayOrder ?? 999) - (b.displayOrder ?? 999));
+    res.json({
+      success: true,
+      categories: sorted,
+      totalCount: sorted.length,
+    });
+  });
+
   router.post('/admin/cms/categories', requireAuth, requirePermission('cms.manage'), (req, res) => {
     try {
       const category = manageCategoryCms({
@@ -345,6 +362,23 @@ export function createPhase5Router(deps: Phase5RouterDeps) {
         actorName: req.auth!.name || 'Admin',
       });
       res.status(201).json({ success: true, category });
+    } catch (err: any) {
+      res.status(400).json({ success: false, error: err.message });
+    }
+  });
+
+  router.put('/admin/cms/categories/reorder', requireAuth, requirePermission('cms.manage'), (req, res) => {
+    try {
+      const orderedIds = Array.isArray(req.body?.orderedIds) ? req.body.orderedIds.map(String) : [];
+      if (orderedIds.length === 0) {
+        return res.status(400).json({ success: false, error: 'orderedIds array is required.' });
+      }
+      const categories = reorderCategoriesCms({
+        orderedIds,
+        actorId: req.auth!.userId,
+        actorName: req.auth!.name || 'Admin',
+      });
+      res.json({ success: true, categories });
     } catch (err: any) {
       res.status(400).json({ success: false, error: err.message });
     }

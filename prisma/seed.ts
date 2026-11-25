@@ -8,6 +8,8 @@ import {
   DEFAULT_ADDRESSES,
 } from '../src/data/mockData.ts';
 
+import { MASTER_34_CATEGORIES } from '../src/data/categoriesMaster.ts';
+
 const prisma = new PrismaClient();
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 
@@ -24,17 +26,6 @@ function mapBusinessType(raw?: string): BusinessType {
   if (norm.includes('artisan')) return BusinessType.INDIVIDUAL_ARTISAN;
   return BusinessType.PROPRIETORSHIP;
 }
-
-const DEFAULT_CATEGORIES = [
-  { id: 'cat-ethnic', name: 'Ethnic Wear', slug: 'ethnic', displayOrder: 1, isFashionPriority: true },
-  { id: 'cat-western', name: 'Western Wear', slug: 'western', displayOrder: 2, isFashionPriority: true },
-  { id: 'cat-streetwear', name: 'Streetwear & Denim', slug: 'streetwear', displayOrder: 3, isFashionPriority: true },
-  { id: 'cat-footwear', name: 'Footwear & Sneakers', slug: 'footwear', displayOrder: 4, isFashionPriority: true },
-  { id: 'cat-accessories', name: 'Handbags & Accessories', slug: 'accessories', displayOrder: 5, isFashionPriority: true },
-  { id: 'cat-beauty', name: 'Beauty & Fragrances', slug: 'beauty', displayOrder: 6, isFashionPriority: true },
-  { id: 'cat-electronics', name: 'Electronics & Tech', slug: 'electronics', displayOrder: 7, isFashionPriority: false },
-  { id: 'cat-home', name: 'Home & Living', slug: 'home', displayOrder: 8, isFashionPriority: false },
-];
 
 const DEFAULT_BRANDS = [
   { id: 'br-anouk', name: 'Anouk Heritage', slug: 'anouk-heritage' },
@@ -138,34 +129,79 @@ async function seed() {
     });
   }
 
-  // 3. Categories & Commission Rules
-  for (const cat of DEFAULT_CATEGORIES) {
-    await prisma.category.upsert({
+  // 3. All 34 Dynamic Categories, Subcategories & Commission Rules
+  for (const cat of MASTER_34_CATEGORIES) {
+    const parentRecord = await prisma.category.upsert({
       where: { slug: cat.slug },
       update: {
         name: cat.name,
+        tagline: cat.tagline,
+        promoTitle: cat.promoTitle,
+        imageUrl: cat.imageUrl,
+        bannerUrl: cat.bannerUrl,
+        sector: cat.sector,
+        seoTitle: cat.seoTitle,
+        seoDescription: cat.seoDescription,
+        attributeSchema: cat.attributes as any,
+        subcategoriesJson: cat.subcategories as any,
+        level: 1,
         displayOrder: cat.displayOrder,
         isFashionPriority: cat.isFashionPriority,
       },
       create: {
-        id: cat.id,
+        id: `cat-${cat.slug}`,
         name: cat.name,
         slug: cat.slug,
+        description: cat.tagline,
+        tagline: cat.tagline,
+        promoTitle: cat.promoTitle,
+        imageUrl: cat.imageUrl,
+        bannerUrl: cat.bannerUrl,
+        sector: cat.sector,
+        seoTitle: cat.seoTitle,
+        seoDescription: cat.seoDescription,
+        attributeSchema: cat.attributes as any,
+        subcategoriesJson: cat.subcategories as any,
+        level: 1,
         displayOrder: cat.displayOrder,
         isFashionPriority: cat.isFashionPriority,
-        isActive: true,
+        isActive: cat.isActive,
       },
     });
 
-    const pct = cat.slug === 'ethnic' ? 10 : cat.slug === 'footwear' ? 14 : cat.slug === 'beauty' ? 8 : 12;
+    for (let sIdx = 0; sIdx < cat.subcategories.length; sIdx++) {
+      const sub = cat.subcategories[sIdx];
+      const subSlug = `${cat.slug}--${sub.id}`;
+      await prisma.category.upsert({
+        where: { slug: subSlug },
+        update: {
+          name: sub.label,
+          parentId: parentRecord.id,
+          level: 2,
+          displayOrder: sIdx + 1,
+          isFashionPriority: cat.isFashionPriority,
+        },
+        create: {
+          id: `cat-${subSlug}`,
+          name: sub.label,
+          slug: subSlug,
+          parentId: parentRecord.id,
+          level: 2,
+          displayOrder: sIdx + 1,
+          isFashionPriority: cat.isFashionPriority,
+          isActive: true,
+        },
+      });
+    }
+
     const ruleId = `cr-${cat.slug}`;
     await prisma.commissionRule.upsert({
       where: { id: ruleId },
       update: {},
       create: {
         id: ruleId,
-        categoryId: cat.id,
-        commissionPercentage: pct,
+        categoryId: parentRecord.id,
+        commissionPercentage: cat.commissionPercent,
         fixedFee: 0,
       },
     });
@@ -443,6 +479,87 @@ async function seed() {
       });
     }
   }
+
+  // 10. Phase 6D Membership Tiers, Phase 6F Countries & FX, Phase 6G Subscriptions/B2B/Digital
+  const tiers = [
+    { tierName: 'SILVER', minLifetimePts: 0, earnMultiplier: 1.0 },
+    { tierName: 'GOLD', minLifetimePts: 500, earnMultiplier: 1.5 },
+    { tierName: 'PLATINUM', minLifetimePts: 2000, earnMultiplier: 2.0 },
+  ];
+  for (const t of tiers) {
+    await prisma.membershipTierConfig.upsert({
+      where: { tierName: t.tierName },
+      update: {},
+      create: t,
+    });
+  }
+
+  const countrySeeds = [
+    { countryCode: 'IN', countryName: 'India', currencyCode: 'INR', shippingFeeInr: 49, customsDutyPercent: 0, taxPercent: 12, codAllowed: true, postalPattern: '^\\d{6}$' },
+    { countryCode: 'US', countryName: 'United States', currencyCode: 'USD', shippingFeeInr: 1499, customsDutyPercent: 8, taxPercent: 8.5, codAllowed: false, postalPattern: '^\\d{5}(-\\d{4})?$' },
+    { countryCode: 'GB', countryName: 'United Kingdom', currencyCode: 'GBP', shippingFeeInr: 1399, customsDutyPercent: 10, taxPercent: 20, codAllowed: false, postalPattern: '^[A-Z]{1,2}\\d[A-Z\\d]?\\s?\\d[A-Z]{2}$' },
+    { countryCode: 'AE', countryName: 'United Arab Emirates', currencyCode: 'AED', shippingFeeInr: 999, customsDutyPercent: 5, taxPercent: 5, codAllowed: false, postalPattern: '^.{2,12}$' },
+    { countryCode: 'SG', countryName: 'Singapore', currencyCode: 'SGD', shippingFeeInr: 899, customsDutyPercent: 0, taxPercent: 9, codAllowed: false, postalPattern: '^\\d{6}$' },
+    { countryCode: 'EU', countryName: 'European Union', currencyCode: 'EUR', shippingFeeInr: 1499, customsDutyPercent: 12, taxPercent: 19, codAllowed: false, postalPattern: '^[A-Z0-9\\- ]{4,10}$' },
+  ];
+  for (const c of countrySeeds) {
+    await prisma.countryConfig.upsert({
+      where: { countryCode: c.countryCode },
+      update: {},
+      create: c,
+    });
+  }
+
+  const fxSeeds = [
+    { currencyCode: 'INR', rateFromInr: 1.0, symbol: '₹', sourceLabel: 'Base Currency' },
+    { currencyCode: 'USD', rateFromInr: 0.012, symbol: '$', sourceLabel: 'Configured FX Reference Rate' },
+    { currencyCode: 'EUR', rateFromInr: 0.011, symbol: '€', sourceLabel: 'Configured FX Reference Rate' },
+    { currencyCode: 'GBP', rateFromInr: 0.0095, symbol: '£', sourceLabel: 'Configured FX Reference Rate' },
+    { currencyCode: 'AED', rateFromInr: 0.044, symbol: 'AED ', sourceLabel: 'Configured FX Reference Rate' },
+    { currencyCode: 'SGD', rateFromInr: 0.016, symbol: 'S$', sourceLabel: 'Configured FX Reference Rate' },
+  ];
+  for (const fx of fxSeeds) {
+    await prisma.exchangeRate.upsert({
+      where: { currencyCode: fx.currencyCode },
+      update: {},
+      create: fx,
+    });
+  }
+
+  await prisma.subscriptionPlan.upsert({
+    where: { id: 'plan-silk-care-30d' },
+    update: {},
+    create: {
+      id: 'plan-silk-care-30d',
+      productId: 'prod-1',
+      name: 'Monthly Wardrobe Refresh & Care Plan (Every 30 Days)',
+      intervalDays: 30,
+      discountPercent: 12,
+      isActive: true,
+    },
+  });
+
+  await prisma.bulkPriceTier.upsert({
+    where: { id: 'bpt-1a' },
+    update: {},
+    create: { id: 'bpt-1a', productId: 'prod-1', minQty: 10, maxQty: 49, unitPriceInr: 1649, discountPercent: 13 },
+  });
+
+  await prisma.digitalAsset.upsert({
+    where: { productId: 'prod-1' },
+    update: {},
+    create: {
+      id: 'dasset-prod-1',
+      productId: 'prod-1',
+      sellerId: 'seller-1',
+      fileName: 'Prime-Bazaar-Silk-Lookbook-CareGuide.txt',
+      mimeType: 'text/plain',
+      fileSizeKb: 2,
+      storageKey: 'lookbook-banarasi-edition.txt',
+      maxDownloads: 5,
+      expiryHours: 72,
+    },
+  });
 
   console.log('[Prime Bazaar Seed] Completed cleanly without duplicate records.');
 }

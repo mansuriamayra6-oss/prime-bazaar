@@ -38,20 +38,36 @@ export interface ProductQuestion {
   answers: ProductAnswer[];
 }
 
+export interface CategoryAttributeSchema {
+  key: string;
+  label: string;
+  options: string[];
+}
+
 export interface CategorySubitem {
   id: string;
   label: string;
   keywords: string[];
+  children?: string[];
   badge?: string;
 }
 
 export interface CategoryDepartment {
   id: string;
+  slug?: string;
   label: string;
   group: 'fashion' | 'more';
+  sector?: string;
+  displayOrder?: number;
+  isActive?: boolean;
+  isFashionPriority?: boolean;
   tagline: string;
   promoTitle: string;
   promoImage: string;
+  bannerUrl?: string;
+  seoTitle?: string;
+  seoDescription?: string;
+  attributes?: CategoryAttributeSchema[];
   subcategories: CategorySubitem[];
 }
 
@@ -86,33 +102,43 @@ export interface Product {
   id: string;
   title: string;
   brand: string;
-  category: 
-    | 'ethnic' 
-    | 'western' 
-    | 'streetwear' 
-    | 'fashion' 
-    | 'mens-fashion' 
-    | 'womens-fashion' 
-    | 'kids-fashion' 
-    | 'footwear' 
-    | 'accessories' 
-    | 'jewellery' 
-    | 'beauty' 
-    | 'health' 
-    | 'home-kitchen' 
-    | 'furniture' 
-    | 'electronics' 
-    | 'mobile-accessories' 
-    | 'computers' 
-    | 'toys-games' 
-    | 'baby-products' 
-    | 'sports-outdoor' 
-    | 'automotive' 
-    | 'office-supplies' 
-    | 'pet-supplies' 
-    | 'garden-products' 
-    | 'diy-tools' 
-    | 'handmade' 
+  category:
+    | 'ethnic'
+    | 'western'
+    | 'streetwear'
+    | 'fashion'
+    | 'mens-fashion'
+    | 'womens-fashion'
+    | 'kids-fashion'
+    | 'luxury-designer'
+    | 'footwear'
+    | 'bags'
+    | 'watches'
+    | 'accessories'
+    | 'jewellery'
+    | 'beauty'
+    | 'health'
+    | 'grocery'
+    | 'books'
+    | 'home-kitchen'
+    | 'furniture'
+    | 'electronics'
+    | 'mobile-accessories'
+    | 'computers'
+    | 'gaming'
+    | 'cameras-optics'
+    | 'smart-home'
+    | 'toys-games'
+    | 'baby-products'
+    | 'sports-outdoor'
+    | 'automotive'
+    | 'industrial'
+    | 'office-supplies'
+    | 'pet-supplies'
+    | 'garden-products'
+    | 'diy-tools'
+    | 'handmade'
+    | 'musical-instruments'
     | 'travel'
     | (string & {});
   subcategory?: string;
@@ -148,9 +174,33 @@ export interface Product {
   reviews: Review[];
 }
 
-export interface CartItem {
-  id: string; // unique item id = productId-color-size
+export interface SellerOffer {
+  id: string;
   productId: string;
+  sellerId: string;
+  sellerName: string;
+  sellerRating: number;
+  sellerCity?: string;
+  sellerSku: string;
+  condition: 'NEW' | 'REFURBISHED' | 'OPEN_BOX';
+  price: number;
+  mrp: number;
+  stock: number;
+  deliveryDays: number;
+  shippingFee: number;
+  codAvailable: boolean;
+  isDefault: boolean;
+  isActive: boolean;
+  buyBoxScore?: number;
+}
+
+export interface CartItem {
+  id: string; // unique item id = productId-color-size(-offerId)
+  productId: string;
+  offerId?: string;
+  offerSellerId?: string;
+  offerSellerName?: string;
+  offerPrice?: number;
   selectedColor: string;
   selectedSize: string;
   quantity: number;
@@ -215,6 +265,7 @@ export interface Order {
     warehouseState: string;
     items: Array<{ productId: string; variantId: string; sku: string; quantity: number }>;
   }>;
+  sellerSuborders?: any[];
 }
 
 export interface Reel {
@@ -499,6 +550,17 @@ export interface CheckoutQuote {
   appliedCouponCode?: string | null;
   giftCardValid?: boolean;
   storeCreditBalance?: number;
+  sellerGroups?: Array<{
+    sellerId: string;
+    sellerName: string;
+    itemsSubtotal: number;
+    discountShare: number;
+    netSubtotal: number;
+    shippingFee: number;
+    taxAmount: number;
+    estimatedDeliveryDays: number;
+    itemCount: number;
+  }>;
 }
 
 export interface TaxInvoiceRecord {

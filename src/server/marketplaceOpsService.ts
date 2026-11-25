@@ -422,6 +422,16 @@ export function manageCategoryCms(params: {
   name?: string;
   slug?: string;
   parentId?: string;
+  group?: 'fashion' | 'more';
+  sector?: string;
+  tagline?: string;
+  promoTitle?: string;
+  imageUrl?: string;
+  bannerUrl?: string;
+  seoTitle?: string;
+  seoDescription?: string;
+  attributes?: Array<{ key: string; label: string; options: string[] }>;
+  subcategories?: Array<{ id: string; label: string; keywords: string[]; children?: string[]; badge?: string }>;
   isActive?: boolean;
   isFashionPriority?: boolean;
   displayOrder?: number;
@@ -433,17 +443,31 @@ export function manageCategoryCms(params: {
     const slug = (params.slug || params.name)
       .trim()
       .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-');
-    if (dbCategories.some((c) => c.slug === slug)) {
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '');
+    if (!slug) throw new Error('Valid category slug is required.');
+    if (dbCategories.some((c) => c.slug === slug || c.id === slug)) {
       throw new Error(`Category slug "${slug}" already exists.`);
     }
+    const isFashion = params.isFashionPriority ?? params.group === 'fashion';
     const created: any = {
-      id: `cat-${slug}`,
+      id: slug,
       name: params.name.trim(),
       slug,
       parentId: params.parentId,
+      group: params.group || (isFashion ? 'fashion' : 'more'),
+      sector: params.sector?.trim() || (isFashion ? 'Fashion & Apparel' : 'Marketplace Expansion'),
+      level: params.parentId ? 2 : 1,
+      tagline: params.tagline?.trim() || `${params.name.trim()} — verified marketplace collection`,
+      promoTitle: params.promoTitle?.trim() || `Featured ${params.name.trim()}`,
+      imageUrl: params.imageUrl?.trim() || '/src/assets/images/hero_fashion_campaign_1793466539913.jpg',
+      bannerUrl: params.bannerUrl?.trim() || params.imageUrl?.trim() || '/src/assets/images/hero_fashion_campaign_1793466539913.jpg',
+      seoTitle: params.seoTitle?.trim() || `${params.name.trim()} | Prime Bazaar`,
+      seoDescription: params.seoDescription?.trim() || `Explore ${params.name.trim()} on Prime Bazaar.`,
+      attributes: Array.isArray(params.attributes) ? params.attributes : [],
+      subcategories: Array.isArray(params.subcategories) ? params.subcategories : [],
       isActive: params.isActive ?? true,
-      isFashionPriority: params.isFashionPriority ?? false,
+      isFashionPriority: isFashion,
       displayOrder: params.displayOrder ?? dbCategories.length + 1,
     };
     dbCategories.push(created);
@@ -464,11 +488,69 @@ export function manageCategoryCms(params: {
 
   const target: any = dbCategories.find((c) => c.id === params.id || c.slug === params.id);
   if (!target) throw new Error('Category not found.');
-  if (params.name) target.name = params.name.trim();
+  const before = { ...target };
+  if (params.name?.trim()) target.name = params.name.trim();
+  if (typeof params.tagline === 'string') target.tagline = params.tagline.trim();
+  if (typeof params.promoTitle === 'string') target.promoTitle = params.promoTitle.trim();
+  if (typeof params.imageUrl === 'string' && params.imageUrl.trim()) target.imageUrl = params.imageUrl.trim();
+  if (typeof params.bannerUrl === 'string' && params.bannerUrl.trim()) target.bannerUrl = params.bannerUrl.trim();
+  if (typeof params.sector === 'string' && params.sector.trim()) target.sector = params.sector.trim();
+  if (typeof params.seoTitle === 'string') target.seoTitle = params.seoTitle.trim();
+  if (typeof params.seoDescription === 'string') target.seoDescription = params.seoDescription.trim();
+  if (Array.isArray(params.attributes)) target.attributes = params.attributes;
+  if (Array.isArray(params.subcategories)) target.subcategories = params.subcategories;
+  if (params.group === 'fashion' || params.group === 'more') target.group = params.group;
   if (typeof params.isActive === 'boolean') target.isActive = params.isActive;
-  if (typeof params.isFashionPriority === 'boolean') target.isFashionPriority = params.isFashionPriority;
+  if (typeof params.isFashionPriority === 'boolean') {
+    target.isFashionPriority = params.isFashionPriority;
+    target.group = params.isFashionPriority ? 'fashion' : 'more';
+  }
   if (typeof params.displayOrder === 'number') target.displayOrder = params.displayOrder;
+
+  recordAuditLog({
+    actorType: 'ADMIN',
+    actorId: params.actorId,
+    actorName: params.actorName,
+    actorRole: 'ADMIN',
+    action: 'CATEGORY_UPDATED',
+    entityType: 'CATEGORY',
+    entityId: target.id,
+    beforeState: before,
+    afterState: target,
+    details: `Updated category ${target.name} (${target.slug}).`,
+    legacyAuditSink: dbAuditLogs,
+  });
   return target;
+}
+
+export function reorderCategoriesCms(params: {
+  orderedIds: string[];
+  actorId: string;
+  actorName: string;
+}) {
+  const rankMap = new Map<string, number>();
+  params.orderedIds.forEach((id, idx) => {
+    rankMap.set(id, idx + 1);
+  });
+  let nextFallback = params.orderedIds.length + 1;
+  dbCategories.forEach((cat) => {
+    const rank = rankMap.get(cat.id) ?? rankMap.get(cat.slug);
+    cat.displayOrder = rank !== undefined ? rank : nextFallback++;
+  });
+  dbCategories.sort((a, b) => (a.displayOrder ?? 999) - (b.displayOrder ?? 999));
+
+  recordAuditLog({
+    actorType: 'ADMIN',
+    actorId: params.actorId,
+    actorName: params.actorName,
+    actorRole: 'ADMIN',
+    action: 'CATEGORIES_REORDERED',
+    entityType: 'CATEGORY',
+    entityId: 'taxonomy',
+    details: `Reordered ${params.orderedIds.length} categories.`,
+    legacyAuditSink: dbAuditLogs,
+  });
+  return [...dbCategories];
 }
 
 export function manageBrandCms(params: {

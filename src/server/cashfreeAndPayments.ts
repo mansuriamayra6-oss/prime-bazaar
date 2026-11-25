@@ -13,6 +13,7 @@ import {
 } from './financeLedger.ts';
 import { issueCreditNoteForInvoice, getInvoicesForOrder } from './gstInvoiceService.ts';
 import { recordAuditLog } from './auditAndRbac.ts';
+import { dbSellerOffers, ensureSellerOffersSeeded } from './marketplaceExpansionService.ts';
 
 // =============================================================================
 // SERVER-AUTHORITATIVE CHECKOUT PRICING, CASHFREE PAYMENTS & REFUNDS
@@ -147,6 +148,7 @@ export function getCashfreeTransport(): CashfreeTransport {
 
 export interface CheckoutItemRequest {
   productId?: string;
+  offerId?: string;
   variantId?: string;
   selectedSize?: string;
   selectedColor?: string;
@@ -156,6 +158,7 @@ export interface CheckoutItemRequest {
 
 export interface PricedCheckoutItem {
   productId: string;
+  offerId?: string;
   variantId: string;
   sku: string;
   title: string;
@@ -169,6 +172,8 @@ export interface PricedCheckoutItem {
   quantity: number;
   unitPrice: number;
   gstRate: number;
+  offerShippingFee?: number;
+  deliveryDays?: number;
   lineSubtotal: number;
   lineDiscount: number;
   lineTotal: number;
@@ -176,6 +181,7 @@ export interface PricedCheckoutItem {
 
 export function resolveAuthoritativeCatalogItem(reqItem: CheckoutItemRequest): {
   productId: string;
+  offerId?: string;
   variantId: string;
   sku: string;
   title: string;
@@ -186,18 +192,73 @@ export function resolveAuthoritativeCatalogItem(reqItem: CheckoutItemRequest): {
   image: string;
   unitPrice: number;
   gstRate: number;
+  offerShippingFee?: number;
+  deliveryDays?: number;
 } {
   const productId = String(reqItem.productId || reqItem.product?.id || '').trim();
   if (!productId) throw new Error('Each cart item must include a valid productId.');
 
+  ensureSellerOffersSeeded();
+  const qty = Math.max(1, Math.floor(Number(reqItem.quantity || 1)));
+  const requestedOfferId = reqItem.offerId ? String(reqItem.offerId).trim() : undefined;
+
   const dbProd = dbProducts.get(productId);
+  const catalogProd = INITIAL_PRODUCTS.find((p) => p.id === productId);
+
+  if (!dbProd && !catalogProd) {
+    throw new Error(`Product ${productId} not found in catalog.`);
+  }
+
+  const baseTitle = dbProd ? dbProd.name : catalogProd!.title;
+  const baseBrand = dbProd ? dbProd.brandName : catalogProd!.brand;
+  const baseCategory = dbProd ? dbProd.categoryId.replace(/^cat-/, '') : catalogProd!.category;
+  const baseImage = (dbProd ? dbProd.images?.[0] : catalogProd!.images?.[0]) || '';
+  const baseGst = Number(dbProd ? dbProd.taxGstPercent || 12 : catalogProd!.gstRate || 12);
+
+  if (requestedOfferId) {
+    const offer = dbSellerOffers.get(requestedOfferId);
+    if (!offer || offer.productId !== productId) {
+      throw new Error(`Seller offer ${requestedOfferId} is not valid for product ${productId}.`);
+    }
+    if (!offer.isActive) {
+      throw new Error(`Seller offer ${requestedOfferId} is currently unavailable.`);
+    }
+    if (offer.stock < qty) {
+      throw new Error(`Only ${offer.stock} unit(s) available from ${offer.sellerName} for this offer.`);
+    }
+    const matchedVariant =
+      (reqItem.variantId && dbProd?.variants.find((v) => v.id === reqItem.variantId)) ||
+      (reqItem.selectedSize && dbProd?.variants.find((v) => v.size === reqItem.selectedSize)) ||
+      dbProd?.variants[0];
+    return {
+      productId,
+      offerId: offer.id,
+      variantId: matchedVariant?.id || productId,
+      sku: offer.sellerSku || matchedVariant?.sku || productId.toUpperCase(),
+      title: baseTitle,
+      brand: baseBrand,
+      category: baseCategory,
+      sellerId: offer.sellerId,
+      sellerName: offer.sellerName,
+      image: baseImage,
+      unitPrice: roundMoney(offer.price),
+      gstRate: baseGst,
+      offerShippingFee: roundMoney(offer.shippingFee),
+      deliveryDays: offer.deliveryDays,
+    };
+  }
+
   if (dbProd) {
     const matchedVariant =
       (reqItem.variantId && dbProd.variants.find((v) => v.id === reqItem.variantId)) ||
       (reqItem.selectedSize && dbProd.variants.find((v) => v.size === reqItem.selectedSize)) ||
       dbProd.variants[0];
+    const defaultOffer = Array.from(dbSellerOffers.values()).find(
+      (o) => o.productId === dbProd.id && o.sellerId === dbProd.sellerId && o.isActive
+    );
     return {
       productId: dbProd.id,
+      offerId: defaultOffer?.id,
       variantId: matchedVariant?.id || dbProd.id,
       sku: matchedVariant?.sku || dbProd.id.toUpperCase(),
       title: dbProd.name,
@@ -211,23 +272,22 @@ export function resolveAuthoritativeCatalogItem(reqItem: CheckoutItemRequest): {
     };
   }
 
-  const catalogProd = INITIAL_PRODUCTS.find((p) => p.id === productId);
-  if (!catalogProd) {
-    throw new Error(`Product ${productId} not found in catalog.`);
-  }
-
+  const defaultOffer = Array.from(dbSellerOffers.values()).find(
+    (o) => o.productId === catalogProd!.id && o.sellerId === catalogProd!.sellerId && o.isActive
+  );
   return {
-    productId: catalogProd.id,
-    variantId: reqItem.variantId || catalogProd.id,
-    sku: catalogProd.sku || catalogProd.id.toUpperCase(),
-    title: catalogProd.title,
-    brand: catalogProd.brand,
-    category: catalogProd.category,
-    sellerId: catalogProd.sellerId,
-    sellerName: catalogProd.sellerName,
-    image: catalogProd.images?.[0] || '',
-    unitPrice: roundMoney(catalogProd.price),
-    gstRate: Number(catalogProd.gstRate || 12),
+    productId: catalogProd!.id,
+    offerId: defaultOffer?.id,
+    variantId: reqItem.variantId || catalogProd!.id,
+    sku: catalogProd!.sku || catalogProd!.id.toUpperCase(),
+    title: catalogProd!.title,
+    brand: catalogProd!.brand,
+    category: catalogProd!.category,
+    sellerId: catalogProd!.sellerId,
+    sellerName: catalogProd!.sellerName,
+    image: catalogProd!.images?.[0] || '',
+    unitPrice: roundMoney(catalogProd!.price),
+    gstRate: Number(catalogProd!.gstRate || 12),
   };
 }
 
@@ -312,11 +372,65 @@ export function calculateAuthoritativeQuote(params: {
   const deliveryFee = netMerchandise >= 999 ? 0 : 49;
   const grossPayableBeforeWallet = roundMoney(netMerchandise + deliveryFee);
 
-  // Extract GST summary
+  // Extract GST summary + per-seller fulfillment groups for multi-vendor split checkout
   let taxAmount = 0;
+  const sellerMap = new Map<
+    string,
+    {
+      sellerId: string;
+      sellerName: string;
+      itemsSubtotal: number;
+      discountShare: number;
+      netSubtotal: number;
+      shippingFee: number;
+      taxAmount: number;
+      estimatedDeliveryDays: number;
+      itemCount: number;
+    }
+  >();
+
   for (const it of pricedItems) {
     const taxable = roundMoney(it.lineTotal / (1 + it.gstRate / 100));
-    taxAmount = roundMoney(taxAmount + roundMoney(it.lineTotal - taxable));
+    const itemTax = roundMoney(it.lineTotal - taxable);
+    taxAmount = roundMoney(taxAmount + itemTax);
+
+    const existingGroup = sellerMap.get(it.sellerId);
+    if (existingGroup) {
+      existingGroup.itemsSubtotal = roundMoney(existingGroup.itemsSubtotal + it.lineSubtotal);
+      existingGroup.discountShare = roundMoney(existingGroup.discountShare + it.lineDiscount);
+      existingGroup.netSubtotal = roundMoney(existingGroup.netSubtotal + it.lineTotal);
+      existingGroup.taxAmount = roundMoney(existingGroup.taxAmount + itemTax);
+      existingGroup.itemCount += it.quantity;
+      existingGroup.estimatedDeliveryDays = Math.max(
+        existingGroup.estimatedDeliveryDays,
+        Number(it.deliveryDays || 3)
+      );
+    } else {
+      sellerMap.set(it.sellerId, {
+        sellerId: it.sellerId,
+        sellerName: it.sellerName,
+        itemsSubtotal: it.lineSubtotal,
+        discountShare: it.lineDiscount,
+        netSubtotal: it.lineTotal,
+        shippingFee: 0,
+        taxAmount: itemTax,
+        estimatedDeliveryDays: Number(it.deliveryDays || 3),
+        itemCount: it.quantity,
+      });
+    }
+  }
+
+  const sellerGroups = Array.from(sellerMap.values());
+  if (deliveryFee > 0 && sellerGroups.length > 0) {
+    let shippingAllocated = 0;
+    sellerGroups.forEach((sg, idx) => {
+      const share =
+        idx === sellerGroups.length - 1
+          ? roundMoney(deliveryFee - shippingAllocated)
+          : roundMoney((sg.netSubtotal / Math.max(1, netMerchandise)) * deliveryFee);
+      shippingAllocated = roundMoney(shippingAllocated + share);
+      sg.shippingFee = share;
+    });
   }
 
   // Validate Gift Card (optional)
@@ -347,6 +461,7 @@ export function calculateAuthoritativeQuote(params: {
 
   return {
     items: pricedItems,
+    sellerGroups,
     itemsSubtotal,
     couponCode: appliedCouponCode,
     couponDiscount,
@@ -458,6 +573,7 @@ export async function initiateOrderRefund(params: {
   idempotencyKey: string;
   orderItemId?: string;
   returnId?: string;
+  invoiceId?: string;
   actorId: string;
   actorName: string;
   onOrderRefundStateChange?: (newPaymentStatus: 'PARTIAL_REFUND' | 'REFUNDED', totalRefunded: number) => void;
@@ -548,14 +664,21 @@ export async function initiateOrderRefund(params: {
       const { invoices } = getInvoicesForOrder(params.orderId);
       let creditNote: any = null;
       if (invoices.length > 0) {
-        creditNote = issueCreditNoteForInvoice({
-          invoiceId: invoices[0].id,
-          refundId: refund.id,
-          refundAmount: reqAmount,
-          reason: refund.reason,
-          issuedBy: params.actorId,
-          actorName: params.actorName,
-        });
+        const targetInv =
+          (params.invoiceId && invoices.find((inv) => inv.id === params.invoiceId)) ||
+          invoices.find((inv) => Number(inv.grandTotal) >= reqAmount) ||
+          invoices[0];
+        const creditAmt = Math.min(Number(targetInv.grandTotal), reqAmount);
+        if (creditAmt > 0) {
+          creditNote = issueCreditNoteForInvoice({
+            invoiceId: targetInv.id,
+            refundId: refund.id,
+            refundAmount: creditAmt,
+            reason: refund.reason,
+            issuedBy: params.actorId,
+            actorName: params.actorName,
+          });
+        }
       }
 
       return { refund, duplicate: false, creditNote };

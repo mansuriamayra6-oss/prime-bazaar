@@ -29,6 +29,7 @@ import {
   getCashfreeRuntimeConfig,
   getCapturedPaidAmountForOrder,
 } from './cashfreeAndPayments.ts';
+import { revokeDownloadGrantsForOrder } from './b2bSubDigitalService.ts';
 import {
   listWarehouses,
   createWarehouse,
@@ -308,12 +309,15 @@ export function createPhase4Router(deps: Phase4RouterDeps) {
           },
         });
 
+        const revokedDigitalGrants = revokeDownloadGrantsForOrder(order.id, reason || 'Order refunded');
+
         res.status(result.duplicate ? 200 : 201).json({
           success: true,
           duplicate: result.duplicate,
           refund: result.refund,
           creditNote: result.creditNote || null,
           orderPaymentStatus: order.paymentStatus,
+          revokedDigitalGrants,
         });
       } catch (err: any) {
         res.status(400).json({ success: false, error: err.message });

@@ -750,3 +750,158 @@ export const SellerGovernancePanel: React.FC<{ seller: Seller; notify: (msg: str
     </div>
   );
 };
+
+export const SellerCatalogOffersPanel: React.FC<{
+  seller: Seller;
+  allProducts: Product[];
+  notify: (msg: string) => void;
+}> = ({ seller, allProducts, notify }) => {
+  const [offers, setOffers] = useState<any[]>([]);
+  const [productId, setProductId] = useState(allProducts[0]?.id || 'prod-1');
+  const [sellerSku, setSellerSku] = useState(`OFF-${seller.id.slice(-3)}-${Date.now().toString().slice(-4)}`);
+  const [condition, setCondition] = useState<'NEW' | 'REFURBISHED' | 'OPEN_BOX'>('NEW');
+  const [price, setPrice] = useState(1499);
+  const [mrp, setMrp] = useState(2499);
+  const [stock, setStock] = useState(20);
+  const [deliveryDays, setDeliveryDays] = useState(3);
+  const [saving, setSaving] = useState(false);
+
+  const loadOffers = async () => {
+    try {
+      const res = await api.offers.listSellerOffers(seller.id);
+      setOffers(res.offers || []);
+    } catch {
+      setOffers([]);
+    }
+  };
+
+  useEffect(() => {
+    loadOffers();
+  }, [seller.id]);
+
+  const handleSaveOffer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      await api.offers.saveSellerOffer({
+        productId,
+        sellerId: seller.id,
+        sellerSku: sellerSku.trim() || `SKU-${Date.now()}`,
+        condition,
+        price: Number(price),
+        mrp: Number(mrp),
+        stock: Number(stock),
+        deliveryDays: Number(deliveryDays),
+      });
+      notify('Seller catalogue offer saved and Buy Box score updated.');
+      await loadOffers();
+    } catch (err: any) {
+      notify(err.message || 'Unable to save offer.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeactivateOffer = async (offerId: string) => {
+    try {
+      await api.offers.deleteSellerOffer(offerId);
+      notify('Seller offer deactivated.');
+      await loadOffers();
+    } catch (err: any) {
+      notify(err.message || 'Unable to deactivate offer.');
+    }
+  };
+
+  return (
+    <div className="bg-white dark:bg-zinc-900 rounded-3xl p-6 border border-zinc-200 dark:border-zinc-800 shadow-xs space-y-5">
+      <div>
+        <h3 className="text-base font-bold text-zinc-900 dark:text-white font-display">
+          Multi-Seller Catalogue Offers & Buy Box
+        </h3>
+        <p className="text-xs text-zinc-500">
+          Attach your SKU, price, condition, and stock to shared marketplace products.
+        </p>
+      </div>
+
+      <form onSubmit={handleSaveOffer} className="grid grid-cols-1 sm:grid-cols-6 gap-2.5 text-xs">
+        <select
+          value={productId}
+          onChange={e => setProductId(e.target.value)}
+          className="sm:col-span-2 px-3 py-2 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800"
+        >
+          {allProducts.slice(0, 20).map(p => (
+            <option key={p.id} value={p.id}>
+              {p.title.slice(0, 40)} (Base ₹{p.price})
+            </option>
+          ))}
+        </select>
+        <input
+          type="text"
+          value={sellerSku}
+          onChange={e => setSellerSku(e.target.value)}
+          placeholder="Your Offer SKU"
+          className="px-3 py-2 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800"
+        />
+        <select
+          value={condition}
+          onChange={e => setCondition(e.target.value as any)}
+          className="px-3 py-2 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800"
+        >
+          <option value="NEW">New</option>
+          <option value="OPEN_BOX">Open Box</option>
+          <option value="REFURBISHED">Refurbished</option>
+        </select>
+        <input
+          type="number"
+          min={1}
+          value={price}
+          onChange={e => {
+            const p = Number(e.target.value);
+            setPrice(p);
+            if (mrp < p) setMrp(p);
+          }}
+          placeholder="Offer Price ₹"
+          className="px-3 py-2 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800"
+        />
+        <button
+          type="submit"
+          disabled={saving}
+          className="px-4 py-2 rounded-xl bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 font-semibold whitespace-nowrap disabled:opacity-50"
+        >
+          {saving ? 'Saving...' : 'List Offer'}
+        </button>
+      </form>
+
+      <div className="divide-y divide-zinc-200 dark:divide-zinc-800 text-xs">
+        {offers.map(o => (
+          <div key={o.id} className="py-2.5 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <div className="font-semibold text-zinc-900 dark:text-white flex items-center gap-2">
+                <span>Product: {o.productId}</span>
+                <span className="font-mono text-[11px] text-zinc-500">SKU {o.sellerSku}</span>
+                {o.isDefault && (
+                  <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                    Buy Box Winner
+                  </span>
+                )}
+              </div>
+              <div className="text-[11px] text-zinc-500 tabular-nums">
+                ₹{o.price} (MRP ₹{o.mrp}) · {o.condition} · Stock: {o.stock} · {o.deliveryDays}d delivery · {o.isActive ? 'Active' : 'Inactive'}
+              </div>
+            </div>
+            {o.isActive && (
+              <button
+                type="button"
+                onClick={() => handleDeactivateOffer(o.id)}
+                className="px-3 py-1 rounded-lg border border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:text-rose-600 text-[11px] font-semibold"
+              >
+                Deactivate
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+

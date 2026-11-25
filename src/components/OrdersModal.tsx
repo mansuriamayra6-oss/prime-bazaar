@@ -25,9 +25,11 @@ export const OrdersModal: React.FC = () => {
   const [isLoadingInvoices, setIsLoadingInvoices] = useState(false);
 
   const [shipmentsByOrder, setShipmentsByOrder] = useState<Record<string, ShipmentRecord[]>>({});
+  const [subordersByOrder, setSubordersByOrder] = useState<Record<string, any[]>>({});
   const [otpInputs, setOtpInputs] = useState<Record<string, string>>({});
   const [verifyingShipmentId, setVerifyingShipmentId] = useState<string | null>(null);
   const [retryingOrderId, setRetryingOrderId] = useState<string | null>(null);
+  const [actingSuborderId, setActingSuborderId] = useState<string | null>(null);
 
   const [returnOrderId, setReturnOrderId] = useState<string | null>(null);
   const [returnReason, setReturnReason] = useState('Size does not fit properly');
@@ -36,24 +38,34 @@ export const OrdersModal: React.FC = () => {
     if (!isOrdersOpen || !user?.isLoggedIn || orders.length === 0) return;
     let cancelled = false;
 
-    const loadShipments = async () => {
+    const loadShipmentsAndSuborders = async () => {
       const results = await Promise.allSettled(
         orders.slice(0, 10).map(async o => {
-          const res = await api.checkout.getOrderShipments(o.id);
-          return { orderId: o.id, shipments: (res.shipments || []) as ShipmentRecord[] };
+          const [shRes, subRes] = await Promise.all([
+            api.checkout.getOrderShipments(o.id).catch(() => ({ shipments: [] })),
+            api.offers.getOrderSuborders(o.id).catch(() => ({ suborders: o.sellerSuborders || [] })),
+          ]);
+          return {
+            orderId: o.id,
+            shipments: (shRes.shipments || []) as ShipmentRecord[],
+            suborders: (subRes.suborders || o.sellerSuborders || []) as any[],
+          };
         })
       );
       if (cancelled) return;
-      const nextMap: Record<string, ShipmentRecord[]> = {};
+      const nextShipMap: Record<string, ShipmentRecord[]> = {};
+      const nextSubMap: Record<string, any[]> = {};
       for (const r of results) {
         if (r.status === 'fulfilled') {
-          nextMap[r.value.orderId] = r.value.shipments;
+          nextShipMap[r.value.orderId] = r.value.shipments;
+          nextSubMap[r.value.orderId] = r.value.suborders;
         }
       }
-      setShipmentsByOrder(nextMap);
+      setShipmentsByOrder(nextShipMap);
+      setSubordersByOrder(nextSubMap);
     };
 
-    loadShipments().catch(() => undefined);
+    loadShipmentsAndSuborders().catch(() => undefined);
     return () => {
       cancelled = true;
     };
@@ -132,6 +144,40 @@ export const OrdersModal: React.FC = () => {
       notify(err.message || 'Unable to initialize payment retry.');
     } finally {
       setRetryingOrderId(null);
+    }
+  };
+
+  const handleCancelSuborder = async (orderId: string, suborderId: string) => {
+    setActingSuborderId(suborderId);
+    try {
+      const res = await api.offers.cancelSuborder(orderId, suborderId, {
+        reason: 'Customer cancelled individual seller fulfillment group',
+      });
+      setSubordersByOrder(prev => ({
+        ...prev,
+        [orderId]: (prev[orderId] || []).map(so => (so.id === suborderId ? res.suborder : so)),
+      }));
+      notify(`Cancelled ${res.suborder?.suborderNumber || 'suborder'} and released seller inventory.`);
+    } catch (err: any) {
+      notify(err.message || 'Unable to cancel suborder.');
+    } finally {
+      setActingSuborderId(null);
+    }
+  };
+
+  const handleReturnSuborder = async (orderId: string, suborderId: string) => {
+    setActingSuborderId(suborderId);
+    try {
+      const res = await api.offers.returnSuborder(orderId, suborderId, 'Fit or preference mismatch for item group');
+      setSubordersByOrder(prev => ({
+        ...prev,
+        [orderId]: (prev[orderId] || []).map(so => (so.id === suborderId ? res.suborder : so)),
+      }));
+      notify(`Return initiated for ${res.suborder?.suborderNumber || 'suborder'}.`);
+    } catch (err: any) {
+      notify(err.message || 'Unable to request suborder return.');
+    } finally {
+      setActingSuborderId(null);
     }
   };
 
@@ -284,7 +330,7 @@ export const OrdersModal: React.FC = () => {
                         />
                         <div className="flex-1 min-w-0 text-xs">
                           <span className="text-[11px] uppercase font-semibold text-zinc-400">
-                            {item.product.brand}
+                            {item.product.brand} {item.offerSellerName ? `· ${item.offerSellerName}` : ''}
                           </span>
                           <h4 className="font-semibold text-zinc-900 dark:text-white truncate">
                             {item.product.title}
@@ -299,6 +345,61 @@ export const OrdersModal: React.FC = () => {
                       </div>
                     ))}
                   </div>
+
+                  {/* Per-Seller Split Suborders */}
+                  {(subordersByOrder[order.id] || order.sellerSuborders || []).length > 0 && (
+                    <div className="pt-3 border-t border-zinc-200 dark:border-zinc-800 space-y-2">
+                      <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300 block">
+                        Seller Fulfillment Groups ({(subordersByOrder[order.id] || order.sellerSuborders || []).length})
+                      </span>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        {(subordersByOrder[order.id] || order.sellerSuborders || []).map((so: any) => (
+                          <div
+                            key={so.id}
+                            className="p-3 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-xs space-y-1.5"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-mono font-bold text-zinc-900 dark:text-white">
+                                {so.suborderNumber}
+                              </span>
+                              <span className="text-[10px] font-bold uppercase text-indigo-600 dark:text-indigo-400">
+                                {so.fulfillmentStatus}
+                              </span>
+                            </div>
+                            <div className="text-[11px] text-zinc-600 dark:text-zinc-300">
+                              Seller: <strong className="text-zinc-900 dark:text-white">{so.sellerName}</strong>
+                            </div>
+                            <div className="text-[11px] text-zinc-500 tabular-nums">
+                              Subtotal: ₹{Number(so.subtotal || 0).toLocaleString('en-IN')} · Shipping: ₹{Number(so.shippingFee || 0)} · GST: ₹{Number(so.taxAmount || 0).toLocaleString('en-IN')}
+                            </div>
+                            {so.fulfillmentStatus !== 'CANCELLED' && so.fulfillmentStatus !== 'RETURNED' && (
+                              <div className="flex items-center gap-2 pt-1">
+                                {so.fulfillmentStatus !== 'DELIVERED' ? (
+                                  <button
+                                    type="button"
+                                    disabled={actingSuborderId === so.id}
+                                    onClick={() => handleCancelSuborder(order.id, so.id)}
+                                    className="px-2.5 py-1 rounded-md border border-rose-300 dark:border-rose-800 text-rose-600 dark:text-rose-400 text-[11px] font-semibold hover:bg-rose-50 dark:hover:bg-rose-950/30 disabled:opacity-50"
+                                  >
+                                    Cancel Suborder
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    disabled={actingSuborderId === so.id}
+                                    onClick={() => handleReturnSuborder(order.id, so.id)}
+                                    className="px-2.5 py-1 rounded-md border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 text-[11px] font-semibold hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-50"
+                                  >
+                                    Return Group
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Live Carrier Shipments & Delivery OTP Verification */}
                   {orderShipments.length > 0 && (

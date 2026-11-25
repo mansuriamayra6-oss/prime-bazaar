@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../../services/api';
+import { useMarketplace } from '../../context/MarketplaceContext';
 import {
   Megaphone,
   Truck,
@@ -9,13 +10,16 @@ import {
   Image as ImageIcon,
   ShieldAlert,
   AlertTriangle,
+  FolderTree,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 
 interface AdminSupplyAndCmsPanelProps {
   notify: (msg: string) => void;
 }
 
-type OpsSubTab = 'cms' | 'procurement' | 'warehouses' | 'ads' | 'staff' | 'audit';
+type OpsSubTab = 'cms' | 'categories' | 'procurement' | 'warehouses' | 'ads' | 'staff' | 'audit';
 
 function isSafeCmsUrl(url: string): boolean {
   if (!url) return true;
@@ -30,6 +34,7 @@ function isSafeCmsUrl(url: string): boolean {
 }
 
 export const AdminSupplyAndCmsPanel: React.FC<AdminSupplyAndCmsPanelProps> = ({ notify }) => {
+  const { refreshCategories } = useMarketplace();
   const [subTab, setSubTab] = useState<OpsSubTab>('cms');
   const [error, setError] = useState<string | null>(null);
 
@@ -39,6 +44,16 @@ export const AdminSupplyAndCmsPanel: React.FC<AdminSupplyAndCmsPanelProps> = ({ 
   const [bannerImage, setBannerImage] = useState('/src/assets/images/hero_fashion_campaign_1793466539913.jpg');
   const [bannerLink, setBannerLink] = useState('/women');
   const [modQueue, setModQueue] = useState<any>({ reviews: [], questions: [] });
+
+  // Dynamic 34+ Categories CMS
+  const [cmsCategories, setCmsCategories] = useState<any[]>([]);
+  const [catName, setCatName] = useState('');
+  const [catSlug, setCatSlug] = useState('');
+  const [catSector, setCatSector] = useState('Marketplace Expansion');
+  const [catSeoTitle, setCatSeoTitle] = useState('');
+  const [catSeoDescription, setCatSeoDescription] = useState('');
+  const [catFashionPriority, setCatFashionPriority] = useState(false);
+  const [editingCatId, setEditingCatId] = useState<string | null>(null);
 
   // Suppliers, POs, GRN
   const [suppliers, setSuppliers] = useState<any[]>([]);
@@ -81,6 +96,9 @@ export const AdminSupplyAndCmsPanel: React.FC<AdminSupplyAndCmsPanelProps> = ({ 
         ]);
         setBanners(bRes.banners || []);
         setModQueue(mRes || { reviews: [], questions: [] });
+      } else if (tab === 'categories') {
+        const cRes = await api.adminOps.getCmsCategories();
+        setCmsCategories(cRes.categories || []);
       } else if (tab === 'procurement') {
         const [sRes, pRes, wRes] = await Promise.all([
           api.adminOps.getSuppliers(),
@@ -143,6 +161,61 @@ export const AdminSupplyAndCmsPanel: React.FC<AdminSupplyAndCmsPanelProps> = ({ 
       notify('CMS banner published.');
     } catch (err: any) {
       notify(err.message || 'Failed to save CMS banner.');
+    }
+  };
+
+  const handleSaveCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await api.adminOps.saveCmsCategory({
+        id: editingCatId || undefined,
+        name: catName,
+        slug: catSlug || undefined,
+        sector: catSector,
+        seoTitle: catSeoTitle || undefined,
+        seoDescription: catSeoDescription || undefined,
+        isFashionPriority: catFashionPriority,
+        group: catFashionPriority ? 'fashion' : 'more',
+      });
+      setEditingCatId(null);
+      setCatName('');
+      setCatSlug('');
+      setCatSeoTitle('');
+      setCatSeoDescription('');
+      await Promise.all([loadSubTab('categories'), refreshCategories()]);
+      notify(editingCatId ? 'Category updated.' : 'New marketplace category added.');
+    } catch (err: any) {
+      notify(err.message || 'Failed to save category.');
+    }
+  };
+
+  const handleToggleCategory = async (cat: any, field: 'isActive' | 'isFashionPriority') => {
+    try {
+      const nextVal = field === 'isActive' ? cat.isActive === false : !cat.isFashionPriority;
+      await api.adminOps.saveCmsCategory({
+        id: cat.id,
+        [field]: nextVal,
+      });
+      await Promise.all([loadSubTab('categories'), refreshCategories()]);
+      notify(`Updated ${cat.name}.`);
+    } catch (err: any) {
+      notify(err.message || 'Failed to update category.');
+    }
+  };
+
+  const handleMoveCategory = async (index: number, delta: -1 | 1) => {
+    const targetIdx = index + delta;
+    if (targetIdx < 0 || targetIdx >= cmsCategories.length) return;
+    const next = [...cmsCategories];
+    const [moved] = next.splice(index, 1);
+    next.splice(targetIdx, 0, moved);
+    setCmsCategories(next);
+    try {
+      await api.adminOps.reorderCmsCategories(next.map(c => c.id));
+      await refreshCategories();
+      notify('Category navigation order updated.');
+    } catch (err: any) {
+      notify(err.message || 'Failed to reorder categories.');
     }
   };
 
@@ -272,6 +345,7 @@ export const AdminSupplyAndCmsPanel: React.FC<AdminSupplyAndCmsPanelProps> = ({ 
         <div className="flex flex-wrap gap-1.5">
           {[
             { id: 'cms', label: 'CMS & Content Mod', icon: ImageIcon },
+            { id: 'categories', label: 'Categories (34+)', icon: FolderTree },
             { id: 'procurement', label: 'Suppliers, PO & GRN', icon: Truck },
             { id: 'warehouses', label: 'Warehouses & OTP Override', icon: KeyRound },
             { id: 'ads', label: 'Sponsored Ads', icon: Megaphone },
@@ -390,6 +464,160 @@ export const AdminSupplyAndCmsPanel: React.FC<AdminSupplyAndCmsPanelProps> = ({ 
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* DYNAMIC 34+ CATEGORIES TAXONOMY & SEO MANAGER */}
+      {subTab === 'categories' && (
+        <div className="space-y-4 text-xs">
+          <form onSubmit={handleSaveCategory} className="p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 space-y-2.5 bg-zinc-50/70 dark:bg-zinc-950/40">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-zinc-900 dark:text-white">
+                {editingCatId ? `Edit Category (${editingCatId})` : `Add or Edit Marketplace Category (${cmsCategories.length} configured)`}
+              </span>
+              {editingCatId && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingCatId(null);
+                    setCatName('');
+                    setCatSlug('');
+                    setCatSeoTitle('');
+                    setCatSeoDescription('');
+                  }}
+                  className="text-rose-600 font-semibold hover:underline"
+                >
+                  Cancel Edit
+                </button>
+              )}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <input
+                type="text"
+                required
+                placeholder="Category Name (e.g. Grocery & Gourmet)"
+                value={catName}
+                onChange={e => setCatName(e.target.value)}
+                className="px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800"
+              />
+              <input
+                type="text"
+                placeholder="Slug (auto if blank)"
+                value={catSlug}
+                disabled={Boolean(editingCatId)}
+                onChange={e => setCatSlug(e.target.value)}
+                className="px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 font-mono disabled:opacity-60"
+              />
+              <input
+                type="text"
+                placeholder="Sector (e.g. Consumer Electronics)"
+                value={catSector}
+                onChange={e => setCatSector(e.target.value)}
+                className="px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800"
+              />
+              <input
+                type="text"
+                placeholder="SEO Title"
+                value={catSeoTitle}
+                onChange={e => setCatSeoTitle(e.target.value)}
+                className="px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800"
+              />
+              <input
+                type="text"
+                placeholder="SEO Description"
+                value={catSeoDescription}
+                onChange={e => setCatSeoDescription(e.target.value)}
+                className="px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 sm:col-span-2"
+              />
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+              <label className="inline-flex items-center gap-2 text-zinc-700 dark:text-zinc-300 font-medium cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={catFashionPriority}
+                  onChange={e => setCatFashionPriority(e.target.checked)}
+                />
+                <span>Show in Primary Fashion Launch Ribbon</span>
+              </label>
+              <button
+                type="submit"
+                className="px-4 py-2 rounded-lg bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 font-semibold"
+              >
+                {editingCatId ? 'Update Category' : 'Add Category'}
+              </button>
+            </div>
+          </form>
+
+          <div className="divide-y divide-zinc-200 dark:divide-zinc-800 border border-zinc-200 dark:border-zinc-800 rounded-xl max-h-96 overflow-y-auto">
+            {cmsCategories.map((cat, idx) => (
+              <div key={cat.id} className="p-3 flex flex-wrap items-center justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-mono text-zinc-400">#{idx + 1}</span>
+                    <span className="font-bold text-zinc-900 dark:text-white">{cat.name}</span>
+                    <span className="font-mono text-[11px] text-zinc-500">({cat.slug})</span>
+                    {cat.isFashionPriority && (
+                      <span className="px-1.5 py-0.5 rounded bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 text-[10px] font-bold">
+                        Fashion Launch
+                      </span>
+                    )}
+                    {cat.isActive === false && (
+                      <span className="px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 text-[10px] font-bold">
+                        Disabled
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-zinc-500 truncate mt-0.5">
+                    {cat.sector || 'General'} · {(cat.subcategories || []).length} subcategories · {(cat.attributes || []).length} filter attributes
+                  </p>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    aria-label={`Move ${cat.name} up`}
+                    onClick={() => handleMoveCategory(idx, -1)}
+                    disabled={idx === 0}
+                    className="p-1.5 rounded border border-zinc-200 dark:border-zinc-700 disabled:opacity-40"
+                  >
+                    <ArrowUp className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Move ${cat.name} down`}
+                    onClick={() => handleMoveCategory(idx, 1)}
+                    disabled={idx === cmsCategories.length - 1}
+                    className="p-1.5 rounded border border-zinc-200 dark:border-zinc-700 disabled:opacity-40"
+                  >
+                    <ArrowDown className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingCatId(cat.id);
+                      setCatName(cat.name);
+                      setCatSlug(cat.slug);
+                      setCatSector(cat.sector || 'Marketplace Expansion');
+                      setCatSeoTitle(cat.seoTitle || '');
+                      setCatSeoDescription(cat.seoDescription || '');
+                      setCatFashionPriority(Boolean(cat.isFashionPriority));
+                    }}
+                    className="px-2.5 py-1 rounded border border-zinc-300 dark:border-zinc-700 font-semibold"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleToggleCategory(cat, 'isActive')}
+                    className={`px-2.5 py-1 rounded font-semibold ${
+                      cat.isActive === false ? 'bg-emerald-600 text-white' : 'bg-zinc-200 dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100'
+                    }`}
+                  >
+                    {cat.isActive === false ? 'Enable' : 'Disable'}
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}

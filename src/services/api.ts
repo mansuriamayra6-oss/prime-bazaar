@@ -693,10 +693,16 @@ export const api = {
         method: payload.id ? 'PUT' : 'POST',
         body: JSON.stringify(payload),
       }),
+    getCmsCategories: async () => apiRequest('/api/v1/admin/cms/categories'),
     saveCmsCategory: async (payload: any) =>
       apiRequest(payload.id ? `/api/v1/admin/cms/categories/${encodeURIComponent(payload.id)}` : '/api/v1/admin/cms/categories', {
         method: payload.id ? 'PUT' : 'POST',
         body: JSON.stringify(payload),
+      }),
+    reorderCmsCategories: async (orderedIds: string[]) =>
+      apiRequest('/api/v1/admin/cms/categories/reorder', {
+        method: 'PUT',
+        body: JSON.stringify({ orderedIds }),
       }),
     saveCmsBrand: async (payload: any) =>
       apiRequest(payload.id ? `/api/v1/admin/cms/brands/${encodeURIComponent(payload.id)}` : '/api/v1/admin/cms/brands', {
@@ -762,5 +768,54 @@ export const api = {
       return res.blob();
     },
   },
+
+  // Phase 6 Multi-Seller Offers & Split Suborder APIs
+  offers: {
+    getForProduct: async (productId: string) =>
+      apiRequest(`/api/products/${encodeURIComponent(productId)}/offers`),
+    listSellerOffers: async (sellerId?: string) =>
+      apiRequest(`/api/v1/seller/offers${sellerId ? `?sellerId=${encodeURIComponent(sellerId)}` : ''}`),
+    saveSellerOffer: async (payload: {
+      offerId?: string;
+      productId: string;
+      sellerId?: string;
+      sellerSku: string;
+      condition?: 'NEW' | 'REFURBISHED' | 'OPEN_BOX';
+      price: number;
+      mrp?: number;
+      stock: number;
+      deliveryDays?: number;
+      shippingFee?: number;
+      codAvailable?: boolean;
+    }) =>
+      apiRequest(
+        payload.offerId
+          ? `/api/v1/seller/offers/${encodeURIComponent(payload.offerId)}`
+          : '/api/v1/seller/offers',
+        {
+          method: payload.offerId ? 'PUT' : 'POST',
+          body: JSON.stringify(payload),
+        }
+      ),
+    deleteSellerOffer: async (offerId: string) =>
+      apiRequest(`/api/v1/seller/offers/${encodeURIComponent(offerId)}`, { method: 'DELETE' }),
+    getOrderSuborders: async (orderId: string) =>
+      apiRequest(`/api/orders/${encodeURIComponent(orderId)}/suborders`),
+    cancelSuborder: async (
+      orderId: string,
+      suborderId: string,
+      payload?: { reason?: string; refundMode?: 'ORIGINAL_METHOD' | 'STORE_CREDIT' }
+    ) =>
+      apiRequest(`/api/orders/${encodeURIComponent(orderId)}/suborders/${encodeURIComponent(suborderId)}/cancel`, {
+        method: 'POST',
+        body: JSON.stringify(payload || {}),
+      }),
+    returnSuborder: async (orderId: string, suborderId: string, reason: string) =>
+      apiRequest(`/api/orders/${encodeURIComponent(orderId)}/suborders/${encodeURIComponent(suborderId)}/return`, {
+        method: 'POST',
+        body: JSON.stringify({ reason }),
+      }),
+  },
 };
+
 

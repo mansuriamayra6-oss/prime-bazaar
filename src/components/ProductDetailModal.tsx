@@ -3,7 +3,7 @@ import { useMarketplace } from '../context/MarketplaceContext';
 import { Breadcrumbs } from './Breadcrumbs';
 import { buildBreadcrumbs, resolveProductPrimaryDepartment } from '../data/categories';
 import { api } from '../services/api';
-import { ProductQuestion, Review, ReviewMedia } from '../types';
+import { ProductQuestion, Review, ReviewMedia, SellerOffer } from '../types';
 import {
   X,
   Star,
@@ -149,6 +149,11 @@ export const ProductDetailModal: React.FC = () => {
   const [reportReason, setReportReason] = useState('');
   const [localHelpfulBoosts, setLocalHelpfulBoosts] = useState<Record<string, number>>({});
 
+  // Multi-Seller Offers & Buy Box state
+  const [sellerOffers, setSellerOffers] = useState<SellerOffer[]>([]);
+  const [selectedOfferId, setSelectedOfferId] = useState<string | null>(null);
+  const [showAllOffers, setShowAllOffers] = useState(false);
+
   // Reset modal internal state whenever selectedProduct changes
   useEffect(() => {
     if (!selectedProduct) return;
@@ -167,6 +172,8 @@ export const ProductDetailModal: React.FC = () => {
     setUploadedMedia([]);
     setReportingReviewId(null);
     setReportReason('');
+    setSelectedOfferId(null);
+    setShowAllOffers(false);
     scrollBodyRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
 
     // Pick up to 2 complementary items for bundle
@@ -182,7 +189,7 @@ export const ProductDetailModal: React.FC = () => {
     setSelectedBundleIds(complementary.slice(0, 1));
   }, [selectedProduct?.id]);
 
-  // Fetch backend Q&A + Reviews for active product
+  // Fetch backend Q&A + Reviews + Seller Offers for active product
   useEffect(() => {
     if (!selectedProduct) return;
     let cancelled = false;
@@ -197,7 +204,8 @@ export const ProductDetailModal: React.FC = () => {
           verifiedOnly: reviewVerifiedOnly,
         })
         .catch(() => null),
-    ]).then(([qaRes, revRes]) => {
+      api.offers.getForProduct(selectedProduct.id).catch(() => null),
+    ]).then(([qaRes, revRes, offersRes]) => {
       if (cancelled) return;
       if (qaRes?.questions) {
         setQuestions(qaRes.questions);
@@ -208,6 +216,12 @@ export const ProductDetailModal: React.FC = () => {
         setServerReviews(revRes.reviews);
       } else {
         setServerReviews([]);
+      }
+      if (offersRes?.offers && Array.isArray(offersRes.offers)) {
+        setSellerOffers(offersRes.offers);
+        setSelectedOfferId(prev => prev || offersRes.defaultOffer?.id || offersRes.offers[0]?.id || null);
+      } else {
+        setSellerOffers([]);
       }
       setQaLoading(false);
     });
@@ -312,10 +326,21 @@ export const ProductDetailModal: React.FC = () => {
   if (!selectedProduct) return null;
 
   const product = selectedProduct;
+  const activeOffer =
+    sellerOffers.find(o => o.id === selectedOfferId) ||
+    sellerOffers.find(o => o.isDefault) ||
+    sellerOffers[0] ||
+    null;
+  const displayPrice = activeOffer ? activeOffer.price : product.price;
+  const displayMrp = activeOffer ? activeOffer.mrp : product.originalPrice;
+  const displaySellerId = activeOffer ? activeOffer.sellerId : product.sellerId;
+  const displaySellerName = activeOffer ? activeOffer.sellerName : product.sellerName;
+  const displaySellerRating = activeOffer ? activeOffer.sellerRating : product.sellerRating;
+
   const wishlisted = isWishlisted(product.id);
   const compared = isCompared(product.id);
   const priceDropAlert = hasPriceAlert(product.id);
-  const isCodAvailable = product.codAvailable !== false;
+  const isCodAvailable = activeOffer ? activeOffer.codAvailable !== false : product.codAvailable !== false;
   const effectivePayMode = !isCodAvailable && selectedPayMode === 'cod' ? 'cashfree' : selectedPayMode;
 
   const currentColor = selectedColor || product.colors[0]?.name || '';
@@ -326,9 +351,9 @@ export const ProductDetailModal: React.FC = () => {
 
   const selectedBundleProducts = bundleCandidates.filter(p => selectedBundleIds.includes(p.id));
   const bundleBaseTotal =
-    product.price + selectedBundleProducts.reduce((sum, p) => sum + p.price, 0);
+    displayPrice + selectedBundleProducts.reduce((sum, p) => sum + p.price, 0);
   const bundleDiscountedTotal =
-    selectedBundleProducts.length > 0 ? Math.round(bundleBaseTotal * 0.9) : product.price;
+    selectedBundleProducts.length > 0 ? Math.round(bundleBaseTotal * 0.9) : displayPrice;
   const bundleSavings = bundleBaseTotal - bundleDiscountedTotal;
 
   const filteredQuestions = questions.filter(q => {
@@ -345,7 +370,7 @@ export const ProductDetailModal: React.FC = () => {
       notify('Please choose an available size first.');
       return;
     }
-    addToCart(product, currentSize, currentColor, 1);
+    addToCart(product, currentSize, currentColor, 1, activeOffer || undefined);
   };
 
   const handleBuyNow = (overrideMode?: 'cashfree' | 'upi' | 'card' | 'netbanking' | 'cod') => {
@@ -353,7 +378,7 @@ export const ProductDetailModal: React.FC = () => {
       notify('Please choose an available size first.');
       return;
     }
-    buyProductNow(product, currentSize, currentColor, overrideMode || effectivePayMode, 1);
+    buyProductNow(product, currentSize, currentColor, overrideMode || effectivePayMode, 1, activeOffer || undefined);
   };
 
   const handleAddBundleToCart = () => {
@@ -361,7 +386,7 @@ export const ProductDetailModal: React.FC = () => {
       notify('Please choose a size for the main product first.');
       return;
     }
-    addToCart(product, currentSize, currentColor, 1);
+    addToCart(product, currentSize, currentColor, 1, activeOffer || undefined);
     selectedBundleProducts.forEach(item => {
       const availSize = item.sizes.find(s => s.available)?.size || 'Standard';
       const defaultColor = item.colors[0]?.name || 'Standard';
@@ -805,52 +830,125 @@ export const ProductDetailModal: React.FC = () => {
               )}
 
               {/* Seller attribution */}
-              <div className="p-4 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
-                <div
-                  className="flex items-center gap-2.5 cursor-pointer group/seller"
-                  onClick={() => {
-                    setSelectedProduct(null);
-                    openSellerStore(product.sellerId);
-                  }}
-                >
-                  <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-200 dark:border-emerald-800">
-                    <Store className="w-4 h-4" />
+              <div className="p-4 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-3 text-xs">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div
+                    className="flex items-center gap-2.5 cursor-pointer group/seller"
+                    onClick={() => {
+                      setSelectedProduct(null);
+                      openSellerStore(displaySellerId);
+                    }}
+                  >
+                    <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-200 dark:border-emerald-800">
+                      <Store className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-bold text-zinc-900 dark:text-white group-hover/seller:text-emerald-600 transition-colors">
+                          Sold by {displaySellerName}
+                        </span>
+                        {activeOffer?.isDefault && (
+                          <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 text-[10px] font-bold">
+                            Recommended
+                          </span>
+                        )}
+                        <ExternalLink className="w-3 h-3 text-zinc-400 group-hover/seller:text-emerald-600" />
+                      </div>
+                      <div className="flex items-center gap-1 text-[11px] text-zinc-500">
+                        <span className="text-emerald-600 font-medium">GST Verified</span>
+                        <span>·</span>
+                        <span className="text-amber-500 font-semibold">{displaySellerRating}★</span>
+                        {activeOffer && (
+                          <>
+                            <span>·</span>
+                            <span>Est. {activeOffer.deliveryDays} days · {activeOffer.stock} in stock</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-bold text-zinc-900 dark:text-white group-hover/seller:text-emerald-600 transition-colors">
-                        {product.sellerName}
-                      </span>
-                      <ExternalLink className="w-3 h-3 text-zinc-400 group-hover/seller:text-emerald-600" />
-                    </div>
-                    <div className="flex items-center gap-1 text-[11px] text-zinc-500">
-                      <span className="text-emerald-600 font-medium">GST Verified</span>
-                      <span>·</span>
-                      <span className="text-amber-500 font-semibold">{product.sellerRating}★</span>
-                    </div>
+
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedProduct(null);
+                        openSellerStore(displaySellerId);
+                      }}
+                      className="flex-1 sm:flex-initial px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-200 font-medium text-[11px]"
+                    >
+                      Visit Store
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => chatWithSeller(displaySellerId, product)}
+                      className="flex-1 sm:flex-initial px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-[11px] flex items-center justify-center gap-1"
+                    >
+                      <MessageSquare className="w-3.5 h-3.5" />
+                      <span>Chat</span>
+                    </button>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 w-full sm:w-auto">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedProduct(null);
-                      openSellerStore(product.sellerId);
-                    }}
-                    className="flex-1 sm:flex-initial px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-200 font-medium text-[11px]"
-                  >
-                    Visit Store
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => chatWithSeller(product.sellerId, product)}
-                    className="flex-1 sm:flex-initial px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-[11px] flex items-center justify-center gap-1"
-                  >
-                    <MessageSquare className="w-3.5 h-3.5" />
-                    <span>Chat</span>
-                  </button>
-                </div>
+                {sellerOffers.length > 1 && (
+                  <div className="pt-2.5 border-t border-zinc-200 dark:border-zinc-800 space-y-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowAllOffers(prev => !prev)}
+                      className="w-full flex items-center justify-between text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
+                    >
+                      <span>Compare {sellerOffers.length} Seller Offers (from ₹{Math.min(...sellerOffers.map(o => o.price)).toLocaleString('en-IN')})</span>
+                      <span>{showAllOffers ? 'Hide Offers' : 'Choose Seller'}</span>
+                    </button>
+
+                    {showAllOffers && (
+                      <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+                        {sellerOffers.map(offer => {
+                          const isSelected = activeOffer?.id === offer.id;
+                          return (
+                            <button
+                              key={offer.id}
+                              type="button"
+                              onClick={() => setSelectedOfferId(offer.id)}
+                              className={`w-full text-left p-2.5 rounded-xl border transition-all flex items-center justify-between gap-2 ${
+                                isSelected
+                                  ? 'border-zinc-900 dark:border-white bg-zinc-50 dark:bg-zinc-800'
+                                  : 'border-zinc-200 dark:border-zinc-800 hover:border-zinc-400'
+                              }`}
+                            >
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-bold text-zinc-900 dark:text-white truncate">
+                                    {offer.sellerName}
+                                  </span>
+                                  {offer.isDefault && (
+                                    <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400">
+                                      · Best Value
+                                    </span>
+                                  )}
+                                  <span className="text-[10px] uppercase font-mono text-zinc-500">
+                                    · {offer.condition.replace('_', ' ')}
+                                  </span>
+                                </div>
+                                <div className="text-[10px] text-zinc-500 mt-0.5 tabular-nums">
+                                  {offer.sellerRating}★ · Delivers in {offer.deliveryDays}d · {offer.shippingFee === 0 ? 'Free Shipping' : `+₹${offer.shippingFee} shipping`} · {offer.stock} left
+                                </div>
+                              </div>
+                              <div className="text-right shrink-0">
+                                <div className="font-mono font-bold text-zinc-900 dark:text-white tabular-nums">
+                                  {formatPrice(offer.price)}
+                                </div>
+                                <span className="text-[10px] font-semibold text-rose-600 dark:text-rose-400">
+                                  {isSelected ? 'Selected' : 'Select'}
+                                </span>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -875,16 +973,16 @@ export const ProductDetailModal: React.FC = () => {
                 {/* Price Row */}
                 <div className="mt-3 flex flex-wrap items-baseline gap-3 pb-4 border-b border-zinc-200 dark:border-zinc-800">
                   <span className="text-2xl sm:text-3xl font-extrabold text-zinc-900 dark:text-white font-mono tabular-nums">
-                    {formatPrice(product.price)}
+                    {formatPrice(displayPrice)}
                   </span>
-                  {product.originalPrice > product.price && (
+                  {displayMrp > displayPrice && (
                     <span className="text-sm text-zinc-400 line-through font-mono tabular-nums">
-                      {formatPrice(product.originalPrice)}
+                      {formatPrice(displayMrp)}
                     </span>
                   )}
-                  {product.discountPercent > 0 && (
+                  {displayMrp > displayPrice && (
                     <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 text-xs font-bold font-mono">
-                      {product.discountPercent}% OFF
+                      {Math.round(((displayMrp - displayPrice) / displayMrp) * 100)}% OFF
                     </span>
                   )}
                   <span className="text-xs text-zinc-400">Inclusive of all taxes</span>

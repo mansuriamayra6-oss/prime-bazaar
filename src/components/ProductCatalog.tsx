@@ -37,6 +37,7 @@ export const ProductCatalog: React.FC = () => {
     isCatalogLoading,
     catalogError,
     retryCatalogSync,
+    categories,
   } = useMarketplace();
 
   // Local filter states
@@ -52,6 +53,11 @@ export const ProductCatalog: React.FC = () => {
   const [codOnly, setCodOnly] = useState<boolean>(false);
   const [showWishlistOnly, setShowWishlistOnly] = useState<boolean>(false);
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState<boolean>(false);
+  const [selectedAttribute, setSelectedAttribute] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSelectedAttribute(null);
+  }, [selectedCategory, selectedSubcategory]);
 
   const [sponsoredAds, setSponsoredAds] = useState<SponsoredAdHighlight[]>([]);
   const impressedAdsRef = useRef<Set<string>>(new Set());
@@ -116,8 +122,8 @@ export const ProductCatalog: React.FC = () => {
   ];
 
   const activeDepartment = useMemo(
-    () => (selectedCategory !== 'all' ? findDepartmentById(selectedCategory) : undefined),
-    [selectedCategory]
+    () => (selectedCategory !== 'all' ? findDepartmentById(selectedCategory, categories) : undefined),
+    [selectedCategory, categories]
   );
 
   const breadcrumbItems = useMemo(
@@ -126,8 +132,9 @@ export const ProductCatalog: React.FC = () => {
         selectedCategory,
         selectedSubcategory,
         searchQuery,
+        departments: categories,
       }),
-    [selectedCategory, selectedSubcategory, searchQuery]
+    [selectedCategory, selectedSubcategory, searchQuery, categories]
   );
 
   const filteredProducts = useMemo(() => {
@@ -141,8 +148,18 @@ export const ProductCatalog: React.FC = () => {
         if (discoveryTab === 'flash' && p.discountPercent < 50) return false;
         if (discoveryTab === 'deals' && p.discountPercent < 40) return false;
 
-        if (!matchesCategoryAndSubcategory(p, selectedCategory, selectedSubcategory)) {
+        if (!matchesCategoryAndSubcategory(p, selectedCategory, selectedSubcategory, categories)) {
           return false;
+        }
+
+        if (selectedAttribute) {
+          const corpus = [p.title, p.description, p.fabric, p.fit, p.warrantyPolicy, p.subcategory]
+            .filter(Boolean)
+            .join(' ')
+            .toLowerCase();
+          if (!corpus.includes(selectedAttribute.toLowerCase())) {
+            return false;
+          }
         }
 
         if (!matchesProductSearch(p, searchQuery)) return false;
@@ -162,8 +179,10 @@ export const ProductCatalog: React.FC = () => {
       });
   }, [
     products,
+    categories,
     selectedCategory,
     selectedSubcategory,
+    selectedAttribute,
     searchQuery,
     maxPrice,
     minRating,
@@ -181,6 +200,7 @@ export const ProductCatalog: React.FC = () => {
     (minDiscount > 0 ? 1 : 0) +
     (codOnly ? 1 : 0) +
     (showWishlistOnly ? 1 : 0) +
+    (selectedAttribute ? 1 : 0) +
     (discoveryTab !== 'all' ? 1 : 0);
 
   const resetFilters = () => {
@@ -189,6 +209,7 @@ export const ProductCatalog: React.FC = () => {
     setMinDiscount(0);
     setCodOnly(false);
     setShowWishlistOnly(false);
+    setSelectedAttribute(null);
     setDiscoveryTab('all');
     setSortBy('trending');
     setSearchQuery('');
@@ -224,9 +245,33 @@ export const ProductCatalog: React.FC = () => {
         </div>
       )}
 
+      {/* Category Hero Banner & SEO Summary when viewing a specific category */}
+      {activeDepartment && (
+        <div className="mb-3 p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="space-y-0.5">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400">
+              {activeDepartment.sector || 'Marketplace Department'}
+            </span>
+            <h3 className="text-sm sm:text-base font-bold text-zinc-900 dark:text-white font-display">
+              {activeDepartment.promoTitle || activeDepartment.label}
+            </h3>
+            <p className="text-xs text-zinc-600 dark:text-zinc-400">
+              {activeDepartment.seoDescription || activeDepartment.tagline}
+            </p>
+          </div>
+          {activeDepartment.bannerUrl && (
+            <img
+              src={activeDepartment.bannerUrl}
+              alt={activeDepartment.label}
+              className="w-full sm:w-32 h-16 rounded-xl object-cover shrink-0 border border-zinc-200 dark:border-zinc-700"
+            />
+          )}
+        </div>
+      )}
+
       {/* Subcategory Filter Bar when browsing a Department */}
       {activeDepartment && activeDepartment.subcategories.length > 0 && (
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-3 mb-2">
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-2 mb-2">
           <button
             type="button"
             onClick={() => navigateCategory(activeDepartment.id, null)}
@@ -255,6 +300,34 @@ export const ProductCatalog: React.FC = () => {
               </button>
             );
           })}
+        </div>
+      )}
+
+      {/* Category-Specific Attribute Filter Bar */}
+      {activeDepartment && activeDepartment.attributes && activeDepartment.attributes.length > 0 && (
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-3 mb-2 text-[11px]">
+          {activeDepartment.attributes.map(attr => (
+            <div key={attr.key} className="flex items-center gap-1.5 shrink-0">
+              <span className="font-bold text-zinc-500 uppercase">{attr.label}:</span>
+              {attr.options.map(opt => {
+                const isSelected = selectedAttribute === opt;
+                return (
+                  <button
+                    key={opt}
+                    type="button"
+                    onClick={() => setSelectedAttribute(isSelected ? null : opt)}
+                    className={`px-2.5 py-1 rounded-md border whitespace-nowrap transition-colors ${
+                      isSelected
+                        ? 'bg-emerald-600 text-white border-emerald-600 font-semibold'
+                        : 'bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700 hover:border-zinc-400'
+                    }`}
+                  >
+                    {opt}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
         </div>
       )}
 

@@ -30,6 +30,12 @@ import {
 } from './src/server/security.ts';
 import { createPhase4Router } from './src/server/phase4Router.ts';
 import { createPhase5Router } from './src/server/phase5Router.ts';
+import { createPhase6Router } from './src/server/phase6Router.ts';
+import { createPhase6ExpansionRouter } from './src/server/phase6ExpansionRouter.ts';
+import { adjustOfferInventory } from './src/server/marketplaceExpansionService.ts';
+import { validateInternationalAddress } from './src/server/loyaltyAndIntlService.ts';
+import { completeReferralOnOrder } from './src/server/loyaltyAndIntlService.ts';
+import { issueDigitalGrantsForOrder, revokeDownloadGrantsForOrder } from './src/server/b2bSubDigitalService.ts';
 import {
   authenticateAdminStaff,
   adminSessionPermissionMap,
@@ -160,6 +166,20 @@ const phase5Router = createPhase5Router({
 });
 app.use('/api/v1', phase5Router);
 app.use('/api', phase5Router);
+
+// Mount Phase 6 (Multi-Seller Offers, Split-Order Suborders & Marketplace Expansion)
+const phase6Router = createPhase6Router({
+  getOrdersMap: () => orders,
+});
+app.use('/api/v1', phase6Router);
+app.use('/api', phase6Router);
+
+// Mount Phase 6 Expansion & Phase 7 Mobile Router (Loyalty, Intl, Discovery/Visual Search, B2B/Subs/Digital, Mobile Devices)
+const phase6ExpansionRouter = createPhase6ExpansionRouter({
+  getOrdersMap: () => orders,
+});
+app.use('/api/v1', phase6ExpansionRouter);
+app.use('/api', phase6ExpansionRouter);
 
 
 // ==========================================
@@ -1775,6 +1795,23 @@ app.post('/api/orders', async (req, res) => {
     const authUser = getAuthenticatedUser(req);
     const resolvedUserId = authUser?.id || 'usr_demo123';
 
+    // Validate international destination & COD rules if non-India countryCode supplied
+    const destCountry = String(address?.countryCode || 'IN').trim().toUpperCase();
+    const intlCheck = validateInternationalAddress({
+      countryCode: destCountry,
+      postalCode: address?.pinCode,
+      phone: address?.phone,
+    });
+    if (!intlCheck.valid) {
+      return res.status(400).json({ success: false, error: intlCheck.error });
+    }
+    if (String(paymentMethod).toLowerCase() === 'cod' && intlCheck.country && !intlCheck.country.codAllowed) {
+      return res.status(400).json({
+        success: false,
+        error: `Cash on Delivery is disabled for ${intlCheck.country.countryName}. Please choose online payment.`,
+      });
+    }
+
     // 1. Server-Authoritative Pricing Evaluation (never trust client price/discount/total)
     const quote = calculateAuthoritativeQuote({
       items,
@@ -1813,6 +1850,15 @@ app.post('/api/orders', async (req, res) => {
       destinationPincode: address?.pinCode,
     });
 
+    // 2.5 Decrement offer-specific inventory if selected (rolls back if wallet fails)
+    const offerAdjustments: Array<{ offerId: string; quantity: number }> = [];
+    for (const it of quote.items) {
+      if (it.offerId) {
+        adjustOfferInventory(it.offerId, -it.quantity);
+        offerAdjustments.push({ offerId: it.offerId, quantity: it.quantity });
+      }
+    }
+
     // 3. Apply Gift Card & Store Credit atomically after stock lock succeeds
     let gcRedeemed = 0;
     let scRedeemed = 0;
@@ -1828,6 +1874,13 @@ app.post('/api/orders', async (req, res) => {
       scRedeemed = walletRes.scRedeemed;
     } catch (walletErr) {
       await releaseOrderReservations(orderId, 'WALLET_APPLICATION_FAILED');
+      for (const adj of offerAdjustments) {
+        try {
+          adjustOfferInventory(adj.offerId, adj.quantity);
+        } catch {
+          // ignore
+        }
+      }
       throw walletErr;
     }
 
@@ -1876,6 +1929,7 @@ app.post('/api/orders', async (req, res) => {
     // 5. Split Order into Seller Suborders + Commission Escrow Ledger
     const enrichedItems = quote.items.map((it) => ({
       productId: it.productId,
+      offerId: it.offerId,
       variantId: it.variantId,
       selectedSize: it.selectedSize,
       selectedColor: it.selectedColor,
@@ -1903,6 +1957,7 @@ app.post('/api/orders', async (req, res) => {
       shippingAddress: address,
       customerName: address?.fullName,
       customerPhone: address?.phone,
+      sellerGroups: quote.sellerGroups,
     });
 
     // 6. Issue Immutable Sequential GST Tax Invoice(s) per Seller Suborder
@@ -2041,6 +2096,14 @@ app.post('/api/orders', async (req, res) => {
 
     const earnedCoins = Math.floor(newOrder.totalAmount * 0.05);
 
+    // Issue digital download grants for any purchased product with digital asset, and complete pending referrals
+    const digitalGrants = issueDigitalGrantsForOrder({
+      orderId,
+      userId: resolvedUserId,
+      productIds: quote.items.map((it) => it.productId),
+    });
+    const completedReferral = completeReferralOnOrder(resolvedUserId, orderId);
+
     res.status(201).json({
       success: true,
       message: 'Order created and inventory reserved successfully',
@@ -2050,6 +2113,8 @@ app.post('/api/orders', async (req, res) => {
       invoices: issuedInvoices,
       splitWarehousePlan: stockPlan.splitWarehousePlan,
       earnedCoins,
+      digitalGrants,
+      completedReferral,
     });
   } catch (err: any) {
     res.status(400).json({ success: false, error: err?.message || 'Unable to process checkout order.' });
@@ -2072,6 +2137,7 @@ app.post('/api/orders/:id/cancel', async (req, res) => {
 
     const reason = String(req.body?.reason || 'Cancelled by customer');
     await releaseOrderReservations(order.id, reason);
+    revokeDownloadGrantsForOrder(order.id, reason);
 
     order.status = 'cancelled';
 
