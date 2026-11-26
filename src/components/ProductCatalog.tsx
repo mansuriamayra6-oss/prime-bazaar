@@ -11,6 +11,11 @@ import {
   matchesCategoryAndSubcategory,
 } from '../data/categories';
 import {
+  isStorefrontElectronicsProduct,
+  isStorefrontFashionProduct,
+  isStorefrontFeaturedProduct,
+} from '../data/storefrontScope';
+import {
   SlidersHorizontal,
   ArrowUpDown,
   X,
@@ -28,9 +33,8 @@ import {
   ChevronRight,
   ShieldCheck,
   Tv,
-  Home,
-  ShoppingBasket,
-  Shirt,
+  Flame,
+  Headphones,
 } from 'lucide-react';
 
 const PAGE_SIZE = 12;
@@ -111,13 +115,32 @@ export const ProductCatalog: React.FC = () => {
     };
   }, [user?.id, products.length]);
 
+  const storefrontPool = useMemo(
+    () => products.filter(p => isStorefrontFeaturedProduct(p, 'all', categories)),
+    [products, categories]
+  );
+
+  const trendingFashionProducts = useMemo(
+    () =>
+      storefrontPool
+        .filter(p => isStorefrontFashionProduct(p) && (p.isTrending || p.isBestSeller || p.discountPercent >= 50))
+        .slice(0, 4),
+    [storefrontPool]
+  );
+
+  const electronicsShelfProducts = useMemo(
+    () => storefrontPool.filter(p => isStorefrontElectronicsProduct(p)).slice(0, 4),
+    [storefrontPool]
+  );
+
   const fallbackRecommended = useMemo(() => {
     if (recommendationsOptOut) return [];
-    if (recommendedProducts.length > 0) return recommendedProducts;
-    return [...products]
+    const scopedRecs = recommendedProducts.filter(p => isStorefrontFeaturedProduct(p, 'all', categories));
+    if (scopedRecs.length > 0) return scopedRecs;
+    return [...storefrontPool]
       .sort((a, b) => b.rating - a.rating || b.reviewCount - a.reviewCount)
       .slice(0, 6);
-  }, [recommendedProducts, recommendationsOptOut, products]);
+  }, [recommendedProducts, recommendationsOptOut, storefrontPool, categories]);
 
   const [sponsoredAds, setSponsoredAds] = useState<SponsoredAdHighlight[]>([]);
   const impressedAdsRef = useRef<Set<string>>(new Set());
@@ -172,31 +195,31 @@ export const ProductCatalog: React.FC = () => {
     }
   };
 
-  // Dynamic facet extraction from real products
+  // Dynamic facet extraction from scoped Fashion & Electronics products
   const availableBrands = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const p of products) {
+    for (const p of storefrontPool) {
       if (!p.brand) continue;
       counts.set(p.brand, (counts.get(p.brand) || 0) + 1);
     }
     return Array.from(counts.entries())
       .sort((a, b) => b[1] - a[1])
       .slice(0, 10);
-  }, [products]);
+  }, [storefrontPool]);
 
   const availableSizes = useMemo(() => {
     const set = new Set<string>();
-    for (const p of products) {
+    for (const p of storefrontPool) {
       for (const s of p.sizes || []) {
         if (s.available && s.size) set.add(s.size);
       }
     }
     return Array.from(set).slice(0, 10);
-  }, [products]);
+  }, [storefrontPool]);
 
   const availableColors = useMemo(() => {
     const map = new Map<string, string>();
-    for (const p of products) {
+    for (const p of storefrontPool) {
       for (const c of p.colors || []) {
         if (c.name && !map.has(c.name)) {
           map.set(c.name, c.hex || '#64748B');
@@ -204,7 +227,7 @@ export const ProductCatalog: React.FC = () => {
       }
     }
     return Array.from(map.entries()).slice(0, 10);
-  }, [products]);
+  }, [storefrontPool]);
 
   const popularKeywords = [
     'Raw Silk Kurti',
@@ -212,7 +235,7 @@ export const ProductCatalog: React.FC = () => {
     'Chanderi Saree',
     'Platform Sneakers',
     'Kundan Choker',
-    'Vegan Tote',
+    'ANC Earbuds',
   ];
 
   const activeDepartment = useMemo(
@@ -241,6 +264,10 @@ export const ProductCatalog: React.FC = () => {
         if (discoveryTab === 'bestsellers' && !p.isBestSeller) return false;
         if (discoveryTab === 'flash' && p.discountPercent < 50) return false;
         if (discoveryTab === 'deals' && p.discountPercent < 40) return false;
+
+        if (!searchQuery.trim() && !isStorefrontFeaturedProduct(p, selectedCategory, categories)) {
+          return false;
+        }
 
         if (!matchesCategoryAndSubcategory(p, selectedCategory, selectedSubcategory, categories)) {
           return false;
@@ -370,7 +397,7 @@ export const ProductCatalog: React.FC = () => {
     ? 'Best Sellers'
     : discoveryTab === 'trending'
     ? 'Top-Rated & Trending'
-    : 'All Marketplace Products';
+    : 'Fashion & Electronics Picks';
 
   const isDefaultHomeView =
     selectedCategory === 'all' &&
@@ -621,70 +648,225 @@ export const ProductCatalog: React.FC = () => {
 
   return (
     <section id="catalog-section" className="max-w-[1440px] mx-auto px-3 sm:px-6 py-4 space-y-5">
-      {/* Homepage Curated Discovery Shelves (shown on main home view using real data) */}
+      {/* Homepage Curated Discovery Shelves (80% Fashion / 20% Selected Electronics) */}
       {isDefaultHomeView && (
         <div className="space-y-5">
-          {/* Shop Department Collections: Fashion, Electronics, Home & Kitchen, Grocery */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {[
-              {
-                id: 'fashion',
-                title: 'Fashion Collections',
-                desc: "Women's, Men's, Kids Wear & Footwear",
-                tag: 'Primary Launch',
-                icon: Shirt,
-                bg: 'bg-rose-50 dark:bg-rose-950/25 border-rose-200 dark:border-rose-900/40 text-rose-700 dark:text-rose-300',
-              },
-              {
-                id: 'electronics',
-                title: 'Electronics Collections',
-                desc: 'Audio, Phones, Laptops & Smart Accessories',
-                tag: 'Tech Deals',
-                icon: Tv,
-                bg: 'bg-sky-50 dark:bg-sky-950/25 border-sky-200 dark:border-sky-900/40 text-sky-700 dark:text-sky-300',
-              },
-              {
-                id: 'home-kitchen',
-                title: 'Home & Kitchen',
-                desc: 'Cookware, Decor, Lighting & Organization',
-                tag: 'Everyday Home',
-                icon: Home,
-                bg: 'bg-emerald-50 dark:bg-emerald-950/25 border-emerald-200 dark:border-emerald-900/40 text-emerald-700 dark:text-emerald-300',
-              },
-              {
-                id: 'grocery',
-                title: 'Grocery & Gourmet',
-                desc: 'Pantry Staples, Coffee, Dry Fruits & Snacks',
-                tag: 'Daily Essentials',
-                icon: ShoppingBasket,
-                bg: 'bg-amber-50 dark:bg-amber-950/25 border-amber-200 dark:border-amber-900/40 text-amber-700 dark:text-amber-300',
-              },
-            ].map(col => {
-              const Icon = col.icon;
-              return (
+          {/* Shop Fashion Editorial Collection Tiles */}
+          <div className="space-y-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white font-display">
+                Shop Fashion
+              </h2>
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar text-[11px] font-semibold">
+                {[
+                  { id: 'kids-fashion', label: "Kids' Fashion" },
+                  { id: 'watches', label: 'Watches' },
+                  { id: 'jewellery', label: 'Jewellery' },
+                  { id: 'accessories', label: 'Fashion Accessories' },
+                  { id: 'beauty', label: 'Beauty' },
+                ].map(pill => (
+                  <button
+                    key={pill.id}
+                    type="button"
+                    onClick={() => navigateCategory(pill.id, null)}
+                    className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-orange-50 hover:text-orange-600 dark:bg-zinc-800 dark:hover:bg-orange-950/30 text-slate-700 dark:text-zinc-200 whitespace-nowrap shrink-0 transition-colors"
+                  >
+                    {pill.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {[
+                {
+                  id: 'womens-fashion',
+                  title: "Women's Fashion",
+                  desc: 'Dresses, tops, jeans, ethnic wear & lingerie',
+                  tag: 'Primary Collection',
+                  image: '/src/assets/images/collection_ethnic_wear_1793466539838.jpg',
+                },
+                {
+                  id: 'mens-fashion',
+                  title: "Men's Fashion",
+                  desc: 'Shirts, T-shirts, jackets, trousers & denim',
+                  tag: 'Menswear Edit',
+                  image: '/src/assets/images/collection_streetwear_1793466541088.jpg',
+                },
+                {
+                  id: 'footwear',
+                  title: 'Shoes & Bags',
+                  desc: 'Sneakers, heels, totes, slings & everyday bags',
+                  tag: 'Step & Carry',
+                  image: '/src/assets/images/collection_footwear_1793466541533.jpg',
+                },
+              ].map(col => (
                 <button
                   key={col.id}
                   type="button"
                   onClick={() => navigateCategory(col.id, null)}
-                  className={`p-4 rounded-xl border text-left transition-all hover:shadow-sm flex items-start justify-between gap-3 ${col.bg}`}
+                  className="group relative h-36 sm:h-40 rounded-2xl overflow-hidden border border-slate-200 dark:border-zinc-800 text-left shadow-xs"
                 >
-                  <div className="min-w-0">
-                    <span className="text-[10px] font-bold uppercase tracking-wider opacity-85">
+                  <img
+                    src={col.image}
+                    alt={col.title}
+                    className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/40 to-transparent p-4 flex flex-col justify-end">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-orange-300">
                       {col.tag}
                     </span>
-                    <h3 className="text-sm font-bold text-slate-900 dark:text-white font-display mt-0.5">
+                    <h3 className="text-base font-extrabold text-white font-display mt-0.5">
                       {col.title}
                     </h3>
-                    <p className="text-[11px] text-slate-600 dark:text-zinc-300 mt-1 line-clamp-2">
-                      {col.desc}
-                    </p>
-                  </div>
-                  <div className="w-9 h-9 rounded-lg bg-white/80 dark:bg-zinc-900/80 flex items-center justify-center shrink-0">
-                    <Icon className="w-4 h-4" />
+                    <p className="text-[11px] text-slate-200 line-clamp-1">{col.desc}</p>
                   </div>
                 </button>
-              );
-            })}
+              ))}
+            </div>
+          </div>
+
+          {/* Trending Fashion Shelf */}
+          {trendingFashionProducts.length > 0 && (
+            <div className="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Flame className="w-4 h-4 text-orange-500" />
+                  <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white font-display">
+                    Trending Fashion
+                  </h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setDiscoveryTab('trending')}
+                  className="text-xs font-bold text-orange-600 hover:underline flex items-center gap-1"
+                >
+                  <span>View Trending</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                {trendingFashionProducts.map(item => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setSelectedProduct(item)}
+                    className="group text-left rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-950/40 p-2.5 hover:border-orange-400 transition-all"
+                  >
+                    <div className="relative aspect-[4/5] rounded-lg overflow-hidden bg-slate-100 dark:bg-zinc-800 mb-2">
+                      <img
+                        src={item.images[0]}
+                        alt={item.title}
+                        referrerPolicy="no-referrer"
+                        onError={e => {
+                          e.currentTarget.src = '/src/assets/images/collection_ethnic_wear_1793466539838.jpg';
+                        }}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
+                      {item.discountPercent > 0 && (
+                        <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-orange-600 text-white text-[10px] font-extrabold font-mono">
+                          -{item.discountPercent}%
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[10px] font-bold text-orange-600 dark:text-orange-400">
+                      Special offer
+                    </span>
+                    <p className="text-xs font-semibold text-slate-900 dark:text-zinc-100 line-clamp-1">
+                      {item.title}
+                    </p>
+                    <div className="flex items-center justify-between mt-1 text-xs">
+                      <span className="font-extrabold text-slate-900 dark:text-white font-mono tabular-nums">
+                        {formatPrice(item.price)}
+                      </span>
+                      <span className="inline-flex items-center gap-0.5 text-[11px] text-amber-600 font-semibold">
+                        <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
+                        {item.rating}
+                      </span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Secondary Selected ELECTRONICS Section (~20% footprint) */}
+          <div className="rounded-2xl border border-sky-200 dark:border-sky-900/50 bg-gradient-to-r from-slate-900 via-[#0F172A] to-sky-950 text-white p-4 sm:p-5 space-y-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2 text-sky-300 text-[11px] font-bold uppercase tracking-wider">
+                  <Tv className="w-3.5 h-3.5" />
+                  <span>ELECTRONICS</span>
+                </div>
+                <h2 className="text-base sm:text-lg font-extrabold font-display mt-0.5">
+                  Smart gadgets and everyday technology
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => navigateCategory('electronics', null)}
+                className="px-3.5 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-extrabold inline-flex items-center gap-1.5 self-start md:self-auto whitespace-nowrap transition-colors"
+              >
+                <span>Shop Electronics</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {[
+                { label: 'Mobile Accessories', cat: 'mobile-accessories' },
+                { label: 'Headphones & Earphones', cat: 'electronics' },
+                { label: 'Smart Watches', cat: 'electronics' },
+                { label: 'Chargers & Cables', cat: 'mobile-accessories' },
+                { label: 'Small Gadgets', cat: 'electronics' },
+              ].map(chip => (
+                <button
+                  key={chip.label}
+                  type="button"
+                  onClick={() => navigateCategory(chip.cat, null)}
+                  className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 border border-white/15 text-xs font-semibold text-slate-100 inline-flex items-center gap-1.5 transition-colors"
+                >
+                  <Headphones className="w-3 h-3 text-sky-300" />
+                  <span>{chip.label}</span>
+                </button>
+              ))}
+            </div>
+
+            {electronicsShelfProducts.length > 0 && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {electronicsShelfProducts.map(item => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setSelectedProduct(item)}
+                    className="flex items-center gap-3 p-2.5 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-left transition-colors"
+                  >
+                    <img
+                      src={item.images[0]}
+                      alt={item.title}
+                      referrerPolicy="no-referrer"
+                      className="w-16 h-16 rounded-lg object-cover bg-slate-800 shrink-0"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-sky-300">
+                        {item.brand}
+                      </span>
+                      <p className="text-xs font-bold text-white line-clamp-1">{item.title}</p>
+                      <div className="flex items-baseline gap-2 mt-1 font-mono tabular-nums">
+                        <span className="text-xs font-extrabold text-orange-300">
+                          {formatPrice(item.price)}
+                        </span>
+                        {item.originalPrice > item.price && (
+                          <span className="text-[10px] text-slate-400 line-through">
+                            {formatPrice(item.originalPrice)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Recommended For You (API-driven with privacy respect) */}
@@ -1152,7 +1334,7 @@ export const ProductCatalog: React.FC = () => {
               </h3>
               <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
                 {activeDepartment
-                  ? `${activeDepartment.label} is active in our 34-department catalog. Clear active filters or browse live Fashion drops below.`
+                  ? `No listings match your current filters in ${activeDepartment.label}. Clear filters or browse live Fashion & Electronics drops below.`
                   : 'Try broadening your price cap, brand filters, or search keyword.'}
               </p>
               <button

@@ -72,7 +72,7 @@ export const Footer: React.FC = () => {
               Get Flash Deal Alerts &amp; Early Collection Drops
             </h3>
             <p className="text-[11px] text-slate-400 mt-0.5">
-              Weekly curated offers across Fashion, Electronics, Home &amp; 34 marketplace departments.
+              Weekly curated offers across Fashion, Accessories, Beauty &amp; Selected Electronics.
             </p>
           </div>
 
@@ -127,7 +127,7 @@ export const Footer: React.FC = () => {
               </div>
             </div>
             <p className="text-slate-400 leading-relaxed text-[11px]">
-              International multi-seller marketplace anchored in Fashion with all 34 categories live, Cashfree-protected checkout, split order tracking, and B2B procurement.
+              Fashion-first multi-seller marketplace with curated everyday Electronics, Cashfree-protected checkout, split order tracking, and verified brand stores.
             </p>
           </div>
 

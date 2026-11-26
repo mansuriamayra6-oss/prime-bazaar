@@ -1,5 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { useMarketplace } from '../context/MarketplaceContext';
+import { isStorefrontFeaturedProduct } from '../data/storefrontScope';
 import {
   Play,
   ArrowRight,
@@ -12,15 +13,14 @@ import {
   Clock,
   Sparkles,
   Shirt,
-  Footprints,
   ShoppingBag,
   Tv,
-  Home,
-  ShoppingBasket,
+  Watch,
   Palette,
   Gem,
   LayoutGrid,
   Plus,
+  Tag,
 } from 'lucide-react';
 
 interface CampaignSlide {
@@ -37,20 +37,20 @@ interface CampaignSlide {
 
 const CAMPAIGN_SLIDES: CampaignSlide[] = [
   {
-    id: 'festive-silk',
-    eyebrow: 'Prime Bazaar Fashion First · Festive Edit',
-    headline: 'Handloom Silks, Artisans & Studio Streetwear — All In One Marketplace.',
+    id: 'fashion-sale-hero',
+    eyebrow: 'FASHION SALE · New collections • Exclusive deals',
+    headline: 'Discover Your Style — Fashion First, Built For Everyday Value.',
     subcopy:
-      'Discover GST-verified makers, multi-seller offers, and Cashfree-protected checkout across 34 categories.',
-    ctaLabel: "Shop Women's Fashion",
-    targetCategory: 'womens-fashion',
-    targetSubcategory: 'anarkali-kurti',
+      "Shop Women's, Men's & Kids' Fashion, Shoes, Bags, Watches, Jewellery, Beauty, plus curated everyday Electronics from GST-verified sellers.",
+    ctaLabel: 'SHOP NOW',
+    targetCategory: 'fashion',
+    targetSubcategory: null,
     image: '/src/assets/images/hero_fashion_campaign_1793466539913.jpg',
   },
   {
     id: 'streetwear-drop',
-    eyebrow: 'Studio Utility Drop · Up to 55% Off',
-    headline: '420 GSM Heavyweight Outerwear & Urban Menswear.',
+    eyebrow: "Men's & Streetwear Drop · Up to 55% Off",
+    headline: 'Heavyweight Outerwear, Shirts & Urban Denim.',
     subcopy:
       'Cut-and-sew cargo jackets, acid-wash oversized tees, and everyday staples with pan-India courier dispatch.',
     ctaLabel: "Shop Men's Fashion",
@@ -60,11 +60,11 @@ const CAMPAIGN_SLIDES: CampaignSlide[] = [
   },
   {
     id: 'footwear-bags',
-    eyebrow: 'Daily Footwear & Vegan Leather Bags',
-    headline: 'Platform Sneakers & Structured Work Totes.',
+    eyebrow: 'Shoes, Bags & Fashion Accessories',
+    headline: 'Platform Sneakers, Structured Totes & Statement Jewellery.',
     subcopy:
-      'Compare seller offers, delivery speed, and bulk pricing across verified studio labels.',
-    ctaLabel: 'Explore Footwear & Bags',
+      'Compare verified seller offers, delivery estimates, and multi-seller deals across studio labels.',
+    ctaLabel: 'Shop Shoes & Bags',
     targetCategory: 'footwear',
     targetSubcategory: null,
     image: '/src/assets/images/collection_footwear_1793466541533.jpg',
@@ -97,18 +97,32 @@ const CATEGORY_SHORTCUTS: ShortcutTile[] = [
     accentClass: 'ring-slate-200 dark:ring-zinc-700',
   },
   {
+    id: 'kids-fashion',
+    label: "Kids' Fashion",
+    category: 'kids-fashion',
+    icon: Shirt,
+    accentClass: 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 ring-indigo-200 dark:ring-indigo-900/40',
+  },
+  {
     id: 'footwear',
-    label: 'Footwear',
+    label: 'Shoes',
     category: 'footwear',
     image: '/src/assets/images/collection_footwear_1793466541533.jpg',
     accentClass: 'ring-orange-200 dark:ring-orange-900/50',
   },
   {
     id: 'bags',
-    label: 'Bags & Totes',
+    label: 'Bags',
     category: 'bags',
     icon: ShoppingBag,
     accentClass: 'bg-amber-50 dark:bg-amber-950/40 text-amber-600 ring-amber-200 dark:ring-amber-900/40',
+  },
+  {
+    id: 'watches',
+    label: 'Watches',
+    category: 'watches',
+    icon: Watch,
+    accentClass: 'bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-200 ring-slate-200 dark:ring-zinc-700',
   },
   {
     id: 'jewellery',
@@ -116,6 +130,13 @@ const CATEGORY_SHORTCUTS: ShortcutTile[] = [
     category: 'jewellery',
     icon: Gem,
     accentClass: 'bg-rose-50 dark:bg-rose-950/40 text-rose-600 ring-rose-200 dark:ring-rose-900/40',
+  },
+  {
+    id: 'accessories',
+    label: 'Fashion Accessories',
+    category: 'accessories',
+    icon: Tag,
+    accentClass: 'bg-purple-50 dark:bg-purple-950/40 text-purple-600 ring-purple-200 dark:ring-purple-900/40',
   },
   {
     id: 'beauty',
@@ -130,27 +151,6 @@ const CATEGORY_SHORTCUTS: ShortcutTile[] = [
     category: 'electronics',
     icon: Tv,
     accentClass: 'bg-sky-50 dark:bg-sky-950/40 text-sky-600 ring-sky-200 dark:ring-sky-900/40',
-  },
-  {
-    id: 'home-kitchen',
-    label: 'Home & Kitchen',
-    category: 'home-kitchen',
-    icon: Home,
-    accentClass: 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 ring-emerald-200 dark:ring-emerald-900/40',
-  },
-  {
-    id: 'grocery',
-    label: 'Grocery',
-    category: 'grocery',
-    icon: ShoppingBasket,
-    accentClass: 'bg-lime-50 dark:bg-lime-950/40 text-lime-700 ring-lime-200 dark:ring-lime-900/40',
-  },
-  {
-    id: 'kids-fashion',
-    label: 'Kids Wear',
-    category: 'kids-fashion',
-    icon: Shirt,
-    accentClass: 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 ring-indigo-200 dark:ring-indigo-900/40',
   },
 ];
 
@@ -216,11 +216,11 @@ export const HeroBanner: React.FC = () => {
 
     return heroCms.map((b, i) => ({
       id: b.id || `cms-hero-${i}`,
-      eyebrow: b.eyebrow || 'Featured Marketplace Campaign',
+      eyebrow: b.eyebrow || 'FASHION SALE · New collections • Exclusive deals',
       headline: b.title,
-      subcopy: b.subtitle || 'Verified GST merchants and pan-India courier fulfillment.',
-      ctaLabel: b.ctaLabel || 'Shop Collection',
-      targetCategory: b.targetCategory || 'all',
+      subcopy: b.subtitle || 'Verified GST fashion labels and everyday gadgets with Cashfree checkout.',
+      ctaLabel: b.ctaLabel || 'SHOP NOW',
+      targetCategory: b.targetCategory || 'fashion',
       targetSubcategory: b.targetSubcategory ?? null,
       image: b.imageUrl || CAMPAIGN_SLIDES[i % CAMPAIGN_SLIDES.length].image,
       linkUrl: isSafeLinkUrl(b.linkUrl) ? b.linkUrl : undefined,
@@ -236,10 +236,11 @@ export const HeroBanner: React.FC = () => {
   }, [isPaused, slides.length]);
 
   const flashDealProducts = useMemo(() => {
-    return [...products]
+    return products
+      .filter(p => isStorefrontFeaturedProduct(p, 'all', categories))
       .sort((a, b) => (b.discountPercent || 0) - (a.discountPercent || 0))
       .slice(0, 6);
-  }, [products]);
+  }, [products, categories]);
 
   const safeIdx = activeSlideIdx < slides.length ? activeSlideIdx : 0;
   const slide = slides[safeIdx] || CAMPAIGN_SLIDES[0];
@@ -379,7 +380,7 @@ export const HeroBanner: React.FC = () => {
             <div className="flex items-center gap-2.5 flex-wrap">
               <div className="flex items-center gap-1.5 text-orange-600 dark:text-orange-400 font-extrabold text-sm sm:text-base font-display">
                 <Zap className="w-4 h-4 fill-orange-500 text-orange-500 shrink-0" />
-                <span>Lightning Flash Deals</span>
+                <span>Flash Deals</span>
               </div>
               <div
                 aria-label="Flash deal countdown timer"
@@ -423,6 +424,9 @@ export const HeroBanner: React.FC = () => {
                         src={item.images[0]}
                         alt={item.title}
                         referrerPolicy="no-referrer"
+                        onError={e => {
+                          e.currentTarget.src = '/src/assets/images/collection_ethnic_wear_1793466539838.jpg';
+                        }}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       />
                       {item.discountPercent > 0 && (
@@ -433,6 +437,9 @@ export const HeroBanner: React.FC = () => {
                     </div>
                     <p className="text-[11px] font-semibold text-slate-900 dark:text-zinc-100 line-clamp-1">
                       {item.title}
+                    </p>
+                    <p className="text-[10px] font-semibold text-orange-600 dark:text-orange-400">
+                      Special price
                     </p>
                   </div>
 
@@ -467,12 +474,12 @@ export const HeroBanner: React.FC = () => {
         </div>
       )}
 
-      {/* 3. Popular Category Shortcut Tiles */}
+      {/* 3. Fashion & Selected Electronics Category Shortcuts */}
       <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 px-3 sm:px-4 py-3">
         <div className="flex items-center justify-between mb-2.5">
           <h2 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white font-display flex items-center gap-1.5">
             <Sparkles className="w-3.5 h-3.5 text-orange-500" />
-            <span>Shop by Popular Category</span>
+            <span>Shop Fashion &amp; Everyday Tech</span>
           </h2>
           <button
             type="button"
@@ -480,12 +487,12 @@ export const HeroBanner: React.FC = () => {
               if (window.innerWidth < 1024) {
                 setIsMobileCategoriesOpen(true);
               } else {
-                handleCampaignClick('all', null);
+                handleCampaignClick('fashion', null);
               }
             }}
             className="text-[11px] font-bold text-orange-600 hover:underline flex items-center gap-1"
           >
-            <span>All {categories.length} Categories</span>
+            <span>Explore All Fashion</span>
             <ArrowRight className="w-3 h-3" />
           </button>
         </div>
@@ -525,11 +532,10 @@ export const HeroBanner: React.FC = () => {
             className="lg:hidden group flex flex-col items-center gap-1.5 w-16 shrink-0 text-center"
           >
             <div className="w-14 h-14 rounded-full bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-200 ring-2 ring-slate-200 dark:ring-zinc-700 flex items-center justify-center">
-              <Footprints className="w-5 h-5 hidden" />
               <LayoutGrid className="w-5 h-5 text-orange-500" />
             </div>
             <span className="text-[11px] font-semibold text-slate-700 dark:text-zinc-300 leading-tight">
-              All {categories.length}
+              Browse Menu
             </span>
           </button>
         </div>

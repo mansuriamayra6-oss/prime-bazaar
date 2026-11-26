@@ -6,6 +6,7 @@ import {
 } from '../context/MarketplaceContext';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 import { filterProductsBySearch, getCategoryDisplayName } from '../utils/productSearch';
+import { getStorefrontDepartments } from '../data/storefrontScope';
 import { api } from '../services/api';
 import {
   ShoppingCart,
@@ -36,11 +37,11 @@ import {
 const RECENT_SEARCHES_KEY = 'pb_recent_searches';
 const POPULAR_SEARCH_CHIPS = [
   'Silk Kurti',
-  'Chanderi Saree',
   'Cargo Jacket',
+  'Chanderi Saree',
   'Platform Sneakers',
   'Kundan Choker',
-  'Vegan Tote',
+  'ANC Earbuds',
 ];
 
 export const Header: React.FC = () => {
@@ -84,6 +85,10 @@ export const Header: React.FC = () => {
 
   const { isInstallable, isInstalled } = usePWAInstall();
   const totalCartItems = cart.reduce((sum, item) => sum + item.quantity, 0);
+  const storefrontCategories = useMemo(
+    () => getStorefrontDepartments(categories),
+    [categories]
+  );
 
   const [showAnnouncement, setShowAnnouncement] = useState(true);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
@@ -233,14 +238,14 @@ export const Header: React.FC = () => {
       {showAnnouncement && activePortal === 'customer' && (
         <div className="bg-gradient-to-r from-orange-600 via-rose-600 to-orange-600 text-white text-[11px] font-medium">
           <div className="max-w-[1440px] mx-auto px-3 sm:px-6 h-7 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-3 truncate">
+            <div className="flex items-center gap-2.5 truncate">
               <span className="inline-flex items-center gap-1 font-bold whitespace-nowrap">
                 <Truck className="w-3.5 h-3.5 shrink-0" />
-                <span>Free Express Delivery ₹999+</span>
+                <span>Special Offers • New Arrivals • Shopping Deals</span>
               </span>
-              <span className="hidden sm:inline text-white/75">|</span>
-              <span className="hidden sm:inline truncate">
-                Fashion-First Launch across 34 Marketplace Categories · Cashfree Verified Checkout
+              <span className="hidden md:inline text-white/75">|</span>
+              <span className="hidden md:inline truncate">
+                Free Express Delivery ₹999+ · Fashion-First Collection &amp; Smart Electronics
               </span>
             </div>
             <div className="flex items-center gap-2 shrink-0">
@@ -334,14 +339,14 @@ export const Header: React.FC = () => {
               {/* Scoped Category Dropdown */}
               <div className="hidden sm:flex items-center bg-slate-100 border-r border-slate-200 shrink-0">
                 <select
-                  aria-label="Search department"
+                  aria-label="Search category"
                   value={selectedCategory}
                   onChange={e => setSelectedCategory(e.target.value)}
-                  className="h-9 sm:h-10 pl-2.5 pr-2 bg-transparent text-xs font-semibold text-slate-700 focus:outline-none cursor-pointer max-w-[128px]"
+                  className="h-9 sm:h-10 pl-2.5 pr-2 bg-transparent text-xs font-semibold text-slate-700 focus:outline-none cursor-pointer max-w-[138px]"
                 >
-                  <option value="all">All ({categories.length})</option>
+                  <option value="all">All</option>
                   <option value="fashion">Fashion</option>
-                  {categories.map(dept => (
+                  {storefrontCategories.map(dept => (
                     <option key={dept.id} value={dept.id}>
                       {dept.label}
                     </option>
@@ -355,8 +360,8 @@ export const Header: React.FC = () => {
                   id="pb-main-search"
                   type="text"
                   role="searchbox"
-                  aria-label="Search Prime Bazaar products, brands, and sellers"
-                  placeholder="Search silk kurtis, electronics, grocery, brands..."
+                  aria-label="Search fashion, shoes, bags, electronics"
+                  placeholder="Search fashion, shoes, bags, electronics..."
                   value={searchQuery}
                   onFocus={() => setIsSearchFocused(true)}
                   onChange={e => handleSearchChange(e.target.value)}
@@ -485,7 +490,7 @@ export const Header: React.FC = () => {
                           }}
                           className="text-[11px] font-bold text-orange-600 hover:underline"
                         >
-                          Search all 34 categories
+                          Search all Fashion &amp; Electronics
                         </button>
                       )}
                     </div>

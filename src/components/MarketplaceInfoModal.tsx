@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useMarketplace } from '../context/MarketplaceContext';
+import { getStorefrontDepartments } from '../data/storefrontScope';
 import {
   X,
   Building2,
@@ -152,16 +153,16 @@ export const MarketplaceInfoModal: React.FC = () => {
                   Built for Modern Multi-Vendor Shopping
                 </p>
                 <p className="text-slate-600 dark:text-zinc-300">
-                  Prime Bazaar unites independent artisans, heritage textile weavers, verified studio brands, and global retail categories inside one seamless marketplace—with Fashion as our flagship launch category across {categories.length} departments.
+                  Prime Bazaar unites independent artisans, heritage textile weavers, verified studio brands, and everyday electronics makers inside one seamless marketplace—with Fashion as our flagship launch focus.
                 </p>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="p-3.5 rounded-xl border border-slate-200 dark:border-zinc-800">
                   <p className="text-lg font-extrabold text-orange-600 font-mono tabular-nums">
-                    {categories.length}
+                    {getStorefrontDepartments(categories).length}
                   </p>
-                  <p className="font-bold text-slate-900 dark:text-white mt-0.5">Active Categories</p>
-                  <p className="text-slate-500 mt-1">Fashion-first with Electronics, Grocery, Books, Automotive &amp; more.</p>
+                  <p className="font-bold text-slate-900 dark:text-white mt-0.5">Curated Departments</p>
+                  <p className="text-slate-500 mt-1">Fashion-first across apparel, shoes, bags, jewellery, beauty &amp; everyday tech.</p>
                 </div>
                 <div className="p-3.5 rounded-xl border border-slate-200 dark:border-zinc-800">
                   <p className="text-lg font-extrabold text-emerald-600 font-mono tabular-nums">

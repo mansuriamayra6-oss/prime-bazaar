@@ -162,7 +162,7 @@ export const VisualSearchModal: React.FC = () => {
               Visual Product Search
             </h2>
             <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              Upload or snap any product photo to find matching items across all 34 categories
+              Upload or snap any product photo to find matching Fashion &amp; Electronics items
             </p>
           </div>
         </div>
