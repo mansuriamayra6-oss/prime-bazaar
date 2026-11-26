@@ -9,7 +9,6 @@ import { Footer } from './components/Footer';
 import { initDeepLinks } from './utils/nativeBridge';
 
 import {
-  Sparkles,
   Play,
   ShoppingBag,
   CheckCircle2,
@@ -17,7 +16,9 @@ import {
   Shirt,
   Database,
   Heart,
-  User,
+  Home,
+  LayoutGrid,
+  Search,
 } from 'lucide-react';
 
 // Phase 7C: Route / Portal / Modal Code-Splitting via React.lazy
@@ -90,6 +91,9 @@ const AdminDashboard = lazy(() =>
 const AndroidInstallSheet = lazy(() =>
   import('./components/android/AndroidInstallSheet').then(m => ({ default: m.AndroidInstallSheet }))
 );
+const MarketplaceInfoModal = lazy(() =>
+  import('./components/MarketplaceInfoModal').then(m => ({ default: m.MarketplaceInfoModal }))
+);
 
 interface ErrorBoundaryState {
   hasError: boolean;
@@ -152,6 +156,9 @@ const AppContent: React.FC = () => {
     setSelectedProduct,
     selectedProduct,
     navigateCategory,
+    setDiscoveryTab,
+    setIsMobileCategoriesOpen,
+    setInfoModalPage,
     openWishlist,
     openTryOn,
     setIsProfileOpen,
@@ -159,7 +166,6 @@ const AppContent: React.FC = () => {
     isApkModalOpen,
     setIsApkModalOpen,
     notify,
-    user,
     wishlist,
     products,
     cart,
@@ -212,6 +218,8 @@ const AppContent: React.FC = () => {
       setIsLiveShoppingOpen(false);
       setIsLaunchChecklistOpen(false);
       setIsApkModalOpen(false);
+      setIsMobileCategoriesOpen(false);
+      setInfoModalPage(null);
     };
     window.addEventListener('keydown', onEscape);
 
@@ -386,82 +394,87 @@ const AppContent: React.FC = () => {
           onClose={() => setIsApkModalOpen(false)}
           onNotify={notify}
         />
+        <MarketplaceInfoModal />
       </Suspense>
       <OfflineIndicator />
 
-      {/* Native Mobile Bottom App Navigation Bar (Phone viewport only, auto-hides on PC/Tablet) */}
+      {/* Native Mobile Bottom App Navigation Bar (Home, Categories, Search, Wishlist, Cart) */}
       <nav
         aria-label="Mobile Bottom App Bar"
-        className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-zinc-950/95 backdrop-blur-lg border-t border-zinc-200 dark:border-zinc-800 grid grid-cols-5 items-center h-16 px-1 shadow-[0_-4px_24px_rgba(0,0,0,0.08)] pb-[max(0.25rem,env(safe-area-inset-bottom,0px))]"
+        className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-zinc-950/95 backdrop-blur-lg border-t border-slate-200 dark:border-zinc-800 grid grid-cols-5 items-center h-16 px-1 shadow-[0_-4px_24px_rgba(0,0,0,0.08)] pb-[max(0.25rem,env(safe-area-inset-bottom,0px))]"
       >
         <button
-          onClick={() => setActivePortal('customer')}
+          type="button"
+          onClick={() => {
+            setActivePortal('customer');
+            navigateCategory('all', null);
+            setDiscoveryTab('all');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
           className={`flex flex-col items-center justify-center gap-1 min-h-[44px] transition-all active:scale-90 ${
             activePortal === 'customer'
-              ? 'text-emerald-600 dark:text-emerald-400 font-bold'
-              : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
+              ? 'text-orange-600 dark:text-orange-400 font-bold'
+              : 'text-slate-500 hover:text-slate-900 dark:hover:text-zinc-200'
           }`}
         >
-          <Sparkles className="w-5 h-5" />
-          <span className="text-[10px] tracking-tight">Discover</span>
+          <Home className="w-5 h-5" />
+          <span className="text-[10px] tracking-tight">Home</span>
         </button>
 
         <button
-          onClick={() => setIsReelsOpen(true)}
-          className="flex flex-col items-center justify-center gap-1 min-h-[44px] text-zinc-500 hover:text-rose-600 transition-all active:scale-90"
+          type="button"
+          onClick={() => {
+            setActivePortal('customer');
+            setIsMobileCategoriesOpen(true);
+          }}
+          className="flex flex-col items-center justify-center gap-1 min-h-[44px] text-slate-500 hover:text-orange-600 transition-all active:scale-90"
         >
-          <Play className="w-5 h-5" />
-          <span className="text-[10px] font-medium tracking-tight">Reels</span>
+          <LayoutGrid className="w-5 h-5" />
+          <span className="text-[10px] font-medium tracking-tight">Categories</span>
         </button>
 
         <button
+          type="button"
+          onClick={() => {
+            setActivePortal('customer');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            setTimeout(() => {
+              const input = document.getElementById('pb-main-search') as HTMLInputElement | null;
+              input?.focus();
+            }, 220);
+          }}
+          className="flex flex-col items-center justify-center gap-1 min-h-[44px] text-slate-500 hover:text-orange-600 transition-all active:scale-90"
+        >
+          <Search className="w-5 h-5" />
+          <span className="text-[10px] font-medium tracking-tight">Search</span>
+        </button>
+
+        <button
+          type="button"
           onClick={() => openWishlist()}
-          className="relative flex flex-col items-center justify-center gap-1 min-h-[44px] text-zinc-500 hover:text-rose-600 transition-all active:scale-90"
+          className="relative flex flex-col items-center justify-center gap-1 min-h-[44px] text-slate-500 hover:text-rose-600 transition-all active:scale-90"
         >
           <Heart className={`w-5 h-5 ${wishlist.length > 0 ? 'text-rose-600 fill-rose-600' : ''}`} />
           <span className="text-[10px] font-medium tracking-tight">Wishlist</span>
           {wishlist.length > 0 && (
-            <span className="absolute top-0 right-3.5 w-4 h-4 rounded-full bg-rose-600 text-white text-[9px] font-bold flex items-center justify-center animate-scale-up">
+            <span className="absolute top-0.5 right-3.5 w-4 h-4 rounded-full bg-rose-600 text-white text-[9px] font-bold flex items-center justify-center">
               {wishlist.length}
             </span>
           )}
         </button>
 
         <button
+          type="button"
           onClick={() => setIsCartOpen(true)}
-          className="relative flex flex-col items-center justify-center gap-1 min-h-[44px] text-zinc-500 hover:text-emerald-600 transition-all active:scale-90"
+          className="relative flex flex-col items-center justify-center gap-1 min-h-[44px] text-slate-500 hover:text-orange-600 transition-all active:scale-90"
         >
           <ShoppingBag className="w-5 h-5" />
-          <span className="text-[10px] font-medium tracking-tight">Bag</span>
+          <span className="text-[10px] font-medium tracking-tight">Cart</span>
           {cartCount > 0 && (
-            <span className="absolute top-0 right-3.5 w-4 h-4 rounded-full bg-emerald-600 text-white text-[9px] font-bold flex items-center justify-center animate-scale-up">
+            <span className="absolute top-0.5 right-3.5 w-4 h-4 rounded-full bg-orange-600 text-white text-[9px] font-bold flex items-center justify-center">
               {cartCount}
             </span>
           )}
-        </button>
-
-        <button
-          onClick={() => {
-            if (user?.isLoggedIn) {
-              setIsProfileOpen(true);
-            } else {
-              setIsAuthOpen(true);
-            }
-          }}
-          className="flex flex-col items-center justify-center gap-1 min-h-[44px] text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-all active:scale-90"
-        >
-          {user?.isLoggedIn && user.avatar ? (
-            <img
-              src={user.avatar}
-              alt="Profile"
-              className="w-5 h-5 rounded-full object-cover border border-emerald-500"
-            />
-          ) : (
-            <User className="w-5 h-5" />
-          )}
-          <span className="text-[10px] font-medium tracking-tight">
-            {user?.isLoggedIn ? 'Account' : 'Sign In'}
-          </span>
         </button>
       </nav>
     </div>

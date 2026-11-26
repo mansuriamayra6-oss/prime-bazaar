@@ -1,34 +1,47 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { useMarketplace } from '../context/MarketplaceContext';
+import {
+  useMarketplace,
+  SupportedLanguage,
+  SupportedCurrency,
+} from '../context/MarketplaceContext';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 import { filterProductsBySearch, getCategoryDisplayName } from '../utils/productSearch';
 import { api } from '../services/api';
-import { 
-  ShoppingBag, 
-  Heart, 
-  Search, 
-  Play, 
-  Camera, 
-  Package, 
-  Coins, 
-  Sun, 
-  Moon, 
-  Store, 
-  ShieldCheck, 
+import {
+  ShoppingCart,
+  Heart,
+  Search,
+  Camera,
+  Package,
+  Store,
+  ShieldCheck,
   User,
-  Sparkles,
-  Headphones,
-  SlidersHorizontal,
-  CheckCircle2,
-  Globe,
-  Database,
+  MapPin,
+  Sun,
+  Moon,
   Building2,
   Smartphone,
   Bell,
   X,
   Tag,
-  ArrowRight
+  ArrowRight,
+  Clock,
+  Sparkles,
+  ChevronDown,
+  Truck,
+  Flame,
+  SlidersHorizontal,
 } from 'lucide-react';
+
+const RECENT_SEARCHES_KEY = 'pb_recent_searches';
+const POPULAR_SEARCH_CHIPS = [
+  'Silk Kurti',
+  'Chanderi Saree',
+  'Cargo Jacket',
+  'Platform Sneakers',
+  'Kundan Choker',
+  'Vegan Tote',
+];
 
 export const Header: React.FC = () => {
   const {
@@ -38,27 +51,20 @@ export const Header: React.FC = () => {
     setSelectedProduct,
     selectedCategory,
     setSelectedCategory,
+    setDiscoveryTab,
+    categories,
+    addresses,
+    countryCode,
     formatPrice,
     cart,
     wishlist,
     openWishlist,
-    coins,
     setIsCartOpen,
-    setIsReelsOpen,
     setIsOrdersOpen,
     setIsVisualSearchOpen,
-    setIsRewardsOpen,
-    setIsSupportOpen,
-    setIsBlueprintOpen,
-    setIsArchitectureOpen,
-    setIsCompareOpen,
-    compareList,
     setIsProfileOpen,
+    setProfileActiveTab,
     setIsAuthOpen,
-    setIsOnboardingOpen,
-    setIsLiveShoppingOpen,
-    setIsLaunchChecklistOpen,
-    openSellerStore,
     openMerchantAuth,
     setIsApkModalOpen,
     priceAlerts,
@@ -69,25 +75,43 @@ export const Header: React.FC = () => {
     theme,
     toggleTheme,
     currency,
-    language
+    setCurrency,
+    language,
+    setLanguage,
+    setIsCompareOpen,
+    compareList,
   } = useMarketplace();
-
 
   const { isInstallable, isInstalled } = usePWAInstall();
   const totalCartItems = cart.reduce((sum, item) => sum + item.quantity, 0);
 
+  const [showAnnouncement, setShowAnnouncement] = useState(true);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [isUtilityOpen, setIsUtilityOpen] = useState(false);
+  const [recentSearches, setRecentSearches] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem(RECENT_SEARCHES_KEY);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [smartSuggest, setSmartSuggest] = useState<{
     correctedQuery: string | null;
     matchedCategories: Array<{ slug: string; name: string }>;
     suggestions: any[];
   } | null>(null);
+
   const searchContainerRef = useRef<HTMLDivElement>(null);
+  const utilityRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
         setIsSearchFocused(false);
+      }
+      if (utilityRef.current && !utilityRef.current.contains(event.target as Node)) {
+        setIsUtilityOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -104,7 +128,7 @@ export const Header: React.FC = () => {
     const timer = setTimeout(() => {
       api.discovery
         .searchSuggest(trimmedQuery)
-        .then((res) => {
+        .then(res => {
           if (res?.success) {
             setSmartSuggest({
               correctedQuery: res.correctedQuery || null,
@@ -118,14 +142,33 @@ export const Header: React.FC = () => {
     return () => clearTimeout(timer);
   }, [trimmedQuery, isSearchFocused]);
 
+  const recordRecentSearch = (term: string) => {
+    const clean = term.trim();
+    if (clean.length < 2) return;
+    setRecentSearches(prev => {
+      const next = [clean, ...prev.filter(t => t.toLowerCase() !== clean.toLowerCase())].slice(0, 6);
+      try {
+        localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(next));
+      } catch {
+        // ignore storage quota errors
+      }
+      return next;
+    });
+  };
+
+  const scopedProducts = useMemo(() => {
+    if (!selectedCategory || selectedCategory === 'all') return products;
+    return products.filter(p => p.category === selectedCategory);
+  }, [products, selectedCategory]);
+
   const matchedProducts = useMemo(() => {
     if (!trimmedQuery) return [];
-    const local = filterProductsBySearch(products, trimmedQuery);
+    const pool = scopedProducts.length > 0 ? scopedProducts : products;
+    const local = filterProductsBySearch(pool, trimmedQuery);
     if (local.length > 0) return local;
-    // Typo-tolerant fallback from backend suggestion IDs
     const suggestIds = new Set((smartSuggest?.suggestions || []).map((s: any) => s.id));
-    return products.filter((p) => suggestIds.has(p.id));
-  }, [products, trimmedQuery, smartSuggest]);
+    return products.filter(p => suggestIds.has(p.id));
+  }, [scopedProducts, products, trimmedQuery, smartSuggest]);
 
   const matchedCategories = useMemo(() => {
     if (!trimmedQuery) return [];
@@ -166,423 +209,666 @@ export const Header: React.FC = () => {
     setIsSearchFocused(false);
   };
 
+  const executeSearch = (overrideQuery?: string) => {
+    const term = (overrideQuery ?? searchQuery).trim();
+    if (overrideQuery !== undefined) {
+      setSearchQuery(overrideQuery);
+    }
+    if (term) {
+      recordRecentSearch(term);
+    }
+    setIsSearchFocused(false);
+    setActivePortal('customer');
+    scrollToCatalog();
+  };
+
+  const defaultAddress = addresses.find(a => a.isDefault) || addresses[0];
+  const deliveryLabel = defaultAddress
+    ? `${defaultAddress.city || 'India'} ${defaultAddress.pinCode || ''}`.trim()
+    : `${countryCode} · Delivery`;
+
   return (
-    <header className="sticky top-0 z-40 bg-white/95 dark:bg-zinc-950/95 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800 transition-colors pt-[env(safe-area-inset-top,0px)]">
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 sm:h-20 flex items-center justify-between gap-2 sm:gap-4 lg:gap-6">
-        {/* Zone 1: Brand Logo & Search Bar near Logo */}
-        <div className="flex items-center gap-2.5 sm:gap-4 flex-1 min-w-0 max-w-xl">
+    <header className="sticky top-0 z-40 bg-[#0F172A] text-white shadow-md pt-[env(safe-area-inset-top,0px)]">
+      {/* 1. Top Announcement Bar (compact single bar, dismissible) */}
+      {showAnnouncement && activePortal === 'customer' && (
+        <div className="bg-gradient-to-r from-orange-600 via-rose-600 to-orange-600 text-white text-[11px] font-medium">
+          <div className="max-w-[1440px] mx-auto px-3 sm:px-6 h-7 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-3 truncate">
+              <span className="inline-flex items-center gap-1 font-bold whitespace-nowrap">
+                <Truck className="w-3.5 h-3.5 shrink-0" />
+                <span>Free Express Delivery ₹999+</span>
+              </span>
+              <span className="hidden sm:inline text-white/75">|</span>
+              <span className="hidden sm:inline truncate">
+                Fashion-First Launch across 34 Marketplace Categories · Cashfree Verified Checkout
+              </span>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setActivePortal('customer');
+                  setDiscoveryTab('flash');
+                  scrollToCatalog();
+                }}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white/15 hover:bg-white/25 font-bold text-[10px] whitespace-nowrap transition-colors"
+              >
+                <Flame className="w-3 h-3 text-amber-200" />
+                <span>Flash Deals</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowAnnouncement(false)}
+                aria-label="Dismiss announcement"
+                className="p-0.5 rounded hover:bg-white/20 text-white/90 transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 2. Main Marketplace Header */}
+      <div className="max-w-[1440px] mx-auto px-3 sm:px-6 py-2 sm:py-2.5 flex items-center justify-between gap-2 sm:gap-3 lg:gap-4">
+        {/* Zone 1: Brand Logo + Delivery Location */}
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           <button
-            onClick={() => setActivePortal('customer')}
-            className="text-left group flex items-center focus:outline-none transition-transform active:scale-98 shrink-0"
+            type="button"
+            onClick={() => {
+              setActivePortal('customer');
+              setSelectedCategory('all');
+              setDiscoveryTab('all');
+            }}
+            className="flex items-center gap-2 rounded-lg p-1 hover:bg-white/10 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 shrink-0"
             aria-label="Prime Bazaar Home"
           >
-            <div className="h-12 sm:h-14 w-12 sm:w-14 p-1.5 rounded-2xl bg-white border border-zinc-200/90 shadow-xs flex items-center justify-center transition-all group-hover:shadow-md">
+            <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-lg bg-white p-1 flex items-center justify-center shrink-0">
               <img
                 src="/assets/aistudio/IMG_20261124_134619_98e88ce3.png"
                 alt="Prime Bazaar"
-                className="h-full w-full object-contain transition-transform group-hover:scale-105"
+                className="h-full w-full object-contain"
               />
+            </div>
+            <div className="hidden sm:flex flex-col text-left leading-none">
+              <span className="text-sm lg:text-base font-extrabold tracking-tight font-display text-white whitespace-nowrap">
+                Prime Bazaar
+              </span>
+              <span className="text-[9px] font-bold uppercase tracking-widest text-orange-400 whitespace-nowrap mt-0.5">
+                One Marketplace
+              </span>
             </div>
           </button>
 
-          {/* Search bar directly beside the logo */}
+          {/* Delivery Location Selector */}
           {activePortal === 'customer' && (
-            <div ref={searchContainerRef} className="relative flex-1 min-w-[130px] max-w-xs sm:max-w-sm md:max-w-md flex items-center">
-              <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-2.5 sm:left-3 pointer-events-none" />
-              <input
-                type="text"
-                role="searchbox"
-                aria-label="Search products by name or category"
-                placeholder="Search by product name or category..."
-                value={searchQuery}
-                onFocus={() => setIsSearchFocused(true)}
-                onChange={e => handleSearchChange(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Escape') {
-                    setIsSearchFocused(false);
-                  } else if (e.key === 'Enter' && trimmedQuery) {
-                    setIsSearchFocused(false);
-                    scrollToCatalog();
-                  }
-                }}
-                className={`w-full pl-8 sm:pl-9 ${trimmedQuery ? 'pr-14 sm:pr-16' : 'pr-7 sm:pr-9'} py-1.5 sm:py-2 text-xs bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 rounded-xl border border-zinc-200/80 dark:border-zinc-700/80 focus:border-emerald-500 dark:focus:border-emerald-500 focus:outline-none transition-all shadow-2xs font-medium placeholder:text-zinc-400`}
-              />
-              {trimmedQuery && (
+            <button
+              type="button"
+              onClick={() => {
+                setProfileActiveTab('addresses');
+                setIsProfileOpen(true);
+              }}
+              title="Choose delivery location"
+              className="hidden md:flex items-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-white/10 text-left transition-colors shrink-0 border border-transparent hover:border-slate-700"
+            >
+              <MapPin className="w-4 h-4 text-orange-400 shrink-0" />
+              <div className="leading-tight">
+                <span className="block text-[10px] text-slate-300 whitespace-nowrap">
+                  Deliver to {countryCode}
+                </span>
+                <span className="block text-xs font-bold text-white whitespace-nowrap max-w-[115px] truncate">
+                  {deliveryLabel}
+                </span>
+              </div>
+            </button>
+          )}
+        </div>
+
+        {/* Zone 2: Amazon-Style Scoped Search Bar */}
+        {activePortal === 'customer' ? (
+          <div
+            ref={searchContainerRef}
+            className="relative flex-1 min-w-0 max-w-2xl flex items-center"
+          >
+            <div className="w-full flex items-stretch rounded-lg overflow-hidden bg-white text-slate-900 shadow-sm ring-1 ring-slate-700/60 focus-within:ring-2 focus-within:ring-orange-500">
+              {/* Scoped Category Dropdown */}
+              <div className="hidden sm:flex items-center bg-slate-100 border-r border-slate-200 shrink-0">
+                <select
+                  aria-label="Search department"
+                  value={selectedCategory}
+                  onChange={e => setSelectedCategory(e.target.value)}
+                  className="h-9 sm:h-10 pl-2.5 pr-2 bg-transparent text-xs font-semibold text-slate-700 focus:outline-none cursor-pointer max-w-[128px]"
+                >
+                  <option value="all">All ({categories.length})</option>
+                  <option value="fashion">Fashion</option>
+                  {categories.map(dept => (
+                    <option key={dept.id} value={dept.id}>
+                      {dept.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Search Input */}
+              <div className="relative flex-1 flex items-center min-w-0">
+                <input
+                  id="pb-main-search"
+                  type="text"
+                  role="searchbox"
+                  aria-label="Search Prime Bazaar products, brands, and sellers"
+                  placeholder="Search silk kurtis, electronics, grocery, brands..."
+                  value={searchQuery}
+                  onFocus={() => setIsSearchFocused(true)}
+                  onChange={e => handleSearchChange(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Escape') {
+                      setIsSearchFocused(false);
+                    } else if (e.key === 'Enter') {
+                      executeSearch();
+                    }
+                  }}
+                  className="w-full h-9 sm:h-10 pl-3 pr-14 bg-white text-slate-900 text-xs sm:text-sm font-medium placeholder:text-slate-400 focus:outline-none"
+                />
+                {trimmedQuery && (
+                  <button
+                    type="button"
+                    onClick={handleClearSearch}
+                    aria-label="Clear search"
+                    className="absolute right-8 p-1 text-slate-400 hover:text-slate-700"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
                 <button
                   type="button"
-                  onClick={handleClearSearch}
-                  aria-label="Clear search"
-                  title="Clear search"
-                  className="absolute right-8 sm:right-9 p-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors"
+                  onClick={() => setIsVisualSearchOpen(true)}
+                  title="Visual product search (camera match)"
+                  aria-label="Search by image"
+                  className="absolute right-1.5 p-1.5 text-slate-500 hover:text-orange-600 transition-colors"
                 >
-                  <X className="w-3.5 h-3.5" />
+                  <Camera className="w-4 h-4" />
                 </button>
-              )}
+              </div>
+
+              {/* Vivid Orange Search Submit Button */}
               <button
                 type="button"
-                onClick={() => setIsVisualSearchOpen(true)}
-                title="Search by image (AI visual match)"
-                className="absolute right-1.5 sm:right-2.5 p-1 text-zinc-400 hover:text-emerald-600 transition-colors"
+                onClick={() => executeSearch()}
+                aria-label="Search marketplace"
+                className="px-3 sm:px-4 bg-orange-500 hover:bg-orange-600 text-white flex items-center justify-center transition-colors shrink-0"
               >
-                <Camera className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <Search className="w-4 h-4 sm:w-[18px] sm:h-[18px]" />
               </button>
+            </div>
 
-              {/* Real-Time Search Results Dropdown */}
-              {isSearchFocused && trimmedQuery.length > 0 && (
-                <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xl overflow-hidden z-50 animate-fadeIn">
-                  <div className="px-3.5 py-2 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between gap-2 bg-zinc-50/80 dark:bg-zinc-950/60">
-                    <span className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">
-                      {smartSuggest?.correctedQuery ? (
-                        <button
-                          type="button"
-                          onClick={() => setSearchQuery(smartSuggest.correctedQuery!)}
-                          className="text-left hover:underline"
-                        >
-                          Did you mean <strong className="text-emerald-600">{smartSuggest.correctedQuery}</strong>? ({matchedProducts.length})
-                        </button>
-                      ) : (
-                        `${matchedProducts.length} ${matchedProducts.length === 1 ? 'product' : 'products'} found`
-                      )}
-                    </span>
-                    {selectedCategory !== 'all' && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedCategory('all');
-                          scrollToCatalog();
-                        }}
-                        className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline"
-                      >
-                        Search all categories
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Matching Category Chips */}
-                  {matchedCategories.length > 0 && (
-                    <div className="px-3.5 py-2.5 border-b border-zinc-100 dark:border-zinc-800">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1.5">
-                        Matching Categories
-                      </p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {matchedCategories.map(cat => (
+            {/* Live Search Dropdown: Suggestions, Popular & Recent Searches */}
+            {isSearchFocused && (
+              <div className="absolute top-full left-0 right-0 mt-1.5 bg-white dark:bg-zinc-900 text-slate-900 dark:text-zinc-100 rounded-xl border border-slate-200 dark:border-zinc-700 shadow-2xl overflow-hidden z-50 animate-fadeIn">
+                {trimmedQuery.length === 0 ? (
+                  <div className="p-3.5 space-y-3">
+                    {recentSearches.length > 0 && (
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            <span>Recent Searches</span>
+                          </span>
                           <button
-                            key={cat.id}
                             type="button"
                             onClick={() => {
-                              setSelectedCategory(cat.id);
-                              setSearchQuery('');
-                              setIsSearchFocused(false);
-                              scrollToCatalog();
+                              setRecentSearches([]);
+                              localStorage.removeItem(RECENT_SEARCHES_KEY);
                             }}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/80 text-[11px] font-semibold hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition-colors"
+                            className="text-[11px] text-orange-600 font-semibold hover:underline"
                           >
-                            <Tag className="w-3 h-3" />
-                            <span>{cat.label}</span>
-                            <span className="text-[10px] opacity-75">({cat.count})</span>
+                            Clear
+                          </button>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {recentSearches.map(term => (
+                            <button
+                              key={term}
+                              type="button"
+                              onClick={() => executeSearch(term)}
+                              className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-zinc-800 hover:bg-orange-50 dark:hover:bg-orange-950/30 text-xs font-medium text-slate-700 dark:text-zinc-200"
+                            >
+                              {term}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div>
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1 mb-1.5">
+                        <Sparkles className="w-3 h-3 text-orange-500" />
+                        <span>Popular Searches</span>
+                      </span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {POPULAR_SEARCH_CHIPS.map(term => (
+                          <button
+                            key={term}
+                            type="button"
+                            onClick={() => executeSearch(term)}
+                            className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-zinc-700 hover:border-orange-500 text-xs font-medium text-slate-700 dark:text-zinc-200 transition-colors"
+                          >
+                            {term}
                           </button>
                         ))}
                       </div>
                     </div>
-                  )}
-
-                  {/* Real-time Filtered Product Matches */}
-                  {matchedProducts.length > 0 ? (
-                    <div className="max-h-72 overflow-y-auto divide-y divide-zinc-100 dark:divide-zinc-800">
-                      {matchedProducts.slice(0, 6).map(product => (
+                  </div>
+                ) : (
+                  <>
+                    <div className="px-3.5 py-2 border-b border-slate-100 dark:border-zinc-800 flex items-center justify-between gap-2 bg-slate-50 dark:bg-zinc-950/60">
+                      <span className="text-[11px] font-semibold text-slate-600 dark:text-zinc-300">
+                        {smartSuggest?.correctedQuery ? (
+                          <button
+                            type="button"
+                            onClick={() => setSearchQuery(smartSuggest.correctedQuery!)}
+                            className="text-left hover:underline"
+                          >
+                            Did you mean{' '}
+                            <strong className="text-orange-600">{smartSuggest.correctedQuery}</strong>? (
+                            {matchedProducts.length})
+                          </button>
+                        ) : (
+                          `${matchedProducts.length} ${matchedProducts.length === 1 ? 'product' : 'products'} found`
+                        )}
+                      </span>
+                      {selectedCategory !== 'all' && (
                         <button
-                          key={product.id}
                           type="button"
                           onClick={() => {
-                            setSelectedProduct(product);
-                            setIsSearchFocused(false);
+                            setSelectedCategory('all');
+                            scrollToCatalog();
                           }}
-                          className="w-full px-3.5 py-2.5 flex items-center gap-3 text-left hover:bg-zinc-50 dark:hover:bg-zinc-800/70 transition-colors"
+                          className="text-[11px] font-bold text-orange-600 hover:underline"
                         >
-                          <img
-                            src={product.images[0]}
-                            alt={product.title}
-                            className="w-10 h-10 rounded-lg object-cover bg-zinc-100 dark:bg-zinc-800 shrink-0"
-                          />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 truncate">
-                              {product.title}
-                            </p>
-                            <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-zinc-500 dark:text-zinc-400">
-                              <span className="px-1.5 py-0.2 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 font-medium">
-                                {getCategoryDisplayName(product.category)}
-                              </span>
-                              <span className="truncate">{product.brand}</span>
-                            </div>
-                          </div>
-                          <span className="text-xs font-bold text-zinc-900 dark:text-white shrink-0">
-                            {formatPrice(product.price)}
-                          </span>
+                          Search all 34 categories
                         </button>
-                      ))}
+                      )}
                     </div>
-                  ) : (
-                    <div className="px-4 py-6 text-center">
-                      <p className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-                        No products matching &ldquo;{trimmedQuery}&rdquo;
-                      </p>
+
+                    {matchedCategories.length > 0 && (
+                      <div className="px-3.5 py-2 border-b border-slate-100 dark:border-zinc-800">
+                        <div className="flex flex-wrap gap-1.5">
+                          {matchedCategories.map(cat => (
+                            <button
+                              key={cat.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedCategory(cat.id);
+                                setSearchQuery('');
+                                setIsSearchFocused(false);
+                                scrollToCatalog();
+                              }}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-orange-50 dark:bg-orange-950/40 text-orange-700 dark:text-orange-300 border border-orange-200 dark:border-orange-800 text-[11px] font-semibold"
+                            >
+                              <Tag className="w-3 h-3" />
+                              <span>{cat.label}</span>
+                              <span className="text-[10px] opacity-75">({cat.count})</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {matchedProducts.length > 0 ? (
+                      <div className="max-h-72 overflow-y-auto divide-y divide-slate-100 dark:divide-zinc-800">
+                        {matchedProducts.slice(0, 6).map(product => (
+                          <button
+                            key={product.id}
+                            type="button"
+                            onClick={() => {
+                              recordRecentSearch(product.title);
+                              setSelectedProduct(product);
+                              setIsSearchFocused(false);
+                            }}
+                            className="w-full px-3.5 py-2.5 flex items-center gap-3 text-left hover:bg-slate-50 dark:hover:bg-zinc-800/70 transition-colors"
+                          >
+                            <img
+                              src={product.images[0]}
+                              alt={product.title}
+                              className="w-10 h-10 rounded-md object-cover bg-slate-100 shrink-0"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-semibold text-slate-900 dark:text-zinc-100 truncate">
+                                {product.title}
+                              </p>
+                              <p className="text-[11px] text-slate-500 dark:text-zinc-400 truncate">
+                                {getCategoryDisplayName(product.category)} · {product.brand} · {product.sellerName}
+                              </p>
+                            </div>
+                            <span className="text-xs font-bold text-slate-900 dark:text-white font-mono tabular-nums shrink-0">
+                              {formatPrice(product.price)}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="px-4 py-5 text-center">
+                        <p className="text-xs font-semibold text-slate-700 dark:text-zinc-300">
+                          No products matching &ldquo;{trimmedQuery}&rdquo;
+                        </p>
+                        <button
+                          type="button"
+                          onClick={handleClearSearch}
+                          className="mt-2 px-3 py-1 rounded-md bg-slate-100 dark:bg-zinc-800 text-[11px] font-semibold"
+                        >
+                          Reset search
+                        </button>
+                      </div>
+                    )}
+
+                    {matchedProducts.length > 0 && (
                       <button
                         type="button"
-                        onClick={handleClearSearch}
-                        className="mt-2 inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-[11px] font-semibold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+                        onClick={() => executeSearch()}
+                        className="w-full px-3.5 py-2 bg-slate-50 dark:bg-zinc-950/70 border-t border-slate-100 dark:border-zinc-800 text-[11px] font-bold text-orange-600 flex items-center justify-center gap-1"
                       >
-                        Reset search
+                        <span>View all {matchedProducts.length} search results</span>
+                        <ArrowRight className="w-3 h-3" />
                       </button>
-                    </div>
-                  )}
-
-                  {matchedProducts.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsSearchFocused(false);
-                        scrollToCatalog();
-                      }}
-                      className="w-full px-3.5 py-2 bg-zinc-50 dark:bg-zinc-950/70 border-t border-zinc-100 dark:border-zinc-800 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50/70 dark:hover:bg-emerald-950/30 flex items-center justify-center gap-1 transition-colors"
-                    >
-                      <span>View all {matchedProducts.length} matching products</span>
-                      <ArrowRight className="w-3 h-3" />
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Zone 2: Navigation Links (adaptive for tablet and PC) */}
-        <nav className="hidden lg:flex items-center gap-3 xl:gap-4 text-xs font-semibold text-zinc-600 dark:text-zinc-300">
-          <button
-            onClick={() => setActivePortal('customer')}
-            className={`whitespace-nowrap transition-colors hover:text-rose-600 ${
-              activePortal === 'customer' ? 'text-rose-600 font-bold' : ''
-            }`}
-          >
-            Discover
-          </button>
-          <button
-            onClick={() => setIsLiveShoppingOpen(true)}
-            className="flex items-center gap-1.5 whitespace-nowrap transition-colors text-rose-600 font-bold hover:text-rose-700"
-          >
-            <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>
-            <span>Live</span>
-          </button>
-          <button
-            onClick={() => openSellerStore('seller-1')}
-            className="flex items-center gap-1.5 whitespace-nowrap transition-colors hover:text-emerald-600"
-          >
-            <Store className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Stores</span>
-          </button>
-          <button
-            onClick={() => setIsReelsOpen(true)}
-            className="flex items-center gap-1.5 whitespace-nowrap transition-colors hover:text-rose-600"
-          >
-            <Play className="w-3.5 h-3.5 fill-current" />
-            <span>Reels</span>
-          </button>
-
-          <button
-            onClick={() => setIsCompareOpen(true)}
-            className="hidden xl:flex items-center gap-1.5 whitespace-nowrap transition-colors hover:text-indigo-600"
-            title="Side-by-Side Product Comparison"
-          >
-            <SlidersHorizontal className="w-3.5 h-3.5" />
-            <span>Compare ({compareList.length})</span>
-          </button>
-          <button
-            onClick={() => setIsRewardsOpen(true)}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800 text-xs font-bold whitespace-nowrap hover:bg-amber-100 transition-colors"
-            title="Deals, Games & Rewards Hub (Spin the Wheel, Scratch Card, Flash Sale)"
-          >
-            <Coins className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
-            <span className="hidden md:inline">Deals & Games</span>
-            <span className="md:hidden">Deals</span>
-            <span className="px-1.5 py-0.2 rounded-full bg-amber-500 text-white text-[10px] font-mono">
-              {coins}
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex-1 flex items-center gap-3 px-2">
+            <span className="text-xs font-semibold text-slate-300">
+              {activePortal === 'seller' ? 'Seller Central Dashboard' : 'Marketplace Admin Console'}
             </span>
-          </button>
-          <button
-            onClick={() => setIsOrdersOpen(true)}
-            className="flex items-center gap-1.5 whitespace-nowrap transition-colors hover:text-zinc-900 dark:hover:text-white"
-          >
-            <Package className="w-3.5 h-3.5" />
-            <span className="hidden xl:inline">Track Orders</span>
-            <span className="xl:hidden">Orders</span>
-          </button>
+            <button
+              type="button"
+              onClick={() => setActivePortal('customer')}
+              className="px-3 py-1.5 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold whitespace-nowrap"
+            >
+              Back to Shopping
+            </button>
+          </div>
+        )}
 
-          <button
-            onClick={() => setIsLaunchChecklistOpen(true)}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 font-mono text-[10px] font-bold border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 transition-colors"
-            title="Section 12: 20/20 Acceptance Verification"
-          >
-            <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-            <span>20/20</span>
-          </button>
-        </nav>
+        {/* Zone 3: Language, Currency, Account, Returns & Orders, Wishlist, Cart & Portals */}
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+          {/* Language & Currency Selectors */}
+          <div className="hidden xl:flex items-center gap-1 bg-slate-800/90 border border-slate-700 rounded-lg px-2 py-1 text-[11px] font-semibold">
+            <select
+              aria-label="Language"
+              value={language}
+              onChange={e => setLanguage(e.target.value as SupportedLanguage)}
+              className="bg-transparent text-white focus:outline-none cursor-pointer uppercase"
+            >
+              <option value="en" className="bg-slate-900">EN</option>
+              <option value="hi" className="bg-slate-900">HI</option>
+              <option value="mr" className="bg-slate-900">MR</option>
+              <option value="ta" className="bg-slate-900">TA</option>
+            </select>
+            <span className="text-slate-600">|</span>
+            <select
+              aria-label="Currency"
+              value={currency}
+              onChange={e => setCurrency(e.target.value as SupportedCurrency)}
+              className="bg-transparent text-orange-300 focus:outline-none cursor-pointer uppercase font-mono"
+            >
+              <option value="INR" className="bg-slate-900">INR ₹</option>
+              <option value="USD" className="bg-slate-900">USD $</option>
+              <option value="EUR" className="bg-slate-900">EUR €</option>
+              <option value="GBP" className="bg-slate-900">GBP £</option>
+              <option value="AED" className="bg-slate-900">AED</option>
+              <option value="SGD" className="bg-slate-900">SGD</option>
+            </select>
+          </div>
 
-        {/* Zone 3: Bag, Wishlist, Profile, Portals */}
-        <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
-
-          {/* Download Apps Tab Icon (always visible across phone, tablet, PC) */}
+          {/* Account / Sign In */}
           <button
-            onClick={() => setIsApkModalOpen(true)}
-            title={
-              isInstalled
-                ? 'Prime Bazaar App Installed'
-                : isInstallable
-                ? '1-Tap Download & Install Prime Bazaar App'
-                : 'Download Apps — Install Prime Bazaar App'
-            }
-            aria-label="Download Apps"
-            className="relative flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs font-bold transition-all active:scale-95 shrink-0"
-          >
-            <Smartphone className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-            <span className="hidden sm:inline">{isInstalled ? 'App Active' : 'Download Apps'}</span>
-            <span className="sm:hidden text-[11px]">{isInstalled ? 'App' : 'Apps'}</span>
-            {!isInstalled && isInstallable && (
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" aria-hidden="true" />
-            )}
-          </button>
-
-          {/* Price-Drop Alerts Bell */}
-          <button
-            onClick={() => openWishlist()}
-            title={`Price-Drop Alerts (${unreadPriceDropCount} new, ${priceAlerts.filter(a => a.status === 'ACTIVE').length} watching)`}
-            aria-label="Price-Drop Notifications"
-            className="relative p-2 text-zinc-600 dark:text-zinc-300 hover:text-amber-600 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors shrink-0"
-          >
-            <Bell className={`w-4 h-4 ${unreadPriceDropCount > 0 ? 'text-amber-500 fill-amber-500 animate-bounce' : priceAlerts.length > 0 ? 'text-amber-500' : ''}`} />
-            {unreadPriceDropCount > 0 ? (
-              <span className="absolute top-1 right-1 w-4 h-4 rounded-full bg-amber-500 text-white text-[10px] font-bold flex items-center justify-center animate-scale-up">
-                {unreadPriceDropCount}
-              </span>
-            ) : priceAlerts.some(a => a.status === 'ACTIVE') ? (
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-emerald-500"></span>
-            ) : null}
-          </button>
-
-          {/* Wishlist count (visible on tablet and PC; docked in bottom bar on phone) */}
-          <button
-            onClick={() => openWishlist()}
-            title="View Saved Wishlist"
-            aria-label={`Wishlist (${wishlist.length} saved)`}
-            className="hidden sm:flex relative p-2 text-zinc-600 dark:text-zinc-300 hover:text-rose-600 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-          >
-            <Heart className={`w-4 h-4 ${wishlist.length > 0 ? 'text-rose-600' : ''}`} />
-            {wishlist.length > 0 && (
-              <span className="absolute top-1 right-1 w-4 h-4 rounded-full bg-rose-600 text-white text-[10px] font-bold flex items-center justify-center animate-scale-up">
-                {wishlist.length}
-              </span>
-            )}
-          </button>
-
-          {/* Shopping Bag Drawer Trigger */}
-          <button
-            onClick={() => setIsCartOpen(true)}
-            className="relative flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-lg bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 font-medium text-xs hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-colors shrink-0"
-          >
-            <ShoppingBag className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Bag</span>
-            {totalCartItems > 0 && (
-              <span className="px-1.5 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-bold leading-none">
-                {totalCartItems}
-              </span>
-            )}
-          </button>
-
-          {/* User Account / Profile Button (visible on tablet/PC; phone has bottom tab) */}
-          <button
+            type="button"
             onClick={() => {
               if (user?.isLoggedIn) {
+                setProfileActiveTab('details');
                 setIsProfileOpen(true);
               } else {
                 setIsAuthOpen(true);
               }
             }}
-            title={user?.isLoggedIn ? `Account (${user.name})` : 'Sign In'}
-            className="hidden sm:flex items-center gap-1.5 p-1.5 sm:px-2.5 sm:py-1 rounded-lg border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-xs font-semibold text-zinc-700 dark:text-zinc-200"
+            className="hidden sm:flex flex-col text-left px-2 py-1 rounded-lg hover:bg-white/10 transition-colors shrink-0"
           >
-            {user?.isLoggedIn && user.avatar ? (
-              <img
-                src={user.avatar}
-                alt={user.name}
-                className="w-4 h-4 rounded-full object-cover"
-              />
-            ) : (
-              <User className="w-4 h-4 text-zinc-600 dark:text-zinc-300" />
-            )}
-            <span className="hidden md:inline">
-              {user?.isLoggedIn ? user.name.split(' ')[0] : 'Sign In'}
+            <span className="text-[10px] text-slate-300 leading-none whitespace-nowrap">
+              {user?.isLoggedIn ? `Hello, ${user.name.split(' ')[0]}` : 'Hello, Sign in'}
+            </span>
+            <span className="text-xs font-bold text-white flex items-center gap-0.5 whitespace-nowrap mt-0.5">
+              <span>Account</span>
+              <ChevronDown className="w-3 h-3 text-slate-400" />
             </span>
           </button>
 
-          {/* Merchant Partner Login / Sign Up Button */}
+          {/* Returns & Orders */}
           <button
-            onClick={() => openMerchantAuth('login')}
-            className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-xs active:scale-95 transition-all shrink-0"
-            title="Merchant Partner - Login or Register as Seller"
+            type="button"
+            onClick={() => setIsOrdersOpen(true)}
+            className="hidden lg:flex flex-col text-left px-2 py-1 rounded-lg hover:bg-white/10 transition-colors shrink-0"
           >
-            <Building2 className="w-3.5 h-3.5 shrink-0" />
-            <span className="hidden md:inline">Merchant Partner</span>
-            <span className="hidden sm:inline md:hidden">Partner</span>
-            <span className="sm:hidden text-[11px]">Partner</span>
+            <span className="text-[10px] text-slate-300 leading-none whitespace-nowrap">
+              Returns
+            </span>
+            <span className="text-xs font-bold text-white flex items-center gap-1 whitespace-nowrap mt-0.5">
+              <Package className="w-3.5 h-3.5 text-orange-400" />
+              <span>&amp; Orders</span>
+            </span>
           </button>
 
-          {/* Theme Switcher */}
+          {/* Price-Drop Notifications */}
           <button
-            onClick={toggleTheme}
-            title={theme === 'dark' ? 'Switch to Light' : 'Switch to Dark'}
-            className="p-1.5 sm:p-2 text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+            type="button"
+            onClick={() => openWishlist()}
+            title={`Price alerts (${unreadPriceDropCount} new)`}
+            aria-label="Price notifications"
+            className="hidden md:flex relative p-2 rounded-lg hover:bg-white/10 text-slate-200 transition-colors shrink-0"
           >
-            {theme === 'dark' ? <Sun className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <Moon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
+            <Bell className={`w-4 h-4 ${unreadPriceDropCount > 0 ? 'text-orange-400 animate-bounce' : ''}`} />
+            {(unreadPriceDropCount > 0 || priceAlerts.some(a => a.status === 'ACTIVE')) && (
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-orange-500" />
+            )}
           </button>
 
-          {/* Portal Switcher (visible on tablet and PC) */}
-          <div className="hidden sm:block relative border-l border-zinc-200 dark:border-zinc-800 pl-2 sm:pl-3">
-            <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-800 p-1 rounded-lg">
-              <button
-                onClick={() => setActivePortal('customer')}
-                className={`px-2 py-1 text-xs font-medium rounded-md transition-all flex items-center gap-1 ${
-                  activePortal === 'customer'
-                    ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-xs font-semibold'
-                    : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900'
-                }`}
-                title="Customer Storefront"
-              >
-                <User className="w-3 h-3" />
-                <span className="hidden md:inline">Shop</span>
-              </button>
-              <button
-                onClick={() => setActivePortal('seller')}
-                className={`px-2 py-1 text-xs font-medium rounded-md transition-all flex items-center gap-1 ${
-                  activePortal === 'seller'
-                    ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-xs font-semibold text-rose-600 dark:text-rose-400'
-                    : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900'
-                }`}
-                title="Seller Studio"
-              >
-                <Store className="w-3 h-3" />
-                <span className="hidden md:inline">Seller</span>
-              </button>
-              <button
-                onClick={() => setActivePortal('admin')}
-                className={`px-2 py-1 text-xs font-medium rounded-md transition-all flex items-center gap-1 ${
-                  activePortal === 'admin'
-                    ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-xs font-semibold text-indigo-600 dark:text-indigo-400'
-                    : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900'
-                }`}
-                title="Admin Control Center"
-              >
-                <ShieldCheck className="w-3 h-3" />
-                <span className="hidden md:inline">Admin</span>
-              </button>
-            </div>
+          {/* Wishlist Icon */}
+          <button
+            type="button"
+            onClick={() => openWishlist()}
+            aria-label={`Wishlist (${wishlist.length})`}
+            title="Wishlist"
+            className="hidden sm:flex relative p-2 rounded-lg hover:bg-white/10 text-slate-200 transition-colors shrink-0"
+          >
+            <Heart className={`w-4 h-4 sm:w-[18px] sm:h-[18px] ${wishlist.length > 0 ? 'text-rose-400 fill-rose-400' : ''}`} />
+            {wishlist.length > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center tabular-nums">
+                {wishlist.length}
+              </span>
+            )}
+          </button>
+
+          {/* Shopping Cart */}
+          <button
+            type="button"
+            onClick={() => setIsCartOpen(true)}
+            aria-label={`Cart (${totalCartItems} items)`}
+            className="relative flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white font-bold text-xs transition-colors shrink-0"
+          >
+            <ShoppingCart className="w-4 h-4 text-orange-400 shrink-0" />
+            <span className="hidden sm:inline">Cart</span>
+            <span className="px-1.5 py-0.5 rounded-full bg-orange-500 text-white text-[10px] font-extrabold leading-none tabular-nums">
+              {totalCartItems}
+            </span>
+          </button>
+
+          {/* Portals / App / Theme Utility Menu */}
+          <div ref={utilityRef} className="relative shrink-0">
+            <button
+              type="button"
+              onClick={() => setIsUtilityOpen(prev => !prev)}
+              aria-expanded={isUtilityOpen}
+              aria-label="Portals, settings, and app menu"
+              className="flex items-center gap-1 px-2 py-1.5 sm:py-2 rounded-lg hover:bg-white/10 text-xs font-semibold text-slate-200 border border-slate-700/80 transition-colors"
+            >
+              <Store className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span className="hidden md:inline whitespace-nowrap">
+                {activePortal === 'seller' ? 'Seller' : activePortal === 'admin' ? 'Admin' : 'More'}
+              </span>
+              <ChevronDown className="w-3 h-3 text-slate-400 shrink-0" />
+            </button>
+
+            {isUtilityOpen && (
+              <div className="absolute right-0 top-full mt-2 w-64 rounded-xl bg-white dark:bg-zinc-900 text-slate-900 dark:text-zinc-100 border border-slate-200 dark:border-zinc-700 shadow-2xl p-2 z-50 space-y-1 text-xs animate-fadeIn">
+                <p className="px-2.5 pt-1 pb-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Switch Portal
+                </p>
+                <div className="grid grid-cols-3 gap-1 p-1 bg-slate-100 dark:bg-zinc-800 rounded-lg">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActivePortal('customer');
+                      setIsUtilityOpen(false);
+                    }}
+                    className={`py-1.5 rounded-md font-semibold flex items-center justify-center gap-1 ${
+                      activePortal === 'customer'
+                        ? 'bg-white dark:bg-zinc-700 text-slate-900 dark:text-white shadow-xs'
+                        : 'text-slate-500'
+                    }`}
+                  >
+                    <User className="w-3 h-3" />
+                    <span>Shop</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActivePortal('seller');
+                      setIsUtilityOpen(false);
+                    }}
+                    className={`py-1.5 rounded-md font-semibold flex items-center justify-center gap-1 ${
+                      activePortal === 'seller'
+                        ? 'bg-white dark:bg-zinc-700 text-orange-600 shadow-xs'
+                        : 'text-slate-500'
+                    }`}
+                  >
+                    <Store className="w-3 h-3" />
+                    <span>Seller</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActivePortal('admin');
+                      setIsUtilityOpen(false);
+                    }}
+                    className={`py-1.5 rounded-md font-semibold flex items-center justify-center gap-1 ${
+                      activePortal === 'admin'
+                        ? 'bg-white dark:bg-zinc-700 text-indigo-600 shadow-xs'
+                        : 'text-slate-500'
+                    }`}
+                  >
+                    <ShieldCheck className="w-3 h-3" />
+                    <span>Admin</span>
+                  </button>
+                </div>
+
+                <div className="xl:hidden pt-1 border-t border-slate-100 dark:border-zinc-800 flex items-center gap-2 px-2 py-1.5">
+                  <select
+                    aria-label="Mobile language"
+                    value={language}
+                    onChange={e => setLanguage(e.target.value as SupportedLanguage)}
+                    className="flex-1 bg-slate-100 dark:bg-zinc-800 rounded px-2 py-1 text-xs font-semibold"
+                  >
+                    <option value="en">English (EN)</option>
+                    <option value="hi">Hindi (HI)</option>
+                    <option value="mr">Marathi (MR)</option>
+                    <option value="ta">Tamil (TA)</option>
+                  </select>
+                  <select
+                    aria-label="Mobile currency"
+                    value={currency}
+                    onChange={e => setCurrency(e.target.value as SupportedCurrency)}
+                    className="flex-1 bg-slate-100 dark:bg-zinc-800 rounded px-2 py-1 text-xs font-semibold"
+                  >
+                    <option value="INR">INR ₹</option>
+                    <option value="USD">USD $</option>
+                    <option value="EUR">EUR €</option>
+                    <option value="GBP">GBP £</option>
+                    <option value="AED">AED</option>
+                    <option value="SGD">SGD</option>
+                  </select>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    openMerchantAuth('login');
+                    setIsUtilityOpen(false);
+                  }}
+                  className="w-full px-2.5 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 flex items-center gap-2 font-semibold text-emerald-700 dark:text-emerald-400"
+                >
+                  <Building2 className="w-4 h-4" />
+                  <span>Merchant Partner Login / Sign Up</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsOrdersOpen(true);
+                    setIsUtilityOpen(false);
+                  }}
+                  className="w-full px-2.5 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 flex items-center gap-2 font-medium"
+                >
+                  <Package className="w-4 h-4 text-slate-500" />
+                  <span>Returns &amp; Track Orders</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsCompareOpen(true);
+                    setIsUtilityOpen(false);
+                  }}
+                  className="w-full px-2.5 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 flex items-center gap-2 font-medium"
+                >
+                  <SlidersHorizontal className="w-4 h-4 text-slate-500" />
+                  <span>Compare Products ({compareList.length})</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsApkModalOpen(true);
+                    setIsUtilityOpen(false);
+                  }}
+                  className="w-full px-2.5 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 flex items-center justify-between font-medium"
+                >
+                  <span className="flex items-center gap-2">
+                    <Smartphone className="w-4 h-4 text-slate-500" />
+                    <span>{isInstalled ? 'Prime Bazaar App Active' : 'Get Mobile App'}</span>
+                  </span>
+                  {!isInstalled && isInstallable && (
+                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    toggleTheme();
+                    setIsUtilityOpen(false);
+                  }}
+                  className="w-full px-2.5 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 flex items-center gap-2 font-medium"
+                >
+                  {theme === 'dark' ? (
+                    <Sun className="w-4 h-4 text-amber-500" />
+                  ) : (
+                    <Moon className="w-4 h-4 text-slate-500" />
+                  )}
+                  <span>{theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>

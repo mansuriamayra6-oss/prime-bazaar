@@ -1,0 +1,705 @@
+# **Prime Bazaar — Temu + Amazon Style Website Interface Layout**
+
+My recommendation is to combine **Amazon's professional marketplace structure** with **Temu's visual product discovery, deals and promotional shopping experience**.
+
+The goal is to make Prime Bazaar look like a large, modern international marketplace, with Fashion as the main category and all 34 categories accessible.
+
+# **1. Homepage layout**
+
+[Best Website Menu Design Inspiration](https://images.openai.com/static-rsc-4/7DgZmS5ClwSpceDi-eOqewy_C5XwkgDTvMH17NJQN6BuziEVlcc1K9ulcSJSAw_2bHfc16kWP2iKuYsg_u0RkIbmRASAehEawCJ1KfjYkk59KQR8EqVnt67pjxYUv1fxZFxBvDYimwJ6P_N34OcQc35q8qd4S_-qBDvPfg6BfDk?purpose=inline)
+
+[How TikTok, Shein and Temu Are Changing the Look of E-Commerce | BoF](https://images.openai.com/static-rsc-4/4jXQdGhgcs7fRSHkx0VbR8Ln7shBoN1RlBcvd745Cv05b6tFGRWBU3esIssOY728V0oVGrZvpGg5SW1bEKtFMeD4f4lnzY7YfWu0X6VMkWUzuOuxZiCqRhXrEVoLdf91qg07ORqtdAkB8wm2_-BArvEFUWSxUpajj8M6Esq1aQk?purpose=inline)
+
+[Jumia-Inspired Marketplace — built with AI on Blink](https://images.openai.com/static-rsc-4/OYpM1BfKa1dduX_fwuqXndXW8bvNZsHIDvzdnBn6lSp5FIr4Dq3su1F2HU-Bzu673k5Kkq0EYtCFqTrwWqnHEoEvhxPeSLARR43U_LwifXemhK4Hn9y7QWtsygA_cG7spM3OvNe9wmtbpPYvDEScz7dYPgX9SctSuAJ88fqa2vU?purpose=inline)
+
+15
+
+| No. | Homepage section       | Layout and features                                          |
+| --- | ---------------------- | ------------------------------------------------------------ |
+| 1   | Top announcement bar   | Free shipping, special offers, delivery announcements        |
+| 2   | Main header            | Prime Bazaar logo, location, search, account, orders, cart   |
+| 3   | Search bar             | Search products, brands, categories and sellers              |
+| 4   | Main navigation        | All Categories, Fashion, Electronics, Grocery, Home, Beauty  |
+| 5   | Mega menu              | Large dropdown with categories and subcategories             |
+| 6   | Hero banner            | Large promotional slider and campaign images                 |
+| 7   | Flash deals            | Countdown timer, discounts and limited-time offers           |
+| 8   | Category shortcuts     | Round icons or image tiles for popular categories            |
+| 9   | Today's deals          | Discounted products with percentage-off labels               |
+| 10  | Recommended for you    | Personalized product recommendations                         |
+| 11  | Best sellers           | Popular products and trending items                          |
+| 12  | Fashion collection     | Men's, women's, kids' fashion and accessories                |
+| 13  | Electronics collection | Phones, computers, accessories and gadgets                   |
+| 14  | New arrivals           | Recently added products                                      |
+| 15  | Top-rated products     | Customer ratings and reviews                                 |
+| 16  | Multi-seller offers    | Compare different sellers for the same product               |
+| 17  | Sponsored products     | Clearly labelled paid product placements                     |
+| 18  | Brand collection       | Popular brands and official stores                           |
+| 19  | Recently viewed        | Products previously visited                                  |
+| 20  | Footer                 | About, customer service, policies, payments and social media |
+
+# **2. Header and navigation layout**
+
+[What are Brand Guidelines? — updated 2026 | IxDF](https://images.openai.com/static-rsc-4/dHCZPQJLSdrntdViEN_68u0KGbeFLr2Ltc0X93B54dvbdOVYNc1WSUUbZfrLkLMZfSzRiHyclXiG8Q2G5Ol__IvwAyFiWNKFSb5zYkhvW7LRFFhpfND-xblmw-71d8C4cHKOWJ0NmF7Wyz-gupriXkJB7OCmi4pFt5KZ-FH9HpI?purpose=inline)
+
+[Come fare acquisti su Temu in Italia - FASTWEBPLUS](https://images.openai.com/static-rsc-4/lMUWxYmXW88v5dE4XKf71WI6le8fDjvBDTOltF39UKxdSQImWFnJBeUxT9o6PTvfEybKfmDkCrUqYHOLTzr-9awxIH5h2QWMnFwfxqo2WLGo2wltrQjr8P7xMY9b7f0W4f_DMYdcltOLGl9UWMcSypP4yllfnZMnW7lfFsvIyRM?purpose=inline)
+
+[Case Study | Scalable E-commerce Platform for Long-Term Growth & High Performance | Evinent](https://images.openai.com/static-rsc-4/uJI4-ActYhuKxiQCdHGW-owHcmRA5XYo8esNUg8yN6MJni-mFG_tpZ1VDEi7uhXZVyyAQ9Aigmjvv6CP-Xt9nsdktPRvh360mxAr-KVDyXXZAHgOiENRPWNlwNRzlMuDvcuoktwSaYlsBu4ryfwwsuWlks1Xm68ITQw7-3mo7WI?purpose=inline)
+
+[How to Optimize Amazon Listings for SEO (2025) - Emplicit](https://images.openai.com/static-rsc-4/wH9qIDCllnlneeyBG23sqnuLBRzgW6knZEtphTPOSo1HjUCh5SU2jfBHQHYk8ZxTQHyY4uUf1PW2ofAg9h46o75It8XAX-xyZWXIeIH8nL_MA3grc3lxUQr6_BJssxol7r6D_VnInzPAYRqQUHDtSy4sozZHwtNx-zJStCjzqM0?purpose=inline)
+
+[Running a test purchase on Temu](https://images.openai.com/static-rsc-4/K8DneGri2qMb6HXenimJgE0gqw3LkpRJlHNx8xCzvYxfsAAV1-AqEK5hf_7TIPVperJLyj8BSZTJjJtgQDVYepWDD8i2ADS6FPti_AblzWzoq6pk3hjnWjnWh4VazRftHcoXjYq41Qk3MKd1XEXfpM-56lS-xgO-znTxM02_G3Q?purpose=inline)
+
+[Create a marketplace category menu - Need help - Bubble Forum](https://images.openai.com/static-rsc-4/Cb2tiVcdOawoADVbfpHYRda44qYm4JNFrr_xYFT4XuP_8Vr7MY4AgLos28oa2-gAmfChhkQwPWqvcdWGF5Go8p7d0TZoVCnOA7UB6xfDqF3pVo1-m2xndWrS8MpUJcqrwjzrqs9jKFjCFCHXltAi90NheGzXTJv0XnVC30swtsc?purpose=inline)
+
+[Gadgetby - E Commerce Website & App UX UI Design in UAE](https://images.openai.com/static-rsc-4/ohh8CUM20tR2o-6jrvmqglAlMaRocLKfaOTm1XShVSyo_5fXXtue5yUXNHEvUxkl7lxsxur4Jjp8uPmsKIg9xoh5WhpXAXrLOJLNzhp4YKOY1pQHqL8_SuDoWLdbH6mPT5DrBHLhZj67Zz1T_AKX2zfYU5ITSfVaAdfuyWgTPWY?purpose=inline)
+
+[E-commerce template - UI/UX :: Behance](https://images.openai.com/static-rsc-4/_VpA9ou3eZ_DN8AeYWuLjR-fG1SGraPt6HD9Ztjhbe5jkybn9JfDhrLVNIfmYOD_HZM-aQWlOLxtYdEWS89Iic-LkWnT6hjaM3gV7EsHF304cNkXH6O4tAu-YNbYoaG9YwZA-ZuFaQs-zwLkidwfz-pBoW26U33fwpXXstg0pJU?purpose=inline)
+
+[Temu in Position to Take US Online Shopping by Storm - Pandaily](https://images.openai.com/static-rsc-4/SwiVqmQJ7sZxdmk2amIn1nleeaW9qMkQJ4ltMxWK-He-TJhn5UxkNoPMF1ozE4NzMv793n29wIENx7IVcVZ8W8tL7SKe0BIdXQ4ycXvhKSoOEFdtWLtLCwJpnk2VIjMVQo4kb64pOzAfz4petnY4lyT9xto9EOUqotILqrm38Fw?purpose=inline)
+
+[Shopora – eCommerce Mega Menu Navigation Design by Jishvi Studio 🌻 on Dribbble](https://images.openai.com/static-rsc-4/8945ove81iJpmpjfBzjxNhwRzbrTi5opWYQRDMpctKitS7RmwvfpRmlul3oeK67HZ00ABeSQ4g9N7EaO_WPnACWzK2EpAML9EdEtQkFcEgHEFmkzb3G2osODbtIMMyf50LBLa9teChs3YIvCjVwC6kWSjLNBjW3wlfrfSEwSQJU?purpose=inline)
+
+[Header Builder Menu filters - XStore Documentation by 8theme.com](https://images.openai.com/static-rsc-4/NJxqwCGbN2fnD-eJ7m1ajze7jYJFVQ1YNzcwcMXb5BoJX8Asw1YoEQailWIrwaH-ZKC7ULZKj5Bj_JkKUo7KI5OrfLJnZR32BH4O0f6vAo2SwsPdIQfMQlsQ4o_XkDRMKgTOxNH7KJjlzyS7pjpTAomUO3_jZNt14UrWcnY135Q?purpose=inline)
+
+[Info-nation - Free ecommerce store template by Zoho Commerce | Try now for free](https://images.openai.com/static-rsc-4/-rsHZxlF164IZrwz-fyceAGNgb5ClhvDmP28RB2Z3hkhpx_gCH91NKvtbCukDWWMfDDYv2EPsYusmcmDwEWfVR9-DhCyqEHk5_2VGOIkY482I43ZCCeIgFmNEwpEJNHsrF-RYDnBCmZesrK3dlSMJSbR90F_ifMG6X4a_78Yg6U?purpose=inline)
+
+[Shop Amazon, Ship to Saudi Arabia Easily](https://images.openai.com/static-rsc-4/AFgzORbccN0G5Hew9J23raaOet_Ws59BsdbTIb574VDAunuMjFUpJj5wi-i4ASNNbjN67Q-zlotxLSjC-ToxdOcP5l1KJvN8ojmM9yTACyQ2dEEgTkzZ4xkRXqL_mv9ACxKlxaoYt4CDBuPvly28WiTw7TnPvbgm2fQB0DcY8Ds?purpose=inline)
+
+The header should have these elements:
+
+1. Prime Bazaar logo.
+2. Delivery location selector.
+3. Large search input.
+4. Search category dropdown.
+5. Search button.
+6. Language selector.
+7. Currency selector.
+8. Sign in / My Account.
+9. Returns and Orders.
+10. Wishlist icon.
+11. Shopping cart with item count.
+12. All Categories menu.
+13. Today's Deals.
+14. Best Sellers.
+15. New Arrivals.
+16. Fashion.
+17. Electronics.
+18. Home & Kitchen.
+19. Grocery.
+20. Beauty & Personal Care.
+
+**Recommended behavior:**
+
+- Desktop: expandable mega menu on hover and click.
+- Mobile: slide-out category drawer.
+- Search: suggestions, popular searches and recent searches.
+
+# **3. Category page layout**
+
+[Filtering UX Best Practices for your Site 2024](https://images.openai.com/static-rsc-4/nkB_VpXC5e9ZPvGJUfR-l6Mvw8Dw5akNui8uCdYCGcaxznu0MlHBVQjiygXqGNj7wh9zpwf251c7bdVU3K9zeq6jWtLxgMfkTCwnX_-5jeJZu7V1qEfWtMthuWlB3uRdVs4WfTrWLuZqGjog23gRqOKVREe-QIrw-MSbnHpWGok?purpose=inline)
+
+[Temu Perú: ¿Qué es y cómo tener envío gratis?](https://images.openai.com/static-rsc-4/5dFLmwK6CROi_MtZ47F2rNIlcukdRO8IgL1uMAnF-rzOt7AV9vj2uTCCiEAnTLAbwzismUGJP963kPK3uDmGoOz2IXiY3CArUBCNvMksbGwSIw5ZwMAhT9RwdpBWcDJuMdhH-Kv0dJF5aR9tfXoXWtApETwdRn7wjRPhHD9YHSM?purpose=inline)
+
+[Shopora – eCommerce Product Listing Page Design by Jishvi Studio 🌻 on Dribbble](https://images.openai.com/static-rsc-4/KCHhC9YgNacmvruDXLXFVMbQLL-uJ5coIl-sinX3ur2_Sni6GoZO173EED1sFeLCyNW1f4a6LKXK5ZPAX7xxSb7by34_gurkpGkuTHaCa0kqxtKI-L6jsmKGwnVZRJWgl-eAA5stsyz05mgvhX2T6eySqN7m5Imh2e8unUMZ7Qw?purpose=inline)
+
+["TECHMART" Electronics eCommerce Product Listing Concept by Irakli Pertenava on Dribbble](https://images.openai.com/static-rsc-4/LuPt1gIuIWrUeEXlt3eSqIgfrr5IHf3qF0pCE6SaRzh4AO7bc-r0hAc27QUaTj02s4KRgbEY_OO2XruX-rC7GlG_t_3lDmBkUTrZNbk1sHcZPFcNxg6b7aePLvY5TZpUOcliDmGmTbl9PYLfZsvd7W0VUNiP8hjudA-XJmDJTuw?purpose=inline)
+
+[Temu Addresses Streetwear Fakes, But Many Slip Through The Cracks](https://images.openai.com/static-rsc-4/umoRm7d7Hs3jprt9AymwGp13XP5z2aV0vyV7wGWFhDDzU6Mq9_libdvbyjN51f5743f5UZBMLmN5G3AUi6Bq5hTI0OPVS9u7TROD7B56Lk_AWjRvrbrQYgb7-TRri60GubdrofDOFspDiA9DGeaR4UHwXF0MM3iw1tjynOOvWY0?purpose=inline)
+
+[KommerceBD - Launch Your Fashion Brand Online](https://images.openai.com/static-rsc-4/ZwpN_S0l1ZJA-UGwzIobVqu2QF85YhhaylQ5uHJCe1idjZUp_X03Grsca6hWxHM7v5mnyFCJwBSwfxdZkziwCW_6haot1hWMDTN74ebHKwbS7dYYNWKTVZEtNxGH0UM3yhALXdHhXYHd8rR2mpihiIbVzON8nlGp5ghBfMdKgRc?purpose=inline)
+
+[亚马逊的关键词搜索结果数是否真的准确？-卖家精灵](https://images.openai.com/static-rsc-4/HPZDFKBkuMnghJpU3WB6BoPRwto6cTx6H9Uj4frAQnkSXaCRZErPlrVlnTdITD9l8uYZ7cP9Fgvo3udyz-1GkoXLV5XyI0pn3c1ns2I8F_vDastZSBTo0sl5BIrWp_xojvX-PyJAVtxXnLISVFcwQ4bBH2DfvV_odDmzbcVXnew?purpose=inline)
+
+[Así es Temu: la app para ahorrar en ropa que amenaza a Shein y Aliexpress](https://images.openai.com/static-rsc-4/I58V8RWHrWQiWMxzFnAxdcELsKPpuybKawZ7tHy8YVP5GQIg3ceTMnAK2gezc-KZ36r4ZPDUZHE0NTUXGHotkzMYui67YOaZXoqxq3Mcuu8A51cK95pCt6z0rRkD2rlbgiylqUiwXSCixj3xO6iBUd87KwVW-iWOkUkx_K_prVY?purpose=inline)
+
+[Orbit - eCommerce template for tech gadgets and electronics. - JoomShaper](https://images.openai.com/static-rsc-4/7xt0s_KQX1kMHhil8FPpT0UbS2OR1wIKgVEyDDDuo3s_QvkMUd8jOs6zJBUJCOzR4HNTeFKiSFDSCv_euoyBRi8Tjflp9pg0HjWc9MLfGiSGRcvzNzI7wSsZM5Q9X2zec0kYgSdotKzrfFWXRri3Onde1aTjntTpSvKLlslRimo?purpose=inline)
+
+[Cosmetics E-commerce UI Kit - Product Detail Page by Taufiq Anshori  for Nucleus UI on Dribbble](https://images.openai.com/static-rsc-4/SfUfd42yl2rbODmxiLTiDU7T5FPqEyT73N_wyxuhk90bRkE_WtdUj1oLbgjCLgVVBdEZ392Uo8NV45FT4ry3gSn9uW-9nba_VGrEY4PhdweQHeO29hVRlf7oI9b3dgd8nEd1OayidzoUMjWOxTUP9wX3JGow9xYiIkm3RmP5gPI?purpose=inline)
+
+[Les 15 meilleurs sites pour acheter des vêtements pas chers](https://images.openai.com/static-rsc-4/HEBzrBJ4ZN62WFOtgOnoVv3MKn_Oxc-OW07_GowwjJ62UgHxrqDvV3kLGASwWUHsFed5dMVZUg0WOkyQ0SsnGGXpRXyKtNtDzQDOUP5D0dGXbZJeeHbAcCQbU924S7YFhYGbT0PdSdxhYw_citUUi_4lHSO001bIfXWPu43mxgQ?purpose=inline)
+
+[eCommerce Category Page Best Practices for 2024 | Inflow](https://images.openai.com/static-rsc-4/YQXanDoZ5KQxLbVTWQmjsKgL9DXuSndMxIeYDVltEKFDNPui-zY3q3OSqcT4kHUalXh-KEfdx3yCpjdKAkZQCPzjFYvk1LCYWSc1Wd70ohavlM2OCj_kaOimDQ5kYmcU75LMgdz2SRyQu2Zu-j8b4YFtPxU2WV8Jz2o4Vlfe7cI?purpose=inline)
+
+| No. | Component              | Features                               |
+| --- | ---------------------- | -------------------------------------- |
+| 1   | Breadcrumb             | Home → Fashion → Men's Clothing        |
+| 2   | Category banner        | Category promotional image             |
+| 3   | Subcategory navigation | Shirts, trousers, shoes, accessories   |
+| 4   | Filter sidebar         | Price, brand, size, color, rating      |
+| 5   | Sort options           | Relevance, price, newest, best-selling |
+| 6   | Product count          | Number of available products           |
+| 7   | Product grid           | Responsive product cards               |
+| 8   | Sponsored products     | Labelled advertising positions         |
+| 9   | Pagination             | Page navigation or load more           |
+| 10  | Recently viewed        | Previously visited products            |
+
+# **4. Product card layout**
+
+[亚马逊新品有救了？-卖家之家](https://images.openai.com/static-rsc-4/XGW6H-Pnwn7rYsRlE68aEKU-2pAprQ858fdco45hTdOLLH73YHYb5av44oBaAyXcgkMqtI_JdO4xb382KjPek9smceKI3RsSpZZMT8_ocG9Q5wwgjuIXVtJCuYxJBpFfvPnS3tK0HWWhw4lJae8Y3DIEAUvTRWtLPNjDlPTeJmM?purpose=inline)
+
+[瞄准中东电商，Temu将性价比引入以色列-服装星球网](https://images.openai.com/static-rsc-4/WPGTRa-c63nTkHUhHbytTO_A4-LKqT1SmRqn8Wo1Lq_dNDgKWBSNYKzmU-F34_hwIRWKfHicj0RpZ9ybcISxietfzvwaHiofFMhKrjM5XVSBAFhCJRgby7reVPM4k6ykweoAeRd7inWkXID-GaFiPVNCMtdgL6fqclkYzE9p5hA?purpose=inline)
+
+[Fashion App designs, themes, templates and downloadable graphic elements on Dribbble](https://images.openai.com/static-rsc-4/tvoinjic6rVd-9Pa46cFMv5Cfqnu7D6p8RgFBI579T8mGAOPU8p7IlzdY0nsOSFFbm4XPf1kyBARCam-HKbionFnVjhytxlIdDdKiMam2UtxdqSFXngcfm9MgVmupuEZRJJfW_wzb_9bDRQF6vqHdR7_NWk-iGbB4qqH5uQfkXQ?purpose=inline)
+
+[Ben Roach | Strategic Design Leadership](https://images.openai.com/static-rsc-4/W9kVockDb8AhpBF0G_BFRaV1xinFdWd9xGx-Jgh4PRpolmKFkxOfKdaw-IQn8ekmMkmmaP5HlLaf0tsUngLKrk-eG8dA1vg8bGhor0KP2OWnkkZ6ZJqd19PN2cuy23qdYxlRUFdqb1EJAB5lH_lNfChgYaFNTy2mzu0A1J435_k?purpose=inline)
+
+[Temu: The Revolutionary Platform That Lets You Shop Like a Billionaire](https://images.openai.com/static-rsc-4/FS5JdOHVta7jMsCe9CKJUMv2CnWlHWvMTtuPsxtP2CS-dihM5Wbnau3Ecelhs0hyviaB3WrSrPWLQqaj_zG-Gnv5w-5KgvhFU1OnzYjDPGBVppUYF55InWdZnORhCF0fy9dLx6bjsxbUzhylcheDTV_m1FCGUDLa67qS4IcYK8E?purpose=inline)
+
+[Modern Fashion eCommerce Site Design :: Behance](https://images.openai.com/static-rsc-4/rvCY920PSUaATJmw7GJ7q1kP2xWJRx61UgdHiIRtQyZvtUU4fbwbhhTw6GFdYAR1W-CBcA_6srR3115BfTZU-f2e8CLGAb0GyiGN8GVbg_pgaiaMMzTEO_algSe0mKZ_bhSzWUCL-DfTobIMthoLrNO8f3F_u-dK0giAhUUoB_4?purpose=inline)
+
+[Von Restorff Effect or Isolation Effect in UX design](https://images.openai.com/static-rsc-4/7HCAEAClRxwc6nTnRF0nn6hbKHliT9VyLLCBpntogJhC1rB2qzs9i0vHWRw3-oebtbpWgB4fn_hzMd7PA2GujE2LuUlk9CgmZRfuuaQJTgEsqLf4Vyx2UtXhvhcb3kBnDK3XFVZiCIUfI57qg_DLDQCnOlod5VDGxzS8ivxiNSY?purpose=inline)
+
+[Stella Mccartney Pure Boost - UI/UX Product Card Concept by Adrian van Os on Dribbble](https://images.openai.com/static-rsc-4/RuNtzPMrMcUzCpkWJ8vNCjjQFBq1cI35WhEyxvLsaYEcjjcoX0s4jZAJiNQRES0bLAKNe3SUhR_jwOk5WcVtqpUkxcZ_nBuEwyhpysUAU1_Wy2m0Cif9Y5qvCOKRlPDcpYOCA1_PlksWNadvnnfrjzpWkeNAKATS19IA--vCXEA?purpose=inline)
+
+[Airstream Ecommerce website UX design case study — Yuvella design](https://images.openai.com/static-rsc-4/EsZl12tCZgH4FJ0kXksPspzOp5WRkI8V4YfO99TvTpwZPkiKFAEyLGsLq7y1LrOp80D3YqCorgrw3jwB1xcNdqO4e6jbSzE_6P6KHej2WHEZZEGjtQCkZwgvzs5l8FAYcn-jDpVIEAh1vKRdVhiCqnhvQ-MS6tjb9KhwHr9irj4?purpose=inline)
+
+[What Is Temu, and Is It Legit? - Make Tech Easier](https://images.openai.com/static-rsc-4/KU-6czSdqNiD44I64W6V4DBjMqd7_MIXzDGEava-jI9bVygHkqT_0ysSAeUndzbcRm3z0W-fFNMft5YpQh-SwQyEH8evkwcOshzOEVGio6onB7G1W1McMmnP3ymcbEg9iA6bmYX-o7eqTnJMuf-gf7BZROqL43glLv8c_44uItw?purpose=inline)
+
+[Screenshot, HD Png Download , Transparent Png Image - PNGitem](https://images.openai.com/static-rsc-4/eYXyQdNLC8rSx8qAlJDDXitRDJN84PYulAy35F1oBTuRafWiJbcc1GUy0tilhE0TRPIJNQBLJAJBytsXDga_9SKDU8yP-y2hBc5KY-0DwyiwSg6AdAQsSxfEuR1oJwr4dflww5MpwdiFw6XiOHrNMJMbOOSpoK9RnsMRNmw1nu0?purpose=inline)
+
+[Is Temu Cheaper Than Amazon? Full Price & Category Comparison](https://images.openai.com/static-rsc-4/Et3WkO7e_ZLYxLNtRwhOqhOANmBnConksm3JynYJn89VgeuDnTf99v1TsKUMEG46y8GtY3uAqnv_fHWkCLvigTVubjviZhW3fVyj0pI2SLR2jYgqqaZ2HrzHYXdb3EoMhSnaSBzLgdfaJ7IYuE3oJdgtyNQBI4jl6xt539VpHmA?purpose=inline)
+
+Every product card should contain:
+
+- Product image.
+- Discount percentage.
+- Product name.
+- Current price.
+- Original price.
+- Star rating.
+- Number of reviews.
+- Seller name.
+- Delivery estimate.
+- Stock availability.
+- Wishlist button.
+- Quick Add to Cart button.
+- Product badges: Best Seller, New, Deal.
+- Sponsored label when applicable.
+
+# **5. Product detail page layout**
+
+[Amazon Listing Guide: Best Practices for Best Sellers](https://images.openai.com/static-rsc-4/GrUKFHa18GIfkMjsYa89M2oyS6vYBAoBRl5uPpUp4WeIM8d1R9ZXeF2K2e5ad7nqLQqTyLvYC3vU2apLQjRJDRjE8BuAR2uHPiF8IM55KdV2wuQaQIey1PaCaJI6AaRQDY9lhvOLRDCoFeXdRqPwjm0SkgQe1Ygi86F_hApXohM?purpose=inline)
+
+[هل Temu آمن للطلب منه؟ إليك ما تحتاج إلى معرفته.](https://images.openai.com/static-rsc-4/EsSBV9xtw27d3IfY4p-yKIbmWCC8GwU_7lqxdXuE9IDOTs-MYxkyyympOq74GeGoeUl_1OE16PNcUA2sRnEmrq79AwNY1vZ4E5FSz_seWwylwr84di8TCKI3yu8IXaSAUF4GV4d6zMm5uKdW5NxXtOyAFCtZIu7ReQY4SbiPBe4?purpose=inline)
+
+[Fashion E-Commerce Product Details Page by Abdullah Sajol 🚀 on Dribbble](https://images.openai.com/static-rsc-4/JIkJBJqVha4X9VmQ8NWSUXx3_7YZoHSFw4CKMev2FsEhIZFpuf1yEjDvN5HyOd2FV51QhEf9yTdsVZqIt9z-kXTCJnJYmhXZvalws4Vh2FCEVekgehyA2A_QkFbrviyv04Fb1ieWPRB7zejlQuuNmzfo0jD4AFKoyu9AyT0nHyY?purpose=inline)
+
+[How To Create Amazon Product Listing To Improve Sales - Velocity](https://images.openai.com/static-rsc-4/PI5K-uw6ZFhWUiEbBd4oJxVInbTpjamiZH4pKvI3cP5rMY5rzwe2G6iSyUP5ySLVDWc_xR7VBwZaJlWW9Xs_iwQW7mbMVP10R1lulrOAi-Dhm8jN5vSnc8heGY6aBwDx2O_f8LGwrTI_ugPq1W9joZSBCndl7V5IQH9ubUVjvA4?purpose=inline)
+
+[How to Resell Temu Products in 2026: Legal Risks & Profit](https://images.openai.com/static-rsc-4/788EnAkm9K9-kmZlTfGtmuLPmCgxK52TdUs7hGG6NtdbOQLIcPmLhs0JabSqgJ8kZRMI4hIByyx_di1rqIvLnnIue-IXbHrKsNawLqkRB2_QFPhuuM9hxoMWst5epDKSn9BEfVQi5wS8KEq8-10AbI92kmNzHgP5MEmzVc5mz8w?purpose=inline)
+
+[5 PDP Features To Inspire Your Next Redesign - Christine Ashley Designs](https://images.openai.com/static-rsc-4/cInMivp6dO1JWNJQ9ZosUMO0rk-1dAxIIoX-SQj_424tMHSCYxVN4jvWHiwG8JPrKNPaSsBxbj6Y9PsmRsyOI36YXZeGUjKNb0AG9SVJzwJ5g_t1j6IASQ9kIBtfpbSqQZUYoBj3seu8ODfVzgdbmMILfjpKK9PurRhDoOIkEvI?purpose=inline)
+
+[Ted Baker dress product page mobile modules by Adam Williams on Dribbble](https://images.openai.com/static-rsc-4/DnvzjBqOuv3Uay7_lUyy_mG2qz1BmCktZBILb_whfF7KPfms0tgaZPEgFdxwRaatp190fSUAhztz1ZWow2WP0g55ivgJjH65gACJU0Eyxaes8rXNQncbbRjj1SQARfKy9zZEv442otS84YRnTh_Qf_jzGGBCE9r6sS1DdVgXI6M?purpose=inline)
+
+[Online clothing store. Product card, shopping cart and payment by Mariia Sizova on Dribbble](https://images.openai.com/static-rsc-4/iAzd6A-or8e5DjyBRzJOKAZzjqp31Nxz8MUEqZpi3R7FIn1P8A2FT5G6oshP3fRQo0kJ_CV-9pEfeOfIptK0QXSpAQDNbQZy8V6PoxSb4weMb-D4SSnYyWhX0mXMzrhJw5lSyxZbei4v365n_DfTR6gVgmAlv4UbpQXSBP8hT2o?purpose=inline)
+
+[Why is Temu So Cheap? 12 Factors Behind Its Low Prices \[2025\]](https://images.openai.com/static-rsc-4/SKu0wCw7d1JX3vwat1480CYBYksi5jbvuF41fdOuUT_AvlAvWiw5RauDV2nLsqYj0whupCYQqazDBwtzqFvUenZXII6s84RCgBwmRTcl5xcVPVBM8CXJrmHOHDHV-RFzgrRYdnMDFq6XLtN_Ec50DVTsplplyPLYKBBl-_Twbrw?purpose=inline)
+
+[4 éléments primordiaux pour votre e-commerce - Hosteur.com](https://images.openai.com/static-rsc-4/5mmSy0N8I_n1kKFr-lrjMHGLpw2LUomxfjXwIex4-PSGPWoBZ8gZSicPQx-qu9bbddgS6Xv-mfLNmh5J5S-bFW1TtRbCuQ6WYnEr-NdBaE4b9QBvHCVu2Y3yVkxN27dvXNSIIWxr5z9ukWe4-PPAHKI9IDKSXaWiBQj3ugnVglM?purpose=inline)
+
+[Amazon product detail page: Why it matters more than your ads](https://images.openai.com/static-rsc-4/9aMFHydn_LNMp6Hcus5_AdmGWLoPAPm-UEHnZbhdO9cWrniZuw47NGRQD-T0QOlJGezg20cxVic8Z17N-eXVPoI8tzNlq6g015AiqIZr34hyMY5BwNUol-sGgN9v2wRE5CVkXWHQLFEqQWdW4vDDKRsaAplA6stkRgQIwM1QTK8?purpose=inline)
+
+[Temu Scraping API - Free Trial](https://images.openai.com/static-rsc-4/1z_Um7oalMeDWd11JEKWZ7lIeLNdFm-ddrdfSTp9YumuuRD8ERddAaoXOcMPqn2RC1s43mbBF4zUpZ7YiC2zXUNDfuO7p-QhMkxL42qcQ60gV5ymkw_peKdKEe5nGnrjIdoHBbXbmgC0-szoJmWNBmBJiSrIvnfhuSwFcDmtFhk?purpose=inline)
+
+1. Breadcrumb navigation.
+2. Product image gallery.
+3. Image zoom.
+4. Product video.
+5. Product title.
+6. Brand and seller information.
+7. Customer rating and reviews.
+8. Current price and discount.
+9. Available seller offers.
+10. Size and color selection.
+11. Size chart.
+12. Quantity selector.
+13. Stock availability.
+14. Delivery location and estimate.
+15. Add to Cart.
+16. Buy Now.
+17. Wishlist.
+18. Product specifications.
+19. Product description.
+20. Customer questions and answers.
+21. Customer photo and video reviews.
+22. Frequently bought together.
+23. Similar products.
+24. Recently viewed products.
+
+# **6. Shopping cart and checkout**
+
+[View Amazon Cart History at Benjamin Downie blog](https://images.openai.com/static-rsc-4/2kOOwkY0kNkPfpCj7dqfj0OJb9X33wfYHvfRtePVSRyyvbwsGq_iGo4EoTnrtV6z3jl8qISwd4zbH95ZxRI9MruC8PgJSn88SL0NaP-R34pSWY4QFquSEpGAPYUBSY5E_zR8rJJsxYAZE_N2IAbaPsT84yMKAV4Kd0t2MrAwB1I?purpose=inline)
+
+[Black Friday Sale - Where Does Temu Ship Your Purchases From?](https://images.openai.com/static-rsc-4/6vArAYXyLtITVLFd4NmQvy-TjsSQ9sfyRuLgBr-C_ZBNFRakLtDota10Cw3CmhDyB6iR_el9YntX6uBh4TM1EWIl3uJa22Q4Jj7LvLuD94ZyeQ31mnpqxuYHXVwqatukpoRlbKBa8Tq6wL-UPdLBuwI-5S0t9pI_fE_Kftu8xFw?purpose=inline)
+
+[Modern Ecommerce Checkout UI by Shahid Siddiqui Akib on Dribbble](https://images.openai.com/static-rsc-4/I55jZIkrLMDilhDjJW6wfIT_FIeisxROWNnp86cK1jfSLtLeNs3SGubcTwRgCxTm1bwlfKw4iDd5oO-wetXW4-kjTjIr5SmR3ml16aUY03EQCyflLFEUzdgNy-5ta3fND8yxiBdpg0rMLCkeKB6PZu6GZz2bPuzY3PHPKQTA58Q?purpose=inline)
+
+[How to Design a Shopping Cart Flow That Converts for Your Online Store | by Creative Tim Staff | Creative Tim’s Blog | Medium](https://images.openai.com/static-rsc-4/_t5DaXY-vmDEFFo18kO2VxleUOUXGihPlsigW5u2yFY9w2a_tRdeMAHTskeHZVSCTVij9f124kgmARCacMnSoIcEEyn_zE7833BO6D9gnsgcwiJszBLgj7ctBq80-NIt8ec-A-800wHCcKQBw8aaic8RspXJISUubnSLAQv30QU?purpose=inline)
+
+[Temu Discount Codes (up to 50% off) | September 2026](https://images.openai.com/static-rsc-4/QzLnLoxdnmJHIeLMXDg5HqZokpu8KuIn_amA5Txn_yq13QNez6vd4YCJg2LtNDN9_dSbLMlSZCcnoL8Uz7Gtx3rTP7rjA7ydWKskMDsKZ_7NJXExEnwp_oy8VrNDRPK0tQ9Zp02BzyEO4AqlcPeZclQP7CkLXjYu4OYUgqH2TYI?purpose=inline)
+
+[Checkout Tailwindcss components for Ecommerce - ComponentLand](https://images.openai.com/static-rsc-4/301P10t_3jkdwqC91ol7e1S1Z_jypC6P2Hkec4A0SCUnACFcBQaDQ7f9ducEfCpKgO3COUW6l485yCiOneD33hsNAKdDu87gpQIdS7lM5_E9ssrs4dsUPrGYnXTfrQA2jvph1Q_g04g_VOSnuHlChHTcHoDEtkEkyDvbvpAUmts?purpose=inline)
+
+[테무(Temu) 구매방법. 결제방법. 가격비교. 무료배송. 묶음배송무료. 최소주문금액. 국내택배회사 이용. (2편)](https://images.openai.com/static-rsc-4/jGkoH5DfS0ewVroC2LvGhmfrzy_KuIx0flpVsBjthExpHewjdIOmTU8JZ3-SSlvqFyW_1Iv_pLn8cll9CGqk9v5DFoUaCGSL9NNqsLJa642hcMjjaVch-M7ZjLbpnjhOVL-7KdYIhVL6SSy__zLV6UccKl0C01H60O35qXJyvxo?purpose=inline)
+
+[One Step Checkout](https://images.openai.com/static-rsc-4/PMJO_JiTJ1uNmENMQlHYMI_ynqsUfIF2b4VW5UTuHYLHqjlawz7H0MNTJi8xYx6EgprxFiPZxKnOuzaIDTU2Jq1lPEGBPIL2gKmPKpEHAeyiNbmB5vc9CS0PEcv4VrOwkAqHVlRm78ExrprBKWbkhWCnodWI66tRPrHOPuz5f6g?purpose=inline)
+
+[Temu Will Be Coming To Malaysia on 11 September 2023](https://images.openai.com/static-rsc-4/h-A8A-4eF1kX-cbS9HmzF1yJAl2poPCZ6NsR_0lKNOGqPgNMmpFoQMWdEZnf_KsaMB5TDFUNccC2_HzVwUmO5dL-FZ23by5OfpVS_ME8sutwDq6IYxdcDpdNjxrWTOii1Xdx2Ko3cchT2vfVmYx7amCZ5lNiexpgiEkzplZI-Fo?purpose=inline)
+
+[Medium](https://images.openai.com/static-rsc-4/bQlG8rF8-B5HWKtd05fKJIkNQN4FGfTfgt_A-Mh5QzBk1qePnFIB3cytdr9N2WwxVVeLdPPqsu-IdGsJ9NrMgO4wjX6gd-3Kmtf-Q_JHF0ekaGwp_oVVGGIO8Dvy0CqQsTqHoUCgZjdWPxKJuUYvixCHpzjGKC-iILxPdwVA2zc?purpose=inline)
+
+[I'm having trouble with payment - Fracture Help Center](https://images.openai.com/static-rsc-4/wB_5m0EELxD3NKPlYrIbNNg6pP1_cT9659fjFZyW7a6DKol1tD7OBorx--J9KMZ19WgwgmzNRxIv1FsKLtAHQ_eZ_LAxr_hReJDOVT0yA-ezbkNKpBYQnSWQEKzG58Kyk87GRDirJRKVzQnGVAht9ABSD5uadfbZ7avZXEDTs_Q?purpose=inline)
+
+**Shopping cart**
+
+- Product image and name.
+- Seller details.
+- Selected size/color.
+- Quantity controls.
+- Price and discount.
+- Remove item.
+- Save for later.
+- Coupon code.
+- Delivery estimate.
+- Seller-wise grouping.
+- Cart subtotal.
+
+**Checkout**
+
+- Customer address.
+- Delivery method.
+- Seller-wise shipping details.
+- Gift card and store credit.
+- Coupon and rewards.
+- Tax calculation.
+- Payment methods.
+- Order summary.
+- Place Order button.
+
+# **7. Customer account dashboard**
+
+[Liberty London · James Finch](https://images.openai.com/static-rsc-4/6wHz7Wdv-n3c2xJxL7x0dOHn7Jn9fzB54GyOpSE58ZA9wRvIY5A2tQqcu2YDf_w3GUBxS3UJDSztucJ-DXmaw2QE7-9m0dpMaL8WXBDJUKgGlre2dqXN3VQN-LHXeVTsgX01-05-YNxEw1ibVcDFoHhaBuw0qX5L2pkaKZ7KV1U?purpose=inline)
+
+[UI/UX Case Study: Pepperfry. A redesign of the user experience and… | by Sakshi Mangudkar | Medium](https://images.openai.com/static-rsc-4/3I1VsYwlG4b5nH-qdJD1791GH5FbibaABKDMRvdvAKaMtvKICKWN6X01nJgHLj7EoY1Pi40HcycK_nuY4T5ucUTB5BCIujboC4bTJvQNbRj_vlPGgBBKL0Hqz4dAEXD9rjC1nBoPGxt4prH6rmWTeEJfYMwDDQSHFItujThHLK0?purpose=inline)
+
+[Amazon Orders: How to Find Order History, Reorder Recent Purchases - Business Insider](https://images.openai.com/static-rsc-4/702b_2mdiPJHnudeyKPGhGbm2TBBCPI3RTSP1GjyeMSWgkxHJATfN7il5rOaCAGJemlKTRPWu9hhCcVclVO0hrt0kLFfGUWOLkHIarj7y_ux8ermj4m1jO7OsMrst-9sA6huCJdIfHlvAsLd3P_bqd_XjVGmKgvcCRiMF7TVM-Q?purpose=inline)
+
+[Kartly - Multivendor eCommerce CMS, Mobile App, Website, Seller and Admin Panel by themelooks](https://images.openai.com/static-rsc-4/lpfMHW_8sJgB1g1L_WAUDJ3QvJ8Y7v-Azkv77nz5oeJmZ-jG92dkVj7Blwi1I8zuK0bDUA5cT6xviS_AHW0F0Tt-3_N06BWWlg5cxcpOxQIhu1b23OjR-PeIMnG1v0loOLRgw452x2CuFy5OET3wW071z2zVAUDiUQN5TVm98ds?purpose=inline)
+
+[AXENTRA AI ‑ The Complete OS - Replace fragmented apps with one unified e-commerce system | Shopify App Store](https://images.openai.com/static-rsc-4/-VHF4Dg-pBQokjkmEiiZMBsSXcRpRkxA5yvfrAjucLrf6gpikFRHsAlfPUwSJacgvFYHPOfYgaV0s6xLV2DVHARnUdP3LxyvXW_LS9s2jzXT6Miv5XeRLQ4mGb7mTvpSOCWKpFLYx5dEGaO0Du66mW3sMV3aWFHePjugyenjDXQ?purpose=inline)
+
+[Welcome ! |             INNELEC](https://images.openai.com/static-rsc-4/KCnR0cUR-IdRmtZCE-R7-Pk-INmEGQpkj_eND4oYhGYfV_U06dy61SDAXJB2DRF9enHREOcGl8CpSFDH6Jgjm2GD3CmRIIYn4yakX-B6cMxC0Sf8PTXKWa3TuJyKfmen6jmBUUoWuZrdwUsQMmn4D-R3Yos4LFvfiCyUqhEmHR0?purpose=inline)
+
+[Account Page Guide](https://images.openai.com/static-rsc-4/Kv1SKw9Co-hyLc9lDiBAX6zDtvPcsNqtFekowVJVUoW3A9_7Lcf5bmXOL8k-7f4Bn8QxpisVV-QQu8HCIA5edcUDe5hOxvrUshN3FkonMlHHq5zg49LUpHaeqVNcgmSLm-YaBEJyjBmk_siE-KIc-bRIUQMmAgxKuR0rny_8Fq4?purpose=inline)
+
+[Lumiere Skin –  Cosmetics HTML Template | Codester](https://images.openai.com/static-rsc-4/DZr9J__GFOXrY8UQDVbo5bLmLs_juI7rAE6_KGxu74mvfmIi4NLKVgPaowy8-WTTjsFirdHqUidRaoXKMccrqgijb83p62HciVjXiauclyXQQF885e3PHiYnx_fA_9zYU8D17Qcix1zP9dwXKGcBiHfi4dkvIhI2sfYo-DPyNGU?purpose=inline)
+
+[Best practice tips on configuring your B2B eCommerce website SparkLayer - The powerful B2B eCommerce platform](https://images.openai.com/static-rsc-4/vJv3MQXP-Z1zvCwv25Lu9deWM2izBuzOzFhjN9MKRbjZvhL7IdmUaIVBXHJIAQAt01N2KsXChVm0001a3gkkL5uZ92hiQmOkIEBW-clg-7iMZ6Hs4Kh9Ey2W3OwVzqh5iuVABJb3UIMkTxzHYf4rfAee6e4eUPOuvhc4qMot6eE?purpose=inline)
+
+[Wie kann ich eine Retoure/Rücksendung anmelden? – Westwing Helpcenter](https://images.openai.com/static-rsc-4/KCV_obLFhgkcWL6-GCPGd03diGkv-Ab28x8griLx30H_GQl38EV_8iOvyS1wxw62EigYMH7amvsb10sp7XHqcOrOH4Fb6IFPV_qqPjzwtfENI_DCVrIAtmtov0s3SFkdZKlBiohhipRwnbr20dM5eWMKt09mmsHi3ABR4-18fIQ?purpose=inline)
+
+- Account overview.
+- My orders.
+- Track orders.
+- Returns and refunds.
+- Cancelled orders.
+- Wishlist.
+- Saved addresses.
+- Payment methods.
+- Gift cards.
+- Store credits.
+- Reward points.
+- Subscriptions.
+- Recently viewed.
+- Notifications.
+- Customer support.
+- Password and security settings.
+
+# **8. Other important website pages**
+
+| Page              | Main layout                            |
+| ----------------- | -------------------------------------- |
+| Today's Deals     | Flash deals, countdown and discounts   |
+| Best Sellers      | Ranked popular products                |
+| New Arrivals      | Latest products                        |
+| Brand Stores      | Brand banners and product collections  |
+| Search Results    | Search bar, filters and product grid   |
+| Seller Store      | Seller profile, products and ratings   |
+| Compare Products  | Side-by-side specifications and prices |
+| Wishlist          | Saved products                         |
+| Order Tracking    | Shipment timeline and delivery status  |
+| Returns Center    | Return requests and refund tracking    |
+| Subscription Page | Recurring product orders               |
+| Wholesale/B2B     | Bulk prices and business quotations    |
+| Digital Products  | Purchased downloads and access         |
+| Help Center       | FAQs, tickets and customer support     |
+| About Us          | Company information                    |
+| Contact Us        | Contact form and support details       |
+
+# **9. Mobile website layout**
+
+[Temu App Review: Is It Legit? Check its Ratings and Pros & Cons](https://images.openai.com/static-rsc-4/RQ_deYRiHH-Prg3K0JQacHX-ntm_7gNdCwEWkGvqntfjG3tQk6tezq-GYOFryr3h13bQCgPFfqmYjuLTPfG1C9UoCZAgxfQN8275YfsxZgPbzb1SgSVGg1DngA5ok8Xd2-kR7TEsv--WgaXtSIdvs5nLK_1zPINFIbfMrwM0jd4?purpose=inline)
+
+[Amazon's UI upgrade: cleaner, faster, responsive | Aswin mv posted on the topic | LinkedIn](https://images.openai.com/static-rsc-4/HzYcEmC066yHPfuJrH7noWQJZ7OSu3wt4G8SFABO9ZDV_KIHwyIOkqPWio8v09CXofRDzaQ3WA0yUZEIEs2Dop0ZLNHJ-Yz17ujl4L0uCEumVg57H5pKPZIRPdLUsvlWYj5HLY8NAC2sUjHvPFnQmxFR7So_mDU1h5AuqTgBvGw?purpose=inline)
+
+[Ecomus](https://images.openai.com/static-rsc-4/O356X9Zw1RvDYRzcC5DRRr5Ka5Pf01-AzADE5gT-Q4JyWW9f8btTjmll3WIer7ulSNkaVwt8S3YnITSucvy-54oaf3gFCM1CMPric-pB8MWg4cx8KEuAjrkhbckquFkqBcZasEpUVGtJ0u2wP1eH8mv-vWWMN2Jz36pVEBPLPpg?purpose=inline)
+
+[What to know about shopping apps Temu and Shein - The Washington Post](https://images.openai.com/static-rsc-4/itNGPIm6lMjPpR9aLIo3Ac_js0Xr7tcte52LHz6KSdEvXR61flYiP6XrZYwwkR7j0PsjMh_Iw9IleoaSyh_LupayE4ecmxApqtsVrYc_a9YxUjfIRRkWeparPQ5LYpEEg5ymE1s3-HYXowqdpkV7ahc7a_9O2QK1Zbc-Fh3QTKQ?purpose=inline)
+
+[11 Design Principles to Boost Your Conversion Rates](https://images.openai.com/static-rsc-4/-ximkLARCjwK3SymbxxQcCcUbID3089m6NYmlUalgSuatgVqR1AInM3YOSu9VpFzJrJ25YVVlDYHFEDsYNoOTUmtFAV6MRucI5-PvQMKUfXxwk4d-YPpXsLltgHHW3TNcAws5CtjzI0AxHrKQ3_G2mBeEsbzYxNX4_7huWZN67c?purpose=inline)
+
+[Sinsang Market - Online Wholesale Marketplace for Korean Fashion](https://images.openai.com/static-rsc-4/n2mUtD5OU290WZaXDJV5X_mQIc0kY842R_jlC1nMIyBB_YEA6KJjwsKk62XA86dcBKkQEk-ad9U6_phRl-3a2kfWK-a3h7Rc3TO4hUCuVHGBRE6sI2-ZFksNI14GazVTGW8B7UGEtTuRHMTS6OqYqZipTA_t1Z-7KUzYrcpXhjs?purpose=inline)
+
+[Mon Marché | Cuberto Projects](https://images.openai.com/static-rsc-4/kpNXd8h78tK9udFN5NdwKNcMw8lXNUMlCuZBYCeM1BdTLLE5zWjEWzFmo4gp4AfkCnuC2es0PolXvFBhbAD8Ti7UvsdC_H4foCwDFq3WyJ7O0kQHRLDsnGQBJ4xd_zvFK3Rnbk_syWw5XsmydePUwwUbr-RL7_yuo8e8TqqrIeU?purpose=inline)
+
+[Temu App Screenshots, UI Screens & Design Inspiration | Uiland](https://images.openai.com/static-rsc-4/5q3ob3kjnsZU78qjnTuTLhOdMy_bRjdGioIdprCm08Mogdkjq2Sh9NURGQqKTd606O0LLVRv3gIg8fX4MkngulIv-yQkgbpIwd62NQtOkz9_KEe9ITgV3BRTrZkNgb7AfHG9z0K4Oz6U-VjNG-7r8vokdGFcJ9NfAERfPP58-Ok?purpose=inline)
+
+[How to Search Storefronts on Amazon App](https://images.openai.com/static-rsc-4/thP4zILk8hRlqD1MWCBQ2H6j1APj5uF1r_yKkMhmVZDKUcYK2n1489OSKhCxpmdWL-QimkZZnUBy5DT3tHOzwzoD8Nq12d50tx_nqEEWgYTxdhjSitXz4Ivcx3IEg-JGFlCmgOH_Br0HL0mUwcpbfHn0r9Oa8X5UZzdFIzVX2Z4?purpose=inline)
+
+[iOS 26 Liquid Glass Buttons :: Behance](https://images.openai.com/static-rsc-4/puxXNTABGVPhVrySH_NlHDIFThHLFG0bpkjFe-OSpqUrsu1BQlTQzFtsF5cbfrL7LpoQEdyw6Pna_52rEfN_uzghEktCkDVjUH4c1Mgt2Ywq7khW_b3MIDkaJpDcTtnqj3KE-WMJrKucNqy39z5jD3Q3YxAvlPP9fdQJOvazQK8?purpose=inline)
+
+[Mobile SEO: tips & best practices to build a mobile-friendly site | Senuto](https://images.openai.com/static-rsc-4/BRwoUK91D873VD9GQYGQgvyxrUwG5tSl4x9_LaOj1-nB_Om4eFvNZ4QwwcZMkSpgB0EjKrRBufWqOkZrsQL_wBoYCuR7vedXRKX9-PyMjSzH2OEw6Te0AZux91hguUibxs2AMg5OICgI2bT-hlJAPHdw71uLdzYCfq1mSe_C1z4?purpose=inline)
+
+[What is Hamburger Menu Getting Replaced by \_\_\_\_? | by Saurabh | daiom | Medium](https://images.openai.com/static-rsc-4/TXa0YS_wHnqk7ug62WFDekBDdBQzBUtafBhw2LULKW_YFEBiivMBdn5pPw60ZB6zh3_WAxuheybN5BCpdVEwnRyZ-x3NYyKIhFxrzcd0aVLuTtCdXo9AYArsWTos5NAZT6o6k5Ua9LKdc5cWvd_NCyE2GcwjcI4QgpGjFhaYz-o?purpose=inline)
+
+[Temu eCommerce - DTF Digital](https://images.openai.com/static-rsc-4/YfAaIcrAhvXjMQ2vvjvzWhO3m63gPFdBConPnE6V769MoDbVBw9dcJtXAZNTFj2tzVsZfp3FYxMKCDi6QtavSPGX3d5p1vyZC2EDSXRDzfblflSqzsK8rLgWKym64OAiXunJ5tHPwWqnM-Y-ggdBBR4hp78fcmGWn1uc6FsPNy0?purpose=inline)
+
+[Amazon mobile app redesign. It is a typical Tuesday. I was enjoying… | by Yu-Shin Lin | Medium](https://images.openai.com/static-rsc-4/WTsEdksS0V0oadq_atLwzwvDUK9Z1OkzhDj7XqIaWrzyEDhDOgELmr8ds4Bcx2pFuzVhS8fwoZ2DhqQD74iI6XR9tf5obMHYG29-tBikJzRckzguQUTyO4fc4HYPnhZTU16VAsVgi4LdGa5FX36Hsqr0EDc4nujcHWXVDoJ4jO8?purpose=inline)
+
+**Mobile bottom navigation:**
+
+Home
+
+Categories
+
+Search
+
+Wishlist
+
+Cart
+
+Mobile interface should also include a sticky search bar, compact promotional banners, two-column product cards and easy-to-use filters.
+
+# **10. Seller and admin dashboard layouts**
+
+[Amazon Seller Login Guide: From Registration to Your First Seller Central Dashboard - Seller Sprite](https://images.openai.com/static-rsc-4/Gny7wydKMU0DofjwTX7xdvTn2QT1H0Zaxvj-YRqp13z17L9t5Z-KKUarFmJQvOSdt6rkbQn8L4bHZh0KLmd6XRDlIbEKSDDBTVYPiWTs1EtfPWesXAvx-yDHLGsvo7SLTp0wIy6SbwI-UZ7L31ir0h9TcWadxg-lxz03JFjs2Hs?purpose=inline)
+
+**Seller dashboard**
+
+- Sales overview
+- Product management
+- Orders
+- Inventory
+- Promotions
+- Advertising
+- Returns
+- Settlements
+- Analytics
+
+[Business Analytics Page📈 - E-commerce Dashboard by Shakibul Islam for Maqaw Design Agency on Dribbble](https://images.openai.com/static-rsc-4/ljDERDHtWbgCBED19ghYbEqNtZOqrM8jdgdOXmDUZ5nSCvaZXKjjHS6pq0Poc7cbr3S5z3pxvmfEvnVMD9sGMKUHFW35jti7XAeKZzkEHmy8qV7HxUgVLJTEU_XCMLL5i0-Eh1D31mF5e2WR-CBOSq4PANI9CVaUCyFysX0_I3k?purpose=inline)
+
+**Admin dashboard**
+
+- Sales overview
+- Customer management
+- Seller approvals
+- Product moderation
+- 34 categories
+- Orders and refunds
+- Payments and finance
+- Ads management
+- Reports and settings
+
+# **11. Recommended Prime Bazaar design direction**
+
+# **Prime Bazaar**
+
+ONE MARKETPLACE. ALL YOUR SHOPPING.
+
+[Novéra - Luxury Fashion Ecommerce Website Home Page Design by Design Monks LLC on Dribbble](https://images.openai.com/static-rsc-4/OsndMTjssvRFHBTi0mFCyy6L8zyrmOtvOmZNtAVq_qd_Q89cmUrXGiIPQ-qV6DCU4C1rY7ZoqRxiMfCXKWcNJenrbxBbpKJOb_jdmKRvVoP2mMN3SjKZNll5hFw7vO3yUERIifbPe-2S3s_0emVW1StfiGncpbp6gjcSiWR8Fqc?purpose=inline)
+
+**Amazon-inspired**
+
+Professional navigation, trusted shopping, product information and account management.
+
+[كيف أربح من برنامج تيمو Temu بسهولة؟](https://images.openai.com/static-rsc-4/83aoXrvWXgBL1vTzuGXWhBx7MQb6V4RHksiWEt7EdoNwHsMDkbBrRMWEkqdKoxKff9NLGdf-u0am1p-cyYP0O-PHM5aW0_XeuCCB3MWifxrCBM2lK7ltSNIx90Su29DbywGcg4DJKai9-9YndOw52Iy2iOlbgUmNJuDL6LY1zlc?purpose=inline)
+
+**Temu-inspired**
+
+Visual discovery, flash deals, promotional banners and engaging product grids.
+
+**Suggested visual style**
+
+- Clean white backgrounds.
+- Deep navy or dark text.
+- Strong orange or coral promotional accents.
+- Large product photography.
+- Rounded product cards.
+- Clear pricing and discount labels.
+- Responsive layouts.
+
+## **12. Copy-ready Google AI Studio prompt**
+
+Use this prompt to ask Google AI Studio to build the complete interface in your existing project.
+
+# PRIME BAZAAR — COMPLETE AMAZON + TEMU INSPIRED WEBSITE UI
+
+Upgrade the existing Prime Bazaar website interface into a premium, modern, international e-commerce marketplace.
+
+Use a combination of:
+
+- Amazon-inspired professional marketplace navigation and shopping structure.
+- Temu-inspired visual product discovery, flash deals and promotional shopping layouts.
+- A unique Prime Bazaar brand identity.
+
+IMPORTANT: Do not copy either company's logos, branding, proprietary assets or exact website design. Create an original Prime Bazaar interface.
+
+## 1. HOMEPAGE
+
+Create these sections in order:
+
+1. Announcement bar.
+2. Main header with Prime Bazaar logo.
+3. Delivery location.
+4. Large search bar with category selection.
+5. Account, orders, wishlist and cart.
+6. Main category navigation.
+7. Mega menu with all 34 categories.
+8. Hero promotional slider.
+9. Flash deals with countdown timer.
+10. Popular category tiles.
+11. Today's deals.
+12. Recommended products.
+13. Best sellers.
+14. Fashion collections.
+15. Electronics collections.
+16. Grocery collections.
+17. Home and kitchen collections.
+18. New arrivals.
+19. Top-rated products.
+20. Multi-seller product offers.
+21. Sponsored products.
+22. Popular brands.
+23. Recently viewed products.
+24. Newsletter and footer.
+
+Fashion should be the primary category while all 34 categories remain accessible.
+
+## 2. HEADER AND MEGA MENU
+
+Create a responsive Amazon-style header.
+
+Include:
+
+- Logo.
+- Location selector.
+- Search input.
+- Category selector.
+- Language and currency.
+- Account.
+- Orders.
+- Wishlist.
+- Cart.
+- All Categories.
+- Today's Deals.
+- Best Sellers.
+- New Arrivals.
+
+Create a multi-level mega menu with category images, subcategories and links.
+
+## 3. CATEGORY AND SEARCH PAGES
+
+Create:
+
+- Category banner.
+- Breadcrumbs.
+- Subcategory links.
+- Left-side filter panel on desktop.
+- Mobile filter drawer.
+- Price range.
+- Brand filter.
+- Rating filter.
+- Size and color filters where relevant.
+- Availability filter.
+- Sort dropdown.
+- Responsive product grid.
+- Pagination or load more.
+
+## 4. PRODUCT CARDS
+
+Each product card should show:
+
+- Product image.
+- Discount.
+- Product title.
+- Current price.
+- Original price.
+- Rating.
+- Review count.
+- Seller information.
+- Delivery estimate.
+- Wishlist button.
+- Quick add to cart.
+- Promotional badges.
+- Sponsored label where applicable.
+
+## 5. PRODUCT DETAIL PAGE
+
+Include:
+
+- Image gallery.
+- Zoom.
+- Video.
+- Product title.
+- Rating and reviews.
+- Multiple seller offers.
+- Price comparison.
+- Size and color selection.
+- Size chart.
+- Quantity selector.
+- Delivery details.
+- Add to Cart.
+- Buy Now.
+- Product specifications.
+- Description.
+- Customer Q&A.
+- Photo and video reviews.
+- Frequently bought together.
+- Related products.
+
+## 6. CART AND CHECKOUT
+
+Create a professional shopping cart with:
+
+- Seller-wise product grouping.
+- Quantity editing.
+- Remove product.
+- Save for later.
+- Coupons.
+- Discounts.
+- Shipping calculation.
+- Taxes.
+- Gift cards.
+- Store credits.
+- Order total.
+
+Checkout must include address, delivery method, payment method and order confirmation.
+
+Preserve existing backend payment and order functionality.
+
+## 7. CUSTOMER ACCOUNT
+
+Create pages for:
+
+- Account overview.
+- Orders.
+- Tracking.
+- Returns.
+- Refunds.
+- Wishlist.
+- Addresses.
+- Payments.
+- Rewards.
+- Gift cards.
+- Subscriptions.
+- Notifications.
+- Customer support.
+- Security settings.
+
+## 8. ADDITIONAL MARKETPLACE PAGES
+
+Create:
+
+- Today's Deals.
+- Best Sellers.
+- New Arrivals.
+- Brand Stores.
+- Search Results.
+- Seller Stores.
+- Product Comparison.
+- Order Tracking.
+- Returns Center.
+- Wholesale/B2B.
+- Digital Products.
+- Help Center.
+- About Us.
+- Contact Us.
+
+## 9. SELLER AND ADMIN DASHBOARDS
+
+Seller dashboard:
+
+- Sales overview.
+- Products.
+- Inventory.
+- Orders.
+- Returns.
+- Promotions.
+- Advertising.
+- Settlements.
+- Analytics.
+
+Admin dashboard:
+
+- Sales overview.
+- Customers.
+- Sellers.
+- Seller approvals.
+- Products.
+- All 34 categories.
+- Orders.
+- Refunds.
+- Payments.
+- CMS.
+- Advertising.
+- Reports.
+- Settings.
+
+## 10. MOBILE RESPONSIVE DESIGN
+
+Create mobile-first layouts:
+
+- Sticky search.
+- Mobile mega menu.
+- Two-column product grid.
+- Compact product cards.
+- Touch-friendly buttons.
+- Bottom navigation: Home, Categories, Search, Wishlist, Cart.
+- Responsive checkout.
+- Mobile account dashboard.
+
+## 11. DESIGN QUALITY
+
+Use:
+
+- Modern professional typography.
+- Clean white backgrounds.
+- Strong but controlled promotional colors.
+- High-quality product imagery.
+- Consistent spacing.
+- Responsive grids.
+- Attractive banners.
+- Smooth, accessible interactions.
+- Fast page loading.
+- Consistent Prime Bazaar branding.
+
+## 12. IMPLEMENTATION RULES
+
+Before changing code:
+
+1. Inspect existing project components.
+2. Identify existing HeroBanner.tsx and CategoryBar.tsx.
+3. Reuse and upgrade existing components.
+4. Identify existing routes and APIs.
+5. Preserve existing functionality.
+6. Avoid duplicate components.
+7. Do not replace real product data with mock production data.
+8. Ensure all buttons and links work.
+9. Test desktop, tablet and mobile layouts.
+
+Implement in small stages and provide a report of files changed and pages completed.
+
+Do not delete existing features, reset the database, or deploy to production without my approval.
+
+**Recommended starting point:** Build the homepage, header, mega menu, category pages and product cards first. These five areas establish the overall Prime Bazaar shopping experience.&#x20;

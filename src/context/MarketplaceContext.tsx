@@ -42,6 +42,8 @@ import { api } from '../services/api';
 export type SupportedLanguage = 'en' | 'hi' | 'mr' | 'ta';
 export type SupportedCurrency = 'INR' | 'USD' | 'EUR' | 'GBP' | 'AED' | 'SGD';
 export type CheckoutPaymentMethod = 'cashfree' | 'upi' | 'card' | 'netbanking' | 'cod' | 'WALLET_ONLY';
+export type DiscoveryTab = 'all' | 'trending' | 'new' | 'bestsellers' | 'flash' | 'deals';
+export type InfoModalPage = 'about' | 'contact' | 'help' | 'b2b' | 'digital' | null;
 
 interface MarketplaceContextType {
   products: Product[];
@@ -171,6 +173,12 @@ interface MarketplaceContextType {
   selectedSubcategory: string | null;
   setSelectedSubcategory: (sub: string | null) => void;
   navigateCategory: (cat: string, sub?: string | null) => void;
+  discoveryTab: DiscoveryTab;
+  setDiscoveryTab: (tab: DiscoveryTab) => void;
+  isMobileCategoriesOpen: boolean;
+  setIsMobileCategoriesOpen: (open: boolean) => void;
+  infoModalPage: InfoModalPage;
+  setInfoModalPage: (page: InfoModalPage) => void;
   recentlyViewed: string[];
   recentlyViewedProducts: Product[];
   isCatalogLoading: boolean;
@@ -1062,6 +1070,9 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategoryState] = useState('all');
   const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null);
+  const [discoveryTab, setDiscoveryTab] = useState<DiscoveryTab>('all');
+  const [isMobileCategoriesOpen, setIsMobileCategoriesOpen] = useState(false);
+  const [infoModalPage, setInfoModalPage] = useState<InfoModalPage>(null);
   const [isCatalogLoading, setIsCatalogLoading] = useState(false);
   const [catalogError, setCatalogError] = useState<string | null>(null);
 
@@ -2054,6 +2065,12 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
         selectedSubcategory,
         setSelectedSubcategory,
         navigateCategory,
+        discoveryTab,
+        setDiscoveryTab,
+        isMobileCategoriesOpen,
+        setIsMobileCategoriesOpen,
+        infoModalPage,
+        setInfoModalPage,
         recentlyViewed,
         recentlyViewedProducts,
         isCatalogLoading,
