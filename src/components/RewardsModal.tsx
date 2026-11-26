@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useMarketplace } from '../context/MarketplaceContext';
+import { api } from '../services/api';
 import { 
   X, 
   Coins, 
@@ -24,9 +25,16 @@ import {
 type DealsTab = 'games' | 'checkin' | 'scratch' | 'flash' | 'coupons' | 'referrals';
 
 export const RewardsModal: React.FC = () => {
-  const { isRewardsOpen, setIsRewardsOpen, coins, earnCoins, notify, applyCoupon } = useMarketplace();
+  const { isRewardsOpen, setIsRewardsOpen, coins, setCoins, earnCoins, notify, applyCoupon, user } = useMarketplace();
   const [activeTab, setActiveTab] = useState<DealsTab>('games');
   const [copied, setCopied] = useState(false);
+
+  // Server Loyalty summary state
+  const [tierName, setTierName] = useState<'SILVER' | 'GOLD' | 'PLATINUM'>('SILVER');
+  const [coinsToNextTier, setCoinsToNextTier] = useState<number>(160);
+  const [serverReferralCode, setServerReferralCode] = useState<string>('BAZAAR-AMAYRA77');
+  const [applyReferralInput, setApplyReferralInput] = useState('');
+  const [loyaltyTxns, setLoyaltyTxns] = useState<any[]>([]);
 
   // Spin the wheel state
   const [isSpinning, setIsSpinning] = useState(false);
@@ -37,13 +45,46 @@ export const RewardsModal: React.FC = () => {
   // Scratch card state
   const [isScratched, setIsScratched] = useState(false);
   const [scratchRewardClaimed, setScratchRewardClaimed] = useState(false);
+  const [scratchWonCoins, setScratchWonCoins] = useState(60);
 
   // 7-day daily check-in state
-  const [claimedDays, setClaimedDays] = useState<number[]>([1]);
-  const [currentDayStreak] = useState(2);
+  const [claimedDays, setClaimedDays] = useState<number[]>([]);
+  const [currentDayStreak, setCurrentDayStreak] = useState(1);
 
   // Flash sale countdown timer
   const [timeLeft, setTimeLeft] = useState({ hours: 4, minutes: 28, seconds: 45 });
+
+  const syncServerLoyalty = () => {
+    if (!user?.isLoggedIn) return;
+    api.loyalty
+      .getMe()
+      .then((res) => {
+        if (res?.account) {
+          setCoins(res.account.coinsBalance);
+          setTierName(res.account.tierName || 'SILVER');
+          setCoinsToNextTier(Number(res.coinsToNextTier || 0));
+          setServerReferralCode(res.account.referralCode || 'BAZAAR-AMAYRA77');
+          setSpinsLeft(res.account.spinsRemainingToday ?? 3);
+          const streak = Number(res.account.streakDays || 0);
+          setCurrentDayStreak(Math.max(1, streak + (res.account.canCheckInToday ? 1 : 0)));
+          setClaimedDays(Array.from({ length: streak }, (_, i) => i + 1));
+          if (!res.account.canScratchToday) {
+            setIsScratched(true);
+            setScratchRewardClaimed(true);
+          }
+        }
+        if (Array.isArray(res?.transactions)) {
+          setLoyaltyTxns(res.transactions);
+        }
+      })
+      .catch(() => {});
+  };
+
+  useEffect(() => {
+    if (isRewardsOpen) {
+      syncServerLoyalty();
+    }
+  }, [isRewardsOpen, user?.isLoggedIn]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -59,7 +100,7 @@ export const RewardsModal: React.FC = () => {
 
   if (!isRewardsOpen) return null;
 
-  const referralCode = 'BAZAAR-AMAYRA77';
+  const referralCode = serverReferralCode;
 
   const handleCopy = () => {
     navigator.clipboard?.writeText?.(referralCode);
@@ -68,59 +109,135 @@ export const RewardsModal: React.FC = () => {
     setTimeout(() => setCopied(false), 2500);
   };
 
+  const handleApplyReferral = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!applyReferralInput.trim()) return;
+    if (!user?.isLoggedIn) {
+      notify('Please sign in first to link a referral code.');
+      return;
+    }
+    try {
+      const res = await api.loyalty.applyReferral(applyReferralInput.trim());
+      notify(res.message || 'Referral code applied!');
+      setApplyReferralInput('');
+      syncServerLoyalty();
+    } catch (err: any) {
+      notify(err?.message || 'Unable to apply referral code.');
+    }
+  };
+
   const wheelSegments = [
     { label: '50 Coins', coins: 50, color: 'from-amber-500 to-yellow-400' },
-    { label: '₹150 OFF', coupon: 'SPIN150', color: 'from-rose-500 to-pink-500' },
     { label: '20 Coins', coins: 20, color: 'from-emerald-500 to-teal-400' },
-    { label: 'Free Ship', coupon: 'FREESHIP', color: 'from-sky-500 to-indigo-500' },
     { label: '100 Coins', coins: 100, color: 'from-purple-500 to-violet-400' },
-    { label: 'Mystery Gift', coins: 75, color: 'from-orange-500 to-amber-400' }
+    { label: '₹150 OFF', coupon: 'SPIN150', color: 'from-rose-500 to-pink-500' },
+    { label: 'Free Ship', coupon: 'FREESHIP', color: 'from-sky-500 to-indigo-500' },
+    { label: '75 Coins', coins: 75, color: 'from-orange-500 to-amber-400' }
   ];
 
-  const handleSpinWheel = () => {
+  const handleSpinWheel = async () => {
     if (isSpinning || spinsLeft <= 0) {
-      if (spinsLeft <= 0) notify('No spins left today! Complete missions to earn more spins.');
+      if (spinsLeft <= 0) notify('No spins left today! Come back tomorrow.');
       return;
     }
     setIsSpinning(true);
     setSpinPrize(null);
 
-    // Random segment
-    const randomIdx = Math.floor(Math.random() * wheelSegments.length);
+    let serverResult: any = null;
+    if (user?.isLoggedIn) {
+      try {
+        serverResult = await api.loyalty.spin();
+      } catch (err: any) {
+        setIsSpinning(false);
+        notify(err?.message || 'Daily spin limit reached.');
+        return;
+      }
+    }
+
+    const winningIdx =
+      typeof serverResult?.segmentIndex === 'number'
+        ? serverResult.segmentIndex % wheelSegments.length
+        : Math.floor(Math.random() * wheelSegments.length);
     const degreesPerSegment = 360 / wheelSegments.length;
     const extraSpins = 5 * 360;
-    const targetDeg = wheelRotation + extraSpins + (randomIdx * degreesPerSegment) + Math.floor(Math.random() * 20);
-
+    const targetDeg = wheelRotation + extraSpins + winningIdx * degreesPerSegment + 15;
     setWheelRotation(targetDeg);
 
     setTimeout(() => {
       setIsSpinning(false);
-      setSpinsLeft(prev => prev - 1);
-      const prize = wheelSegments[randomIdx];
-      setSpinPrize(prize.label);
-      if (prize.coins) {
-        earnCoins(prize.coins, `Spin & Win: ${prize.label}`);
-        notify(`🎉 Congratulations! You won ${prize.label}!`);
-      } else if (prize.coupon) {
-        notify(`🎉 You won coupon ${prize.coupon}! Applied to your cart.`);
+      if (serverResult) {
+        setSpinsLeft(serverResult.spinsRemainingToday ?? Math.max(0, spinsLeft - 1));
+        setSpinPrize(serverResult.prizeLabel);
+        if (serverResult.account) setCoins(serverResult.account.coinsBalance);
+        if (serverResult.couponCode) {
+          applyCoupon(serverResult.couponCode);
+        }
+        notify(`You won ${serverResult.prizeLabel}!`);
+        syncServerLoyalty();
+      } else {
+        setSpinsLeft(prev => Math.max(0, prev - 1));
+        const prize = wheelSegments[winningIdx];
+        setSpinPrize(prize.label);
+        if (prize.coins) {
+          earnCoins(prize.coins, `Spin & Win: ${prize.label}`);
+        } else if (prize.coupon) {
+          applyCoupon(prize.coupon);
+          notify(`You won coupon ${prize.coupon}!`);
+        }
       }
     }, 3500);
   };
 
-  const handleClaimDailyCheckIn = (day: number, amount: number) => {
+  const handleClaimDailyCheckIn = async (day: number, amount: number) => {
     if (claimedDays.includes(day)) return;
+    if (user?.isLoggedIn) {
+      try {
+        const res = await api.loyalty.checkIn();
+        if (res.alreadyClaimed) {
+          notify(res.message);
+          return;
+        }
+        if (res.account) setCoins(res.account.coinsBalance);
+        setClaimedDays(prev => [...prev, res.streakDays || day]);
+        setCurrentDayStreak(res.streakDays || day);
+        notify(res.message || `+${res.awardedCoins} Bazaar Coins credited!`);
+        syncServerLoyalty();
+        return;
+      } catch (err: any) {
+        notify(err?.message || 'Unable to claim check-in.');
+        return;
+      }
+    }
     setClaimedDays(prev => [...prev, day]);
     earnCoins(amount, `Day ${day} Check-in Streak`);
-    notify(`Day ${day} check-in reward: +${amount} Bazaar Coins credited! 🪙`);
+    notify(`Day ${day} check-in reward: +${amount} Bazaar Coins credited!`);
   };
 
-  const handleScratch = () => {
+  const handleScratch = async () => {
     if (isScratched || scratchRewardClaimed) return;
     setIsScratched(true);
+    if (user?.isLoggedIn) {
+      try {
+        const res = await api.loyalty.scratch();
+        setScratchRewardClaimed(true);
+        if (res.alreadyClaimed) {
+          notify(res.message);
+          return;
+        }
+        setScratchWonCoins(res.coinsAwarded || 60);
+        if (res.account) setCoins(res.account.coinsBalance);
+        notify(res.message || `You scratched & won +${res.coinsAwarded} Bazaar Coins!`);
+        syncServerLoyalty();
+        return;
+      } catch (err: any) {
+        notify(err?.message || 'Unable to claim scratch card.');
+        return;
+      }
+    }
     setTimeout(() => {
       setScratchRewardClaimed(true);
       earnCoins(60, 'Scratch Card Winner');
-      notify('🎉 You scratched & won +60 Bazaar Coins + ₹100 Extra Voucher!');
+      notify('You scratched & won +60 Bazaar Coins + ₹100 Extra Voucher!');
     }, 400);
   };
 
@@ -132,8 +249,14 @@ export const RewardsModal: React.FC = () => {
   ];
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 animate-fadeIn">
-      <div 
+    <div
+      className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 animate-fadeIn"
+      onClick={() => setIsRewardsOpen(false)}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Deals, Games & Rewards Hub"
         className="relative w-full max-w-2xl bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden shadow-2xl border border-zinc-200 dark:border-zinc-800 flex flex-col max-h-[92vh]"
         onClick={e => e.stopPropagation()}
       >
@@ -144,27 +267,30 @@ export const RewardsModal: React.FC = () => {
               <Coins className="w-6 h-6" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-base sm:text-lg font-bold font-display text-zinc-900 dark:text-white">
                   Deals, Games & Rewards Hub
                 </h2>
-                <span className="px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 text-[10px] font-bold">
-                  Temu Super Perks
+                <span className="px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 text-[10px] font-bold">
+                  {tierName} Tier
                 </span>
               </div>
-              <div className="flex items-center gap-2 mt-0.5 text-xs">
+              <div className="flex items-center gap-2 mt-0.5 text-xs flex-wrap">
                 <span className="text-zinc-500">Balance:</span>
                 <span className="font-extrabold font-mono text-amber-600 dark:text-amber-400 text-sm">
                   {coins} Coins
                 </span>
-                <span className="text-[10px] text-zinc-400">(= ₹{coins} off at checkout)</span>
+                <span className="text-[10px] text-zinc-400">
+                  (= ₹{coins} off{coinsToNextTier > 0 ? ` · ${coinsToNextTier} pts to next tier` : ''})
+                </span>
               </div>
             </div>
           </div>
 
           <button
             onClick={() => setIsRewardsOpen(false)}
-            className="p-2 rounded-xl text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+            aria-label="Close rewards modal"
+            className="p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -513,12 +639,17 @@ export const RewardsModal: React.FC = () => {
           {activeTab === 'referrals' && (
             <div className="space-y-4">
               <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800 space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between flex-wrap gap-2">
                   <div className="flex items-center gap-2 text-xs font-semibold text-zinc-900 dark:text-white">
                     <Share2 className="w-4 h-4 text-rose-600" />
                     <span>Your Unique Reseller / Referral Code</span>
                   </div>
-                  <span className="text-[10px] text-emerald-600 font-bold">Earn 100 Coins / Friend</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                      Tier: {tierName} {coinsToNextTier > 0 ? `(${coinsToNextTier} to next)` : '(Top Tier)'}
+                    </span>
+                    <span className="text-[10px] text-emerald-600 font-bold">Earn 100 Coins / Friend</span>
+                  </div>
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -526,6 +657,7 @@ export const RewardsModal: React.FC = () => {
                     {referralCode}
                   </div>
                   <button
+                    type="button"
                     onClick={handleCopy}
                     className="px-4 py-2.5 rounded-xl bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 text-xs font-semibold flex items-center gap-1.5 hover:bg-zinc-800 transition-colors shrink-0"
                   >
@@ -534,9 +666,41 @@ export const RewardsModal: React.FC = () => {
                   </button>
                 </div>
                 <p className="text-[11px] text-zinc-500">
-                  When a friend signs up with your code and places their first order, you both get 100 Bazaar Coins credited instantly.
+                  When a friend signs up with your code and places their first order, you both get 100 Bazaar Coins credited automatically.
                 </p>
+
+                <form onSubmit={handleApplyReferral} className="pt-2 border-t border-zinc-200 dark:border-zinc-700 flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Have a friend's referral code? Enter here"
+                    value={applyReferralInput}
+                    onChange={e => setApplyReferralInput(e.target.value.toUpperCase())}
+                    className="flex-1 px-3 py-2 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 font-mono text-xs"
+                  />
+                  <button
+                    type="submit"
+                    className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold whitespace-nowrap"
+                  >
+                    Apply Code
+                  </button>
+                </form>
               </div>
+
+              {loyaltyTxns.length > 0 && (
+                <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800 space-y-2 text-xs">
+                  <span className="font-bold text-zinc-900 dark:text-white block">Recent Reward Ledger</span>
+                  <div className="divide-y divide-zinc-200 dark:divide-zinc-700/60 max-h-40 overflow-y-auto">
+                    {loyaltyTxns.slice(0, 8).map((tx: any) => (
+                      <div key={tx.id} className="py-1.5 flex items-center justify-between gap-2 tabular-nums">
+                        <span className="text-zinc-700 dark:text-zinc-300 truncate">{tx.description}</span>
+                        <span className={`font-mono font-bold ${tx.coinsDelta >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                          {tx.coinsDelta >= 0 ? `+${tx.coinsDelta}` : tx.coinsDelta} Coins
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -544,3 +708,4 @@ export const RewardsModal: React.FC = () => {
     </div>
   );
 };
+

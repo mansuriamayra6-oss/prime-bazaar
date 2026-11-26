@@ -33,10 +33,24 @@ export const OrdersModal: React.FC = () => {
 
   const [returnOrderId, setReturnOrderId] = useState<string | null>(null);
   const [returnReason, setReturnReason] = useState('Size does not fit properly');
+  const [digitalGrants, setDigitalGrants] = useState<any[]>([]);
 
   useEffect(() => {
-    if (!isOrdersOpen || !user?.isLoggedIn || orders.length === 0) return;
+    if (!isOrdersOpen || !user?.isLoggedIn) return;
     let cancelled = false;
+
+    api.phase6G
+      .getMyDigitalDownloads()
+      .then(res => {
+        if (!cancelled && Array.isArray(res?.grants)) {
+          setDigitalGrants(res.grants);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setDigitalGrants([]);
+      });
+
+    if (orders.length === 0) return;
 
     const loadShipmentsAndSuborders = async () => {
       const results = await Promise.allSettled(
@@ -218,6 +232,52 @@ export const OrdersModal: React.FC = () => {
 
         {/* Orders List */}
         <div className="flex-1 min-h-0 overflow-y-auto p-6 sm:p-8 space-y-6">
+          {digitalGrants.length > 0 && (
+            <div className="p-4 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800 space-y-2.5 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-indigo-950 dark:text-indigo-200 flex items-center gap-1.5">
+                  <Download className="w-4 h-4 text-indigo-600" />
+                  <span>Signed Digital Downloads ({digitalGrants.length})</span>
+                </span>
+                <span className="text-[11px] text-indigo-700 dark:text-indigo-400">
+                  HMAC-verified · Revoked automatically on refund/cancel
+                </span>
+              </div>
+              <div className="space-y-2">
+                {digitalGrants.map((grant: any) => {
+                  const remaining = Math.max(0, Number(grant.maxDownloads || 0) - Number(grant.downloadCount || 0));
+                  return (
+                    <div key={grant.id} className="p-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <span className="font-semibold text-zinc-900 dark:text-white block">
+                          {grant.fileName} (Order #{grant.orderId})
+                        </span>
+                        <span className="text-[11px] text-zinc-500 font-mono">
+                          {grant.revokedAt ? 'REVOKED' : `${remaining}/${grant.maxDownloads} downloads left · Expires ${new Date(grant.expiresAt).toLocaleDateString()}`}
+                        </span>
+                      </div>
+                      {!grant.revokedAt && remaining > 0 ? (
+                        <a
+                          href={grant.downloadUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold flex items-center gap-1 whitespace-nowrap"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span>Download</span>
+                        </a>
+                      ) : (
+                        <span className="px-2.5 py-1 rounded bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-semibold text-[11px]">
+                          {grant.revokedAt ? 'Revoked' : 'Limit Reached'}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {orders.length > 0 ? (
             orders.map(order => {
               const orderShipments = shipmentsByOrder[order.id] || [];

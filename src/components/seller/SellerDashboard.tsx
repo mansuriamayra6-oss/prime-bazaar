@@ -62,6 +62,7 @@ import {
   SellerSponsoredAdsPanel,
   SellerGovernancePanel,
   SellerCatalogOffersPanel,
+  SellerB2BAndDigitalPanel,
 } from './SellerOpsPanels';
 
 type SellerTab = 
@@ -1965,6 +1966,12 @@ export const SellerDashboard: React.FC = () => {
               </div>
 
               <SellerCatalogOffersPanel
+                seller={currentSeller}
+                allProducts={products}
+                notify={notify}
+              />
+
+              <SellerB2BAndDigitalPanel
                 seller={currentSeller}
                 allProducts={products}
                 notify={notify}

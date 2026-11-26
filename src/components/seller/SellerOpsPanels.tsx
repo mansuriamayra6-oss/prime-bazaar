@@ -905,3 +905,159 @@ export const SellerCatalogOffersPanel: React.FC<{
   );
 };
 
+export const SellerB2BAndDigitalPanel: React.FC<{
+  seller: Seller;
+  allProducts: Product[];
+  notify: (msg: string) => void;
+}> = ({ seller, allProducts, notify }) => {
+  const [rfqs, setRfqs] = useState<any[]>([]);
+  const [quoteInputs, setQuoteInputs] = useState<Record<string, number>>({});
+  const [assetProductId, setAssetProductId] = useState(allProducts[0]?.id || 'prod-1');
+  const [assetFileName, setAssetFileName] = useState('Care-And-Sizing-Guide.txt');
+  const [assetContent, setAssetContent] = useState('Prime Bazaar Official Care Guide & Fabric Authenticity Certificate.');
+
+  const loadRfqs = () => {
+    api.phase6G
+      .getRfqs()
+      .then(res => setRfqs(res.rfqs || []))
+      .catch(() => setRfqs([]));
+  };
+
+  useEffect(() => {
+    loadRfqs();
+  }, [seller.id]);
+
+  const handleQuoteRfq = async (rfqId: string, status: 'QUOTED' | 'REJECTED') => {
+    try {
+      const unitPrice = quoteInputs[rfqId] || 1199;
+      await api.phase6G.quoteRfq(rfqId, { quotedUnitPrice: unitPrice, status });
+      notify(`RFQ ${status.toLowerCase()} successfully.`);
+      loadRfqs();
+    } catch (err: any) {
+      notify(err?.message || 'Unable to update RFQ.');
+    }
+  };
+
+  const handleRegisterAsset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await api.phase6G.registerDigitalAsset({
+        productId: assetProductId,
+        fileName: assetFileName,
+        mimeType: 'text/plain',
+        content: assetContent,
+        maxDownloads: 3,
+        expiryHours: 72,
+      });
+      notify('Digital companion asset attached to product!');
+    } catch (err: any) {
+      notify(err?.message || 'Unable to register digital asset.');
+    }
+  };
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="bg-white dark:bg-zinc-900 rounded-3xl p-6 border border-zinc-200 dark:border-zinc-800 shadow-xs space-y-4 text-xs">
+        <div>
+          <h3 className="text-base font-bold text-zinc-900 dark:text-white font-display">
+            B2B Wholesale Quote Requests (RFQs)
+          </h3>
+          <p className="text-zinc-500">Quote unit pricing or decline incoming B2B buyer bulk inquiries.</p>
+        </div>
+
+        {rfqs.length === 0 ? (
+          <p className="text-zinc-500 py-4">No B2B quote requests assigned to this store yet.</p>
+        ) : (
+          <div className="space-y-2.5 max-h-64 overflow-y-auto">
+            {rfqs.map(rfq => (
+              <div key={rfq.id} className="p-3 rounded-xl border border-zinc-200 dark:border-zinc-800 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-bold text-zinc-900 dark:text-white">
+                    {rfq.productId} · Qty {rfq.requestedQty}
+                  </span>
+                  <span className="font-mono text-[10px] font-bold px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800">
+                    {rfq.status}
+                  </span>
+                </div>
+                {rfq.notes && <p className="text-[11px] text-zinc-500">{rfq.notes}</p>}
+                {rfq.status === 'OPEN' && (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={1}
+                      placeholder="Unit Price ₹"
+                      value={quoteInputs[rfq.id] ?? rfq.targetUnitPrice ?? 1199}
+                      onChange={e => setQuoteInputs(prev => ({ ...prev, [rfq.id]: Number(e.target.value) }))}
+                      className="w-28 px-2.5 py-1 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleQuoteRfq(rfq.id, 'QUOTED')}
+                      className="px-3 py-1 rounded-lg bg-emerald-600 text-white font-semibold"
+                    >
+                      Send Quote
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleQuoteRfq(rfq.id, 'REJECTED')}
+                      className="px-3 py-1 rounded-lg border border-rose-300 text-rose-600 font-semibold"
+                    >
+                      Reject
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <form
+        onSubmit={handleRegisterAsset}
+        className="bg-white dark:bg-zinc-900 rounded-3xl p-6 border border-zinc-200 dark:border-zinc-800 shadow-xs space-y-3 text-xs"
+      >
+        <div>
+          <h3 className="text-base font-bold text-zinc-900 dark:text-white font-display">
+            Attach Signed Digital Product Guide
+          </h3>
+          <p className="text-zinc-500">Auto-unlocked for buyers with HMAC-signed URLs (revoked on refund).</p>
+        </div>
+
+        <select
+          value={assetProductId}
+          onChange={e => setAssetProductId(e.target.value)}
+          className="w-full px-3 py-2 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800"
+        >
+          {allProducts.slice(0, 20).map(p => (
+            <option key={p.id} value={p.id}>
+              {p.title.slice(0, 48)}
+            </option>
+          ))}
+        </select>
+        <input
+          type="text"
+          required
+          value={assetFileName}
+          onChange={e => setAssetFileName(e.target.value)}
+          placeholder="File name (e.g. Styling-Lookbook.txt)"
+          className="w-full px-3 py-2 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 font-mono"
+        />
+        <textarea
+          rows={2}
+          required
+          value={assetContent}
+          onChange={e => setAssetContent(e.target.value)}
+          className="w-full px-3 py-2 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800"
+        />
+        <button
+          type="submit"
+          className="px-4 py-2 rounded-xl bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 font-semibold"
+        >
+          Save Digital Asset
+        </button>
+      </form>
+    </div>
+  );
+};
+
+

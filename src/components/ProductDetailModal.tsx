@@ -154,6 +154,17 @@ export const ProductDetailModal: React.FC = () => {
   const [selectedOfferId, setSelectedOfferId] = useState<string | null>(null);
   const [showAllOffers, setShowAllOffers] = useState(false);
 
+  // Smart Discovery, B2B Wholesale, Subscriptions & Digital Assets state
+  const [recoBundleIds, setRecoBundleIds] = useState<string[]>([]);
+  const [bulkTiers, setBulkTiers] = useState<any[]>([]);
+  const [rfqQty, setRfqQty] = useState(25);
+  const [rfqNotes, setRfqNotes] = useState('');
+  const [rfqSubmitting, setRfqSubmitting] = useState(false);
+  const [showRfqForm, setShowRfqForm] = useState(false);
+  const [subPlans, setSubPlans] = useState<any[]>([]);
+  const [subscribingPlanId, setSubscribingPlanId] = useState<string | null>(null);
+  const [digitalAssetInfo, setDigitalAssetInfo] = useState<any>(null);
+
   // Reset modal internal state whenever selectedProduct changes
   useEffect(() => {
     if (!selectedProduct) return;
@@ -205,7 +216,11 @@ export const ProductDetailModal: React.FC = () => {
         })
         .catch(() => null),
       api.offers.getForProduct(selectedProduct.id).catch(() => null),
-    ]).then(([qaRes, revRes, offersRes]) => {
+      api.discovery.recommendations({ productId: selectedProduct.id }).catch(() => null),
+      api.phase6G.getBulkPricing(selectedProduct.id, 1).catch(() => null),
+      api.phase6G.getPlans(selectedProduct.id).catch(() => null),
+      api.phase6G.getDigitalAssetForProduct(selectedProduct.id).catch(() => null),
+    ]).then(([qaRes, revRes, offersRes, recoRes, bulkRes, planRes, assetRes]) => {
       if (cancelled) return;
       if (qaRes?.questions) {
         setQuestions(qaRes.questions);
@@ -223,6 +238,14 @@ export const ProductDetailModal: React.FC = () => {
       } else {
         setSellerOffers([]);
       }
+      if (Array.isArray(recoRes?.frequentlyBoughtTogether)) {
+        setRecoBundleIds(recoRes.frequentlyBoughtTogether.map((x: any) => x.id));
+      } else {
+        setRecoBundleIds([]);
+      }
+      setBulkTiers(Array.isArray(bulkRes?.tiers) ? bulkRes.tiers : []);
+      setSubPlans(Array.isArray(planRes?.plans) ? planRes.plans : []);
+      setDigitalAssetInfo(assetRes?.hasDigitalAsset ? assetRes.asset : null);
       setQaLoading(false);
     });
 
@@ -259,19 +282,22 @@ export const ProductDetailModal: React.FC = () => {
     [selectedProduct, selectedCategory]
   );
 
-  // Complementary Bundle items
+  // Complementary Bundle items (prefers real co-occurrence backend recommendations when present)
   const bundleCandidates = useMemo(() => {
     if (!selectedProduct) return [];
     const primaryDept = resolveProductPrimaryDepartment(selectedProduct);
+    const recoSet = new Set(recoBundleIds);
     return products
       .filter(p => p.id !== selectedProduct.id && p.inStock > 0)
       .sort((a, b) => {
+        const aReco = recoSet.has(a.id) ? 2 : 0;
+        const bReco = recoSet.has(b.id) ? 2 : 0;
         const aDept = resolveProductPrimaryDepartment(a).group === primaryDept.group ? 1 : 0;
         const bDept = resolveProductPrimaryDepartment(b).group === primaryDept.group ? 1 : 0;
-        return bDept - aDept || b.rating - a.rating;
+        return (bReco + bDept) - (aReco + aDept) || b.rating - a.rating;
       })
       .slice(0, 2);
-  }, [products, selectedProduct]);
+  }, [products, selectedProduct, recoBundleIds]);
 
   // Related / Similar products
   const relatedProducts = useMemo(() => {
@@ -1125,6 +1151,142 @@ export const ProductDetailModal: React.FC = () => {
                       </div>
                     )}
                   </div>
+
+                  {/* Signed Digital Bonus Asset Callout */}
+                  {digitalAssetInfo && (
+                    <div className="p-3 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800 flex items-center justify-between gap-2 text-xs">
+                      <div>
+                        <span className="font-bold text-indigo-900 dark:text-indigo-200 block">
+                          Includes Signed Digital Companion ({digitalAssetInfo.fileName})
+                        </span>
+                        <span className="text-[11px] text-indigo-700 dark:text-indigo-400">
+                          Up to {digitalAssetInfo.maxDownloads} downloads · unlocked automatically in My Orders after checkout
+                        </span>
+                      </div>
+                      <span className="px-2 py-0.5 rounded bg-indigo-600 text-white text-[10px] font-bold shrink-0">
+                        Digital Included
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Subscribe & Save Plan */}
+                  {subPlans.length > 0 && (
+                    <div className="p-3.5 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 space-y-2 text-xs">
+                      <div className="flex items-center justify-between gap-2">
+                        <div>
+                          <span className="font-bold text-zinc-900 dark:text-white block">
+                            Subscribe & Save Auto-Replenish
+                          </span>
+                          <span className="text-[11px] text-zinc-500">
+                            {subPlans[0].name} · Save {subPlans[0].discountPercent}% every {subPlans[0].intervalDays} days
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={subscribingPlanId === subPlans[0].id}
+                          onClick={async () => {
+                            if (!user?.isLoggedIn) {
+                              notify('Please sign in first to start a subscription.');
+                              setIsAuthOpen(true);
+                              return;
+                            }
+                            setSubscribingPlanId(subPlans[0].id);
+                            try {
+                              const res = await api.phase6G.subscribe(subPlans[0].id);
+                              notify(res?.subscription?.mandateNote || 'Subscription created! Manage in Profile > My Subscriptions.');
+                            } catch (err: any) {
+                              notify(err?.message || 'Unable to create subscription.');
+                            } finally {
+                              setSubscribingPlanId(null);
+                            }
+                          }}
+                          className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] whitespace-nowrap shrink-0 disabled:opacity-50"
+                        >
+                          {subscribingPlanId === subPlans[0].id ? 'Joining...' : `Subscribe (${formatPrice(Math.round(displayPrice * (1 - subPlans[0].discountPercent / 100)))})`}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* B2B Bulk Tiered Pricing & Request for Quote (RFQ) */}
+                  {(bulkTiers.length > 0 || true) && (
+                    <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800 space-y-2 text-xs">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-bold text-zinc-900 dark:text-white">
+                          B2B Wholesale & Bulk Quotes
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setShowRfqForm(prev => !prev)}
+                          className="text-[11px] font-semibold text-rose-600 dark:text-rose-400 hover:underline"
+                        >
+                          {showRfqForm ? 'Hide RFQ Form' : 'Request Bulk Quote (RFQ)'}
+                        </button>
+                      </div>
+
+                      {bulkTiers.length > 0 && (
+                        <div className="grid grid-cols-3 gap-2 text-[11px] font-mono tabular-nums">
+                          {bulkTiers.slice(0, 3).map((tier: any) => (
+                            <div key={tier.id} className="p-2 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700">
+                              <span className="block font-sans text-zinc-500">{tier.minQty}+ units</span>
+                              <span className="font-bold text-zinc-900 dark:text-white">{formatPrice(tier.unitPrice)}/ea</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {showRfqForm && (
+                        <div className="pt-2 border-t border-zinc-200 dark:border-zinc-700 space-y-2">
+                          <div className="flex gap-2">
+                            <input
+                              type="number"
+                              min={5}
+                              value={rfqQty}
+                              onChange={e => setRfqQty(Number(e.target.value))}
+                              placeholder="Qty"
+                              className="w-24 px-2.5 py-1.5 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 font-mono text-xs"
+                            />
+                            <input
+                              type="text"
+                              value={rfqNotes}
+                              onChange={e => setRfqNotes(e.target.value)}
+                              placeholder="Delivery timeline or GST invoice notes..."
+                              className="flex-1 px-2.5 py-1.5 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs"
+                            />
+                            <button
+                              type="button"
+                              disabled={rfqSubmitting}
+                              onClick={async () => {
+                                if (!user?.isLoggedIn) {
+                                  notify('Sign in & register your B2B GSTIN account in Profile to submit RFQs.');
+                                  setIsAuthOpen(true);
+                                  return;
+                                }
+                                setRfqSubmitting(true);
+                                try {
+                                  await api.phase6G.createRfq({
+                                    productId: product.id,
+                                    requestedQty: rfqQty,
+                                    notes: rfqNotes || undefined,
+                                  });
+                                  notify('Wholesale RFQ submitted to seller!');
+                                  setShowRfqForm(false);
+                                  setRfqNotes('');
+                                } catch (err: any) {
+                                  notify(err?.message || 'Register a B2B GSTIN account in Profile first.');
+                                } finally {
+                                  setRfqSubmitting(false);
+                                }
+                              }}
+                              className="px-3 py-1.5 rounded-lg bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 font-bold text-xs whitespace-nowrap disabled:opacity-50"
+                            >
+                              {rfqSubmitting ? 'Sending...' : 'Submit RFQ'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 

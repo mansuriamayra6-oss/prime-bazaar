@@ -13,13 +13,14 @@ import {
   FolderTree,
   ArrowUp,
   ArrowDown,
+  Globe,
 } from 'lucide-react';
 
 interface AdminSupplyAndCmsPanelProps {
   notify: (msg: string) => void;
 }
 
-type OpsSubTab = 'cms' | 'categories' | 'procurement' | 'warehouses' | 'ads' | 'staff' | 'audit';
+type OpsSubTab = 'cms' | 'categories' | 'procurement' | 'warehouses' | 'ads' | 'staff' | 'audit' | 'intl_b2b';
 
 function isSafeCmsUrl(url: string): boolean {
   if (!url) return true;
@@ -86,6 +87,14 @@ export const AdminSupplyAndCmsPanel: React.FC<AdminSupplyAndCmsPanelProps> = ({ 
   const [auditSearch, setAuditSearch] = useState('');
   const [auditEntity, setAuditEntity] = useState('');
 
+  // Phase 6D/6F/6G: International FX, B2B Verification & Loyalty Expiry Controls
+  const [intlCountries, setIntlCountries] = useState<any[]>([]);
+  const [intlRates, setIntlRates] = useState<any[]>([]);
+  const [fxEditCurrency, setFxEditCurrency] = useState('USD');
+  const [fxEditRate, setFxEditRate] = useState(0.012);
+  const [b2bAccounts, setB2bAccounts] = useState<any[]>([]);
+  const [expiryResult, setExpiryResult] = useState<string | null>(null);
+
   const loadSubTab = async (tab: OpsSubTab) => {
     setError(null);
     try {
@@ -131,6 +140,14 @@ export const AdminSupplyAndCmsPanel: React.FC<AdminSupplyAndCmsPanelProps> = ({ 
           limit: 40,
         });
         setAuditLogs(lRes.logs || []);
+      } else if (tab === 'intl_b2b') {
+        const [iRes, bRes] = await Promise.all([
+          api.intl.getConfig(),
+          api.phase6G.adminGetB2BAccounts(),
+        ]);
+        setIntlCountries(iRes.countries || []);
+        setIntlRates(iRes.rates || []);
+        setB2bAccounts(bRes.accounts || []);
       }
     } catch (err: any) {
       setError(err.message || 'Insufficient admin privileges for this module.');
@@ -350,6 +367,7 @@ export const AdminSupplyAndCmsPanel: React.FC<AdminSupplyAndCmsPanelProps> = ({ 
             { id: 'warehouses', label: 'Warehouses & OTP Override', icon: KeyRound },
             { id: 'ads', label: 'Sponsored Ads', icon: Megaphone },
             { id: 'staff', label: 'Admin Staff & Roles', icon: Users },
+            { id: 'intl_b2b', label: 'Intl, B2B & Loyalty', icon: Globe },
             { id: 'audit', label: 'Audit Logs', icon: FileSearch },
           ].map(t => {
             const Icon = t.icon;
@@ -946,6 +964,123 @@ export const AdminSupplyAndCmsPanel: React.FC<AdminSupplyAndCmsPanelProps> = ({ 
           </div>
         </div>
       )}
+
+      {/* INTERNATIONAL FX, B2B GSTIN VERIFICATION & LOYALTY EXPIRY */}
+      {subTab === 'intl_b2b' && (
+        <div className="space-y-6 text-xs">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 space-y-3">
+              <span className="font-bold text-zinc-900 dark:text-white block">
+                Exchange Rate Matrix ({intlRates.length} currencies)
+              </span>
+              <div className="flex gap-2">
+                <select
+                  value={fxEditCurrency}
+                  onChange={e => setFxEditCurrency(e.target.value)}
+                  className="px-2.5 py-1.5 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 font-mono"
+                >
+                  {['USD', 'EUR', 'GBP', 'AED', 'SGD'].map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+                <input
+                  type="number"
+                  step="0.0001"
+                  value={fxEditRate}
+                  onChange={e => setFxEditRate(Number(e.target.value))}
+                  className="flex-1 px-2.5 py-1.5 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await api.intl.adminSaveFx(fxEditCurrency, { rateFromInr: fxEditRate });
+                      await loadSubTab('intl_b2b');
+                      notify(`Updated ${fxEditCurrency} FX rate.`);
+                    } catch (err: any) {
+                      notify(err?.message || 'Failed to update FX rate.');
+                    }
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 font-semibold"
+                >
+                  Update FX
+                </button>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {intlCountries.map(c => (
+                  <div key={c.countryCode} className="p-2 rounded-lg bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
+                    <div className="font-bold text-zinc-900 dark:text-white">{c.countryName} ({c.countryCode})</div>
+                    <div className="text-[11px] text-zinc-500 font-mono">
+                      {c.currencyCode} · Duty {c.customsDutyPercent}% · VAT {c.taxPercent}% · COD: {c.codAllowed ? 'Yes' : 'No'}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-bold text-zinc-900 dark:text-white">Loyalty Coin Expiry Maintenance</span>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      const res = await api.loyalty.adminRunExpirySweep();
+                      setExpiryResult(`Swept ${res.accountsExpired || 0} accounts, expired ${res.coinsExpiredTotal || 0} coins.`);
+                      notify('Loyalty coin expiry sweep completed.');
+                    } catch (err: any) {
+                      notify(err?.message || 'Expiry sweep failed.');
+                    }
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-rose-600 text-white font-semibold"
+                >
+                  Run Coin Expiry Sweep
+                </button>
+              </div>
+              {expiryResult && <p className="text-emerald-600 font-mono text-[11px]">{expiryResult}</p>}
+
+              <span className="font-bold text-zinc-900 dark:text-white block pt-2 border-t border-zinc-200 dark:border-zinc-800">
+                B2B GSTIN Account Verification ({b2bAccounts.length})
+              </span>
+              {b2bAccounts.length === 0 ? (
+                <p className="text-zinc-500">No B2B accounts registered yet.</p>
+              ) : (
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {b2bAccounts.map(acc => (
+                    <div key={acc.userId} className="p-2.5 rounded-lg border border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-2">
+                      <div>
+                        <span className="font-bold text-zinc-900 dark:text-white block">{acc.companyName}</span>
+                        <span className="font-mono text-[11px] text-zinc-500">{acc.gstin} · {acc.verificationStatus}</span>
+                      </div>
+                      <div className="flex gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            api.phase6G.adminReviewB2BAccount(acc.userId, 'VERIFIED').then(() => loadSubTab('intl_b2b'))
+                          }
+                          className="px-2.5 py-1 rounded bg-emerald-600 text-white font-semibold"
+                        >
+                          Verify
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            api.phase6G.adminReviewB2BAccount(acc.userId, 'REJECTED').then(() => loadSubTab('intl_b2b'))
+                          }
+                          className="px-2.5 py-1 rounded bg-rose-600 text-white font-semibold"
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+

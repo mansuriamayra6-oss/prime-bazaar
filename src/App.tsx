@@ -1,63 +1,157 @@
-import React from 'react';
+import React, { Component, Suspense, lazy, useEffect } from 'react';
 import { MarketplaceProvider, useMarketplace } from './context/MarketplaceContext';
 import { Header } from './components/Header';
 import { CategoryBar } from './components/CategoryBar';
 import { HeroBanner } from './components/HeroBanner';
 import { ProductCatalog } from './components/ProductCatalog';
-import { ProductDetailModal } from './components/ProductDetailModal';
-import { TrendStreamModal } from './components/TrendStreamModal';
-import { VisualSearchModal } from './components/VisualSearchModal';
-import { CartDrawer } from './components/CartDrawer';
-import { CheckoutModal } from './components/CheckoutModal';
-import { OrdersModal } from './components/OrdersModal';
-import { RewardsModal } from './components/RewardsModal';
-import { OnboardingModal } from './components/OnboardingModal';
-import { AuthModal } from './components/AuthModal';
-import { ProfileModal } from './components/ProfileModal';
-import { CompareModal } from './components/CompareModal';
-import { VirtualTryOnModal } from './components/VirtualTryOnModal';
-import { SupportChatModal } from './components/SupportChatModal';
-import { BlueprintProgressModal } from './components/BlueprintProgressModal';
-import { ArchitectureModal } from './components/ArchitectureModal';
-import { SellerStorefrontModal } from './components/SellerStorefrontModal';
-import { LiveShoppingModal } from './components/LiveShoppingModal';
-import { BuyerSellerChatModal } from './components/BuyerSellerChatModal';
-import { LaunchChecklistModal } from './components/LaunchChecklistModal';
-import { MerchantPartnerModal } from './components/seller/MerchantPartnerModal';
-import { SellerDashboard } from './components/seller/SellerDashboard';
-import { AdminDashboard } from './components/admin/AdminDashboard';
-import { AndroidInstallSheet } from './components/android/AndroidInstallSheet';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { Footer } from './components/Footer';
+import { initDeepLinks } from './utils/nativeBridge';
 
-import { 
-  Sparkles, 
-  Play, 
-  ShoppingBag, 
-  Package, 
-  Coins, 
-  CheckCircle2, 
-  X,
+import {
+  Sparkles,
+  Play,
+  ShoppingBag,
+  CheckCircle2,
   Layers,
   Shirt,
   Database,
   Heart,
-  User
+  User,
 } from 'lucide-react';
 
+// Phase 7C: Route / Portal / Modal Code-Splitting via React.lazy
+const ProductDetailModal = lazy(() =>
+  import('./components/ProductDetailModal').then(m => ({ default: m.ProductDetailModal }))
+);
+const TrendStreamModal = lazy(() =>
+  import('./components/TrendStreamModal').then(m => ({ default: m.TrendStreamModal }))
+);
+const VisualSearchModal = lazy(() =>
+  import('./components/VisualSearchModal').then(m => ({ default: m.VisualSearchModal }))
+);
+const CartDrawer = lazy(() =>
+  import('./components/CartDrawer').then(m => ({ default: m.CartDrawer }))
+);
+const CheckoutModal = lazy(() =>
+  import('./components/CheckoutModal').then(m => ({ default: m.CheckoutModal }))
+);
+const OrdersModal = lazy(() =>
+  import('./components/OrdersModal').then(m => ({ default: m.OrdersModal }))
+);
+const RewardsModal = lazy(() =>
+  import('./components/RewardsModal').then(m => ({ default: m.RewardsModal }))
+);
+const OnboardingModal = lazy(() =>
+  import('./components/OnboardingModal').then(m => ({ default: m.OnboardingModal }))
+);
+const AuthModal = lazy(() =>
+  import('./components/AuthModal').then(m => ({ default: m.AuthModal }))
+);
+const ProfileModal = lazy(() =>
+  import('./components/ProfileModal').then(m => ({ default: m.ProfileModal }))
+);
+const CompareModal = lazy(() =>
+  import('./components/CompareModal').then(m => ({ default: m.CompareModal }))
+);
+const VirtualTryOnModal = lazy(() =>
+  import('./components/VirtualTryOnModal').then(m => ({ default: m.VirtualTryOnModal }))
+);
+const SupportChatModal = lazy(() =>
+  import('./components/SupportChatModal').then(m => ({ default: m.SupportChatModal }))
+);
+const BlueprintProgressModal = lazy(() =>
+  import('./components/BlueprintProgressModal').then(m => ({ default: m.BlueprintProgressModal }))
+);
+const ArchitectureModal = lazy(() =>
+  import('./components/ArchitectureModal').then(m => ({ default: m.ArchitectureModal }))
+);
+const SellerStorefrontModal = lazy(() =>
+  import('./components/SellerStorefrontModal').then(m => ({ default: m.SellerStorefrontModal }))
+);
+const LiveShoppingModal = lazy(() =>
+  import('./components/LiveShoppingModal').then(m => ({ default: m.LiveShoppingModal }))
+);
+const BuyerSellerChatModal = lazy(() =>
+  import('./components/BuyerSellerChatModal').then(m => ({ default: m.BuyerSellerChatModal }))
+);
+const LaunchChecklistModal = lazy(() =>
+  import('./components/LaunchChecklistModal').then(m => ({ default: m.LaunchChecklistModal }))
+);
+const MerchantPartnerModal = lazy(() =>
+  import('./components/seller/MerchantPartnerModal').then(m => ({ default: m.MerchantPartnerModal }))
+);
+const SellerDashboard = lazy(() =>
+  import('./components/seller/SellerDashboard').then(m => ({ default: m.SellerDashboard }))
+);
+const AdminDashboard = lazy(() =>
+  import('./components/admin/AdminDashboard').then(m => ({ default: m.AdminDashboard }))
+);
+const AndroidInstallSheet = lazy(() =>
+  import('./components/android/AndroidInstallSheet').then(m => ({ default: m.AndroidInstallSheet }))
+);
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  message: string;
+}
+
+class AppErrorBoundary extends Component<{ children: React.ReactNode }, ErrorBoundaryState> {
+  state: ErrorBoundaryState = { hasError: false, message: '' };
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, message: error?.message || 'Unexpected UI error' };
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen flex items-center justify-center p-6 bg-zinc-50 dark:bg-zinc-950 text-center">
+          <div className="max-w-md p-6 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-3 shadow-lg">
+            <h2 className="text-lg font-bold text-zinc-900 dark:text-white">Something went wrong</h2>
+            <p className="text-xs text-zinc-500">{this.state.message}</p>
+            <button
+              type="button"
+              onClick={() => {
+                this.setState({ hasError: false, message: '' });
+                window.location.reload();
+              }}
+              className="px-4 py-2 rounded-xl bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-xs font-bold"
+            >
+              Reload Marketplace
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+const PortalLoader: React.FC = () => (
+  <div className="max-w-7xl mx-auto px-4 py-16 text-center text-xs text-zinc-500">
+    Loading marketplace module...
+  </div>
+);
+
 const AppContent: React.FC = () => {
-  const { 
-    activePortal, 
-    setActivePortal, 
-    notification, 
-    setIsReelsOpen, 
-    setIsCartOpen, 
-    setIsOrdersOpen, 
+  const {
+    activePortal,
+    setActivePortal,
+    notification,
+    setIsReelsOpen,
+    setIsCartOpen,
+    setIsOrdersOpen,
     setIsRewardsOpen,
     setIsBlueprintOpen,
     setIsArchitectureOpen,
     setIsLiveShoppingOpen,
     setIsLaunchChecklistOpen,
+    setIsVisualSearchOpen,
+    setIsCheckoutOpen,
+    setSelectedProduct,
+    selectedProduct,
+    navigateCategory,
     openWishlist,
     openTryOn,
     setIsProfileOpen,
@@ -68,18 +162,82 @@ const AppContent: React.FC = () => {
     user,
     wishlist,
     products,
-    cart 
+    cart,
   } = useMarketplace();
 
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
-  const isWishlistToast = notification && (notification.toLowerCase().includes('wishlist') || notification.includes('❤️'));
+  const isWishlistToast =
+    notification && (notification.toLowerCase().includes('wishlist') || notification.includes('❤️'));
+
+  // Phase 7B & 7D: Capacitor Deep Link listener + Global Escape-to-close keyboard navigation
+  useEffect(() => {
+    const cleanupDeepLinks = initDeepLinks({
+      onProductLink: (productId) => {
+        const found = products.find(p => p.id === productId);
+        if (found) {
+          setActivePortal('customer');
+          setSelectedProduct(found);
+        }
+      },
+      onCategoryLink: (slug) => {
+        setActivePortal('customer');
+        navigateCategory(slug);
+      },
+      onOrdersLink: () => {
+        setIsOrdersOpen(true);
+      },
+      onBackDismiss: () => {
+        if (selectedProduct) {
+          setSelectedProduct(null);
+          return true;
+        }
+        return false;
+      },
+    });
+
+    const onEscape = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      setSelectedProduct(null);
+      setIsCartOpen(false);
+      setIsCheckoutOpen(false);
+      setIsOrdersOpen(false);
+      setIsRewardsOpen(false);
+      setIsProfileOpen(false);
+      setIsVisualSearchOpen(false);
+      setIsReelsOpen(false);
+      setIsAuthOpen(false);
+      setIsBlueprintOpen(false);
+      setIsArchitectureOpen(false);
+      setIsLiveShoppingOpen(false);
+      setIsLaunchChecklistOpen(false);
+      setIsApkModalOpen(false);
+    };
+    window.addEventListener('keydown', onEscape);
+
+    return () => {
+      cleanupDeepLinks();
+      window.removeEventListener('keydown', onEscape);
+    };
+  }, [products]);
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 flex flex-col font-sans transition-colors duration-200">
+      {/* Phase 7D: Keyboard Skip Link */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-90 focus:px-4 focus:py-2 focus:rounded-xl focus:bg-zinc-900 focus:text-white focus:text-xs focus:font-bold"
+      >
+        Skip to main content
+      </a>
+
       {/* Toast Notification */}
       {notification && (
-        <div className="fixed bottom-20 md:bottom-8 left-1/2 -translate-x-1/2 z-70 transition-all duration-300 pointer-events-auto">
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-20 md:bottom-8 left-1/2 -translate-x-1/2 z-70 transition-all duration-300 pointer-events-auto"
+        >
           <div className="px-4 py-2.5 rounded-2xl bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 text-xs font-semibold shadow-2xl flex items-center gap-2.5 border border-zinc-700/60 dark:border-zinc-300/80 backdrop-blur-md">
             {isWishlistToast ? (
               <Heart className="w-4 h-4 text-rose-500 fill-rose-500 shrink-0 animate-scale-up" />
@@ -104,7 +262,7 @@ const AppContent: React.FC = () => {
       <Header />
 
       {/* Main View Router */}
-      <main className="flex-1 pb-20 md:pb-8">
+      <main id="main-content" className="flex-1 pb-20 md:pb-8">
         {activePortal === 'customer' && (
           <div>
             <CategoryBar />
@@ -140,7 +298,7 @@ const AppContent: React.FC = () => {
                   </button>
 
                   <button
-                    onClick={() => openTryOn(products[0])}
+                    onClick={() => products[0] && openTryOn(products[0])}
                     className="px-4 py-3 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/20 font-bold text-xs flex items-center gap-2 backdrop-blur-md transition-all active:scale-95"
                   >
                     <Shirt className="w-4 h-4 text-rose-400" />
@@ -160,9 +318,10 @@ const AppContent: React.FC = () => {
           </div>
         )}
 
-        {activePortal === 'seller' && <SellerDashboard />}
-
-        {activePortal === 'admin' && <AdminDashboard />}
+        <Suspense fallback={<PortalLoader />}>
+          {activePortal === 'seller' && <SellerDashboard />}
+          {activePortal === 'admin' && <AdminDashboard />}
+        </Suspense>
       </main>
 
       {/* Floating Blueprint, Architecture & Acceptance 20/20 Toolbar (Tablet & Desktop only) */}
@@ -200,45 +359,46 @@ const AppContent: React.FC = () => {
       {/* Footer */}
       <Footer />
 
-      {/* Modals and Drawers */}
-      <ProductDetailModal />
-      <TrendStreamModal />
-      <VisualSearchModal />
-      <CartDrawer />
-      <CheckoutModal />
-      <OrdersModal />
-      <RewardsModal />
-      <OnboardingModal />
-      <AuthModal />
-      <ProfileModal />
-      <CompareModal />
-      <VirtualTryOnModal />
-      <SupportChatModal />
-      <BlueprintProgressModal />
-      <ArchitectureModal />
-      <SellerStorefrontModal />
-      <LiveShoppingModal />
-      <BuyerSellerChatModal />
-      <LaunchChecklistModal />
-      <MerchantPartnerModal />
-      <AndroidInstallSheet
-        isOpen={isApkModalOpen}
-        onClose={() => setIsApkModalOpen(false)}
-        onNotify={notify}
-      />
+      {/* Lazy-Loaded Modals and Drawers */}
+      <Suspense fallback={null}>
+        <ProductDetailModal />
+        <TrendStreamModal />
+        <VisualSearchModal />
+        <CartDrawer />
+        <CheckoutModal />
+        <OrdersModal />
+        <RewardsModal />
+        <OnboardingModal />
+        <AuthModal />
+        <ProfileModal />
+        <CompareModal />
+        <VirtualTryOnModal />
+        <SupportChatModal />
+        <BlueprintProgressModal />
+        <ArchitectureModal />
+        <SellerStorefrontModal />
+        <LiveShoppingModal />
+        <BuyerSellerChatModal />
+        <LaunchChecklistModal />
+        <MerchantPartnerModal />
+        <AndroidInstallSheet
+          isOpen={isApkModalOpen}
+          onClose={() => setIsApkModalOpen(false)}
+          onNotify={notify}
+        />
+      </Suspense>
       <OfflineIndicator />
 
-
       {/* Native Mobile Bottom App Navigation Bar (Phone viewport only, auto-hides on PC/Tablet) */}
-      <nav 
+      <nav
         aria-label="Mobile Bottom App Bar"
         className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-zinc-950/95 backdrop-blur-lg border-t border-zinc-200 dark:border-zinc-800 grid grid-cols-5 items-center h-16 px-1 shadow-[0_-4px_24px_rgba(0,0,0,0.08)] pb-[max(0.25rem,env(safe-area-inset-bottom,0px))]"
       >
         <button
           onClick={() => setActivePortal('customer')}
-          className={`flex flex-col items-center justify-center gap-1 transition-all active:scale-90 ${
-            activePortal === 'customer' 
-              ? 'text-emerald-600 dark:text-emerald-400 font-bold' 
+          className={`flex flex-col items-center justify-center gap-1 min-h-[44px] transition-all active:scale-90 ${
+            activePortal === 'customer'
+              ? 'text-emerald-600 dark:text-emerald-400 font-bold'
               : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
           }`}
         >
@@ -248,7 +408,7 @@ const AppContent: React.FC = () => {
 
         <button
           onClick={() => setIsReelsOpen(true)}
-          className="flex flex-col items-center justify-center gap-1 text-zinc-500 hover:text-rose-600 transition-all active:scale-90"
+          className="flex flex-col items-center justify-center gap-1 min-h-[44px] text-zinc-500 hover:text-rose-600 transition-all active:scale-90"
         >
           <Play className="w-5 h-5" />
           <span className="text-[10px] font-medium tracking-tight">Reels</span>
@@ -256,7 +416,7 @@ const AppContent: React.FC = () => {
 
         <button
           onClick={() => openWishlist()}
-          className="relative flex flex-col items-center justify-center gap-1 text-zinc-500 hover:text-rose-600 transition-all active:scale-90"
+          className="relative flex flex-col items-center justify-center gap-1 min-h-[44px] text-zinc-500 hover:text-rose-600 transition-all active:scale-90"
         >
           <Heart className={`w-5 h-5 ${wishlist.length > 0 ? 'text-rose-600 fill-rose-600' : ''}`} />
           <span className="text-[10px] font-medium tracking-tight">Wishlist</span>
@@ -269,7 +429,7 @@ const AppContent: React.FC = () => {
 
         <button
           onClick={() => setIsCartOpen(true)}
-          className="relative flex flex-col items-center justify-center gap-1 text-zinc-500 hover:text-emerald-600 transition-all active:scale-90"
+          className="relative flex flex-col items-center justify-center gap-1 min-h-[44px] text-zinc-500 hover:text-emerald-600 transition-all active:scale-90"
         >
           <ShoppingBag className="w-5 h-5" />
           <span className="text-[10px] font-medium tracking-tight">Bag</span>
@@ -288,14 +448,20 @@ const AppContent: React.FC = () => {
               setIsAuthOpen(true);
             }
           }}
-          className="flex flex-col items-center justify-center gap-1 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-all active:scale-90"
+          className="flex flex-col items-center justify-center gap-1 min-h-[44px] text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-all active:scale-90"
         >
           {user?.isLoggedIn && user.avatar ? (
-            <img src={user.avatar} alt="Profile" className="w-5 h-5 rounded-full object-cover border border-emerald-500" />
+            <img
+              src={user.avatar}
+              alt="Profile"
+              className="w-5 h-5 rounded-full object-cover border border-emerald-500"
+            />
           ) : (
             <User className="w-5 h-5" />
           )}
-          <span className="text-[10px] font-medium tracking-tight">{user?.isLoggedIn ? 'Account' : 'Sign In'}</span>
+          <span className="text-[10px] font-medium tracking-tight">
+            {user?.isLoggedIn ? 'Account' : 'Sign In'}
+          </span>
         </button>
       </nav>
     </div>
@@ -304,8 +470,10 @@ const AppContent: React.FC = () => {
 
 export default function App() {
   return (
-    <MarketplaceProvider>
-      <AppContent />
-    </MarketplaceProvider>
+    <AppErrorBoundary>
+      <MarketplaceProvider>
+        <AppContent />
+      </MarketplaceProvider>
+    </AppErrorBoundary>
   );
 }

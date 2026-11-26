@@ -2,6 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useMarketplace } from '../context/MarketplaceContext';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 import { filterProductsBySearch, getCategoryDisplayName } from '../utils/productSearch';
+import { api } from '../services/api';
 import { 
   ShoppingBag, 
   Heart, 
@@ -76,6 +77,11 @@ export const Header: React.FC = () => {
   const totalCartItems = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [smartSuggest, setSmartSuggest] = useState<{
+    correctedQuery: string | null;
+    matchedCategories: Array<{ slug: string; name: string }>;
+    suggestions: any[];
+  } | null>(null);
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -90,10 +96,36 @@ export const Header: React.FC = () => {
 
   const trimmedQuery = searchQuery.trim();
 
+  useEffect(() => {
+    if (!isSearchFocused || trimmedQuery.length < 2) {
+      setSmartSuggest(null);
+      return;
+    }
+    const timer = setTimeout(() => {
+      api.discovery
+        .searchSuggest(trimmedQuery)
+        .then((res) => {
+          if (res?.success) {
+            setSmartSuggest({
+              correctedQuery: res.correctedQuery || null,
+              matchedCategories: res.matchedCategories || [],
+              suggestions: res.suggestions || [],
+            });
+          }
+        })
+        .catch(() => {});
+    }, 180);
+    return () => clearTimeout(timer);
+  }, [trimmedQuery, isSearchFocused]);
+
   const matchedProducts = useMemo(() => {
     if (!trimmedQuery) return [];
-    return filterProductsBySearch(products, trimmedQuery);
-  }, [products, trimmedQuery]);
+    const local = filterProductsBySearch(products, trimmedQuery);
+    if (local.length > 0) return local;
+    // Typo-tolerant fallback from backend suggestion IDs
+    const suggestIds = new Set((smartSuggest?.suggestions || []).map((s: any) => s.id));
+    return products.filter((p) => suggestIds.has(p.id));
+  }, [products, trimmedQuery, smartSuggest]);
 
   const matchedCategories = useMemo(() => {
     if (!trimmedQuery) return [];
@@ -200,7 +232,17 @@ export const Header: React.FC = () => {
                 <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xl overflow-hidden z-50 animate-fadeIn">
                   <div className="px-3.5 py-2 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between gap-2 bg-zinc-50/80 dark:bg-zinc-950/60">
                     <span className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">
-                      {matchedProducts.length} {matchedProducts.length === 1 ? 'product' : 'products'} found
+                      {smartSuggest?.correctedQuery ? (
+                        <button
+                          type="button"
+                          onClick={() => setSearchQuery(smartSuggest.correctedQuery!)}
+                          className="text-left hover:underline"
+                        >
+                          Did you mean <strong className="text-emerald-600">{smartSuggest.correctedQuery}</strong>? ({matchedProducts.length})
+                        </button>
+                      ) : (
+                        `${matchedProducts.length} ${matchedProducts.length === 1 ? 'product' : 'products'} found`
+                      )}
                     </span>
                     {selectedCategory !== 'all' && (
                       <button

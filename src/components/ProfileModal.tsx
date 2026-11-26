@@ -1,5 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useMarketplace } from '../context/MarketplaceContext';
+import { api } from '../services/api';
+import {
+  getBiometricLockPreference,
+  setBiometricLockPreference,
+  registerPushNotifications,
+} from '../utils/nativeBridge';
 import { INITIAL_BUYER_CHATS, INITIAL_LIVE_SESSIONS } from '../data/mockData';
 import { 
   X, 
@@ -60,6 +66,9 @@ export const ProfileModal: React.FC = () => {
     setLanguage, 
     currency, 
     setCurrency, 
+    countryCode,
+    setCountryCode,
+    intlCountries,
     setIsOrdersOpen, 
     setIsRewardsOpen,
     setIsAuthOpen,
@@ -84,6 +93,31 @@ export const ProfileModal: React.FC = () => {
 
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [copiedReferral, setCopiedReferral] = useState(false);
+
+  // Stage 4/5 Profile State: B2B, Subscriptions, Personalization Privacy, Native Mobile
+  const [b2bAccount, setB2bAccount] = useState<any>(null);
+  const [b2bCompany, setB2bCompany] = useState('');
+  const [b2bGstin, setB2bGstin] = useState('');
+  const [mySubscriptions, setMySubscriptions] = useState<any[]>([]);
+  const [personalizationOn, setPersonalizationOn] = useState(true);
+  const [biometricEnabled, setBiometricEnabled] = useState(false);
+  const [pushRegistering, setPushRegistering] = useState(false);
+
+  useEffect(() => {
+    if (!isProfileOpen || !user?.isLoggedIn) return;
+    getBiometricLockPreference().then(setBiometricEnabled).catch(() => {});
+    Promise.allSettled([
+      api.phase6G.getB2BAccount(),
+      api.phase6G.getMySubscriptions(),
+      api.loyalty.getMe(),
+    ]).then(([bRes, sRes, lRes]) => {
+      if (bRes.status === 'fulfilled') setB2bAccount(bRes.value?.account || null);
+      if (sRes.status === 'fulfilled') setMySubscriptions(sRes.value?.subscriptions || []);
+      if (lRes.status === 'fulfilled' && lRes.value?.account) {
+        setPersonalizationOn(lRes.value.account.personalizationOn !== false);
+      }
+    });
+  }, [isProfileOpen, user?.isLoggedIn]);
 
   const activeTab = profileActiveTab;
   const setActiveTab = setProfileActiveTab;
@@ -298,6 +332,117 @@ export const ProfileModal: React.FC = () => {
                   <span className="text-[10px] text-amber-600 font-bold bg-amber-50 dark:bg-amber-950/50 px-2.5 py-1 rounded-full border border-amber-200 dark:border-amber-800">
                     Active
                   </span>
+                </div>
+
+                {/* B2B Wholesale Registration & Status */}
+                <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-zinc-900 dark:text-white">B2B Wholesale Account (GSTIN)</span>
+                    {b2bAccount && (
+                      <span className="px-2 py-0.5 rounded bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 text-[10px] font-bold">
+                        {b2bAccount.verificationStatus}
+                      </span>
+                    )}
+                  </div>
+                  {b2bAccount ? (
+                    <p className="text-[11px] text-zinc-600 dark:text-zinc-300">
+                      <strong>{b2bAccount.companyName}</strong> · GSTIN: <span className="font-mono">{b2bAccount.gstin}</span>
+                    </p>
+                  ) : (
+                    <form
+                      onSubmit={async e => {
+                        e.preventDefault();
+                        try {
+                          const res = await api.phase6G.registerB2B({ companyName: b2bCompany, gstin: b2bGstin });
+                          setB2bAccount(res.account);
+                          notify('B2B GSTIN account submitted for verification.');
+                        } catch (err: any) {
+                          notify(err?.message || 'Enter a valid 15-character Indian GSTIN.');
+                        }
+                      }}
+                      className="flex flex-col sm:flex-row gap-2"
+                    >
+                      <input
+                        type="text"
+                        required
+                        placeholder="Company Legal Name"
+                        value={b2bCompany}
+                        onChange={e => setB2bCompany(e.target.value)}
+                        className="flex-1 px-2.5 py-1.5 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900"
+                      />
+                      <input
+                        type="text"
+                        required
+                        maxLength={15}
+                        placeholder="15-char GSTIN (e.g. 27AABCU9603R1ZM)"
+                        value={b2bGstin}
+                        onChange={e => setB2bGstin(e.target.value.toUpperCase())}
+                        className="flex-1 px-2.5 py-1.5 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 font-mono"
+                      />
+                      <button
+                        type="submit"
+                        className="px-3 py-1.5 rounded-lg bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 font-bold whitespace-nowrap"
+                      >
+                        Register B2B
+                      </button>
+                    </form>
+                  )}
+                </div>
+
+                {/* Auto-Replenish Subscriptions */}
+                <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800 space-y-2">
+                  <span className="font-bold text-zinc-900 dark:text-white block">My Subscriptions ({mySubscriptions.length})</span>
+                  {mySubscriptions.length === 0 ? (
+                    <p className="text-[11px] text-zinc-500">No active replenishment subscriptions yet. Look for Subscribe &amp; Save on product pages.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {mySubscriptions.map((sub: any) => (
+                        <div key={sub.id} className="p-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <span className="font-semibold text-zinc-900 dark:text-white block">{sub.planName}</span>
+                            <span className="text-[10px] text-zinc-500 font-mono">{sub.status} · ₹{sub.unitPrice}/cycle · {sub.mandateNote}</span>
+                          </div>
+                          <div className="flex gap-1.5">
+                            {sub.status === 'ACTIVE' && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  api.phase6G.subscriptionAction(sub.id, 'PAUSE').then(r =>
+                                    setMySubscriptions(prev => prev.map(x => (x.id === sub.id ? r.subscription : x)))
+                                  )
+                                }
+                                className="px-2 py-1 rounded border border-zinc-300 dark:border-zinc-700 font-semibold"
+                              >
+                                Pause
+                              </button>
+                            )}
+                            {sub.status === 'PAUSED' && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  api.phase6G.subscriptionAction(sub.id, 'RESUME').then(r =>
+                                    setMySubscriptions(prev => prev.map(x => (x.id === sub.id ? r.subscription : x)))
+                                  )
+                                }
+                                className="px-2 py-1 rounded bg-emerald-600 text-white font-semibold"
+                              >
+                                Resume
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                api.phase6G.renewSubscription(sub.id).then(r => notify(r.message || `Status: ${r.renewalStatus}`))
+                              }
+                              className="px-2 py-1 rounded bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 font-semibold"
+                            >
+                              Renew Check
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -846,12 +991,27 @@ export const ProfileModal: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-zinc-700 dark:text-zinc-300 font-semibold mb-2">Currency Display</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {['INR', 'USD', 'EUR'].map(c => (
+                  <label className="block text-zinc-700 dark:text-zinc-300 font-semibold mb-2">Shopping Country / Region</label>
+                  <select
+                    value={countryCode}
+                    onChange={e => setCountryCode(e.target.value)}
+                    className="w-full p-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 font-semibold text-zinc-900 dark:text-white"
+                  >
+                    {(intlCountries?.length ? intlCountries : [{ countryCode: 'IN', countryName: 'India', currencyCode: 'INR' }]).map((c: any) => (
+                      <option key={c.countryCode} value={c.countryCode}>
+                        {c.countryName} ({c.countryCode}) · Default {c.currencyCode}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-zinc-700 dark:text-zinc-300 font-semibold mb-2">Currency Display (Live FX)</label>
+                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                    {(['INR', 'USD', 'EUR', 'GBP', 'AED', 'SGD'] as const).map(c => (
                       <button
                         key={c}
-                        onClick={() => setCurrency(c as any)}
+                        onClick={() => setCurrency(c)}
                         className={`p-2 rounded-xl border text-center font-bold font-mono transition-all ${
                           currency === c ? 'border-zinc-900 bg-zinc-900 text-white dark:bg-white dark:text-zinc-900' : 'border-zinc-200 dark:border-zinc-800'
                         }`}
@@ -861,6 +1021,28 @@ export const ProfileModal: React.FC = () => {
                     ))}
                   </div>
                 </div>
+
+                <label className="p-3.5 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-3 cursor-pointer">
+                  <div>
+                    <span className="font-bold text-zinc-900 dark:text-white block">Personalized AI Recommendations</span>
+                    <span className="text-[11px] text-zinc-500">Allow activity-based offers &amp; smart product discovery</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={personalizationOn}
+                    onChange={async e => {
+                      const next = e.target.checked;
+                      setPersonalizationOn(next);
+                      try {
+                        await api.loyalty.setPersonalization(next);
+                        notify(next ? 'Personalized recommendations enabled.' : 'Personalized recommendations disabled (privacy mode).');
+                      } catch (err: any) {
+                        notify(err?.message || 'Sign in to persist privacy settings.');
+                      }
+                    }}
+                    className="w-4 h-4 accent-emerald-600"
+                  />
+                </label>
               </div>
             )}
 
@@ -940,6 +1122,51 @@ export const ProfileModal: React.FC = () => {
                 <div>
                   <h3 className="font-bold text-sm text-zinc-900 dark:text-white">Account Security & Device Management</h3>
                   <p className="text-[11px] text-zinc-400">Manage 2-factor authentication, active sessions, and data rights</p>
+                </div>
+
+                {/* Native Mobile Push & App Biometric Lock */}
+                <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800 space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-3">
+                      <Smartphone className="w-5 h-5 text-indigo-500 shrink-0" />
+                      <div>
+                        <span className="font-bold text-zinc-900 dark:text-white block">Mobile Push Notifications</span>
+                        <span className="text-[11px] text-zinc-400">Register this Android / iOS / Browser device for order updates</span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={pushRegistering}
+                      onClick={async () => {
+                        setPushRegistering(true);
+                        try {
+                          await registerPushNotifications(notify);
+                        } finally {
+                          setPushRegistering(false);
+                        }
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 font-bold text-[11px] whitespace-nowrap"
+                    >
+                      {pushRegistering ? 'Registering...' : 'Enable Push'}
+                    </button>
+                  </div>
+                  <label className="flex items-center justify-between pt-2 border-t border-zinc-200 dark:border-zinc-700 cursor-pointer">
+                    <div>
+                      <span className="font-semibold text-zinc-900 dark:text-white block">App Biometric Lock Screen Preference</span>
+                      <span className="text-[10px] text-zinc-400">Stored locally in Capacitor Preferences (requires active OTP session)</span>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={biometricEnabled}
+                      onChange={e => {
+                        const val = e.target.checked;
+                        setBiometricEnabled(val);
+                        setBiometricLockPreference(val);
+                        notify(val ? 'App biometric lock preference saved.' : 'App biometric lock disabled.');
+                      }}
+                      className="w-4 h-4 accent-emerald-600"
+                    />
+                  </label>
                 </div>
 
                 {/* Two Factor Authentication */}

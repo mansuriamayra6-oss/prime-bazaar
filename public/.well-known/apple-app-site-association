@@ -1,0 +1,14 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "APPLE_TEAM_ID.in.primebazaarfashion.app",
+        "paths": ["/product/*", "/category/*", "/orders", "/"]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": ["APPLE_TEAM_ID.in.primebazaarfashion.app"]
+  }
+}

@@ -40,7 +40,7 @@ import { BLUEPRINT_FEATURES } from '../data/blueprintFeatures';
 import { api } from '../services/api';
 
 export type SupportedLanguage = 'en' | 'hi' | 'mr' | 'ta';
-export type SupportedCurrency = 'INR' | 'USD' | 'EUR';
+export type SupportedCurrency = 'INR' | 'USD' | 'EUR' | 'GBP' | 'AED' | 'SGD';
 export type CheckoutPaymentMethod = 'cashfree' | 'upi' | 'card' | 'netbanking' | 'cod' | 'WALLET_ONLY';
 
 interface MarketplaceContextType {
@@ -179,11 +179,16 @@ interface MarketplaceContextType {
   theme: 'light' | 'dark';
   toggleTheme: () => void;
 
-  // Multi-Language & Multi-Currency
+  // Multi-Language, Country & Multi-Currency
   language: SupportedLanguage;
   setLanguage: (lang: SupportedLanguage) => void;
   currency: SupportedCurrency;
   setCurrency: (cur: SupportedCurrency) => void;
+  countryCode: string;
+  setCountryCode: (code: string) => void;
+  intlCountries: any[];
+  intlRates: any[];
+  setCoins: React.Dispatch<React.SetStateAction<number>>;
   formatPrice: (priceInInr: number) => string;
 
   // User Profile & Authentication
@@ -309,7 +314,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     setTheme(prev => (prev === 'light' ? 'dark' : 'light'));
   };
 
-  // Language & Currency
+  // Language, Country & Currency
   const [language, setLanguage] = useState<SupportedLanguage>(() => {
     const saved = localStorage.getItem('tb_lang');
     return (saved as SupportedLanguage) || 'en';
@@ -320,6 +325,30 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     return (saved as SupportedCurrency) || 'INR';
   });
 
+  const [countryCode, setCountryCode] = useState<string>(() => {
+    return localStorage.getItem('tb_country') || 'IN';
+  });
+
+  const [intlCountries, setIntlCountries] = useState<any[]>([]);
+  const [intlRates, setIntlRates] = useState<any[]>([
+    { currencyCode: 'INR', rateFromInr: 1.0, symbol: '₹' },
+    { currencyCode: 'USD', rateFromInr: 0.012, symbol: '$' },
+    { currencyCode: 'EUR', rateFromInr: 0.011, symbol: '€' },
+    { currencyCode: 'GBP', rateFromInr: 0.0095, symbol: '£' },
+    { currencyCode: 'AED', rateFromInr: 0.044, symbol: 'AED ' },
+    { currencyCode: 'SGD', rateFromInr: 0.016, symbol: 'S$' },
+  ]);
+
+  useEffect(() => {
+    api.intl
+      .getConfig()
+      .then((res) => {
+        if (Array.isArray(res?.countries)) setIntlCountries(res.countries);
+        if (Array.isArray(res?.exchangeRates)) setIntlRates(res.exchangeRates);
+      })
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     localStorage.setItem('tb_lang', language);
   }, [language]);
@@ -328,16 +357,17 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     localStorage.setItem('tb_curr', currency);
   }, [currency]);
 
+  useEffect(() => {
+    localStorage.setItem('tb_country', countryCode);
+  }, [countryCode]);
+
   const formatPrice = (priceInInr: number) => {
-    if (currency === 'USD') {
-      const usdVal = Math.round(priceInInr * 0.012);
-      return `$${usdVal.toLocaleString()}`;
+    const fx = intlRates.find((r) => r.currencyCode === currency);
+    if (!fx || currency === 'INR') {
+      return `₹${Math.round(priceInInr).toLocaleString('en-IN')}`;
     }
-    if (currency === 'EUR') {
-      const eurVal = Math.round(priceInInr * 0.011);
-      return `€${eurVal.toLocaleString()}`;
-    }
-    return `₹${priceInInr.toLocaleString('en-IN')}`;
+    const val = Number((priceInInr * fx.rateFromInr).toFixed(2));
+    return `${fx.symbol}${val.toLocaleString()}`;
   };
 
   // User Profile & Real Authentication State (Starts unauthenticated by default)
@@ -2036,6 +2066,11 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
         setLanguage,
         currency,
         setCurrency,
+        countryCode,
+        setCountryCode,
+        intlCountries,
+        intlRates,
+        setCoins,
         formatPrice,
 
         user,

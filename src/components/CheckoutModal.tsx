@@ -84,6 +84,10 @@ export const CheckoutModal: React.FC = () => {
     user,
     storeCreditBalance,
     refreshStoreCredit,
+    countryCode,
+    setCountryCode,
+    intlCountries,
+    currency,
     notify
   } = useMarketplace();
 
@@ -104,6 +108,7 @@ export const CheckoutModal: React.FC = () => {
   const [validatingGiftCard, setValidatingGiftCard] = useState(false);
   const [useStoreCredit, setUseStoreCredit] = useState(false);
   const [buyerGstin, setBuyerGstin] = useState('');
+  const [intlQuote, setIntlQuote] = useState<any>(null);
 
   // Backend Payment Intent
   const [paymentIntent, setPaymentIntent] = useState<any>(null);
@@ -178,6 +183,40 @@ export const CheckoutModal: React.FC = () => {
       cancelled = true;
     };
   }, [isCheckoutOpen, quoteItemsPayload, activeCoupon?.code, appliedGiftCardCode, useStoreCredit, user?.id]);
+
+  // Fetch International landed quote (shipping, customs duty, VAT, COD eligibility)
+  const selectedCountryConfig = useMemo(
+    () => (intlCountries || []).find((c: any) => c.countryCode === countryCode) || { countryCode: 'IN', countryName: 'India', codAllowed: true },
+    [intlCountries, countryCode]
+  );
+  const isCodAllowedForCountry = selectedCountryConfig.codAllowed !== false;
+
+  useEffect(() => {
+    if (!isCodAllowedForCountry && paymentMethod === 'cod') {
+      setPaymentMethod('cashfree');
+    }
+  }, [isCodAllowedForCountry, paymentMethod]);
+
+  useEffect(() => {
+    if (!isCheckoutOpen || cart.length === 0) return;
+    let cancelled = false;
+    api.intl
+      .getQuote({
+        countryCode: countryCode || 'IN',
+        targetCurrency: currency || 'INR',
+        subtotalInr: Math.max(0, cartTotal - cartDiscount),
+        paymentMethod: paymentMethod === 'cod' ? 'COD' : 'PREPAID',
+      })
+      .then(res => {
+        if (!cancelled && res?.quote) setIntlQuote(res.quote);
+      })
+      .catch(() => {
+        if (!cancelled) setIntlQuote(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isCheckoutOpen, countryCode, currency, cartTotal, cartDiscount, paymentMethod]);
 
   const initializePaymentIntent = async () => {
     if (finalAmount <= 0) return null;
@@ -574,19 +613,36 @@ export const CheckoutModal: React.FC = () => {
         {/* STEP 1: Address Selection */}
         {step === 'address' && (
           <div className="space-y-5">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <h3 className="text-base font-bold text-zinc-900 dark:text-white font-display">
                 Select Shipping Address
               </h3>
-              {!isAddingAddress && (
-                <button
-                  onClick={() => setIsAddingAddress(true)}
-                  className="flex items-center gap-1 text-xs font-semibold text-emerald-600 hover:underline"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Add New Address</span>
-                </button>
-              )}
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-300">
+                  <span className="font-semibold">Country:</span>
+                  <select
+                    aria-label="Destination Country"
+                    value={countryCode}
+                    onChange={e => setCountryCode(e.target.value)}
+                    className="px-2 py-1 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs font-semibold text-zinc-900 dark:text-white"
+                  >
+                    {(intlCountries?.length ? intlCountries : [{ countryCode: 'IN', countryName: 'India', currencyCode: 'INR' }]).map((c: any) => (
+                      <option key={c.countryCode} value={c.countryCode}>
+                        {c.countryName} ({c.currencyCode})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {!isAddingAddress && (
+                  <button
+                    onClick={() => setIsAddingAddress(true)}
+                    className="flex items-center gap-1 text-xs font-semibold text-emerald-600 hover:underline"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add New Address</span>
+                  </button>
+                )}
+              </div>
             </div>
 
             {!isAddingAddress ? (
@@ -861,6 +917,18 @@ export const CheckoutModal: React.FC = () => {
                     <span className="font-sans">Store Credit Applied</span>
                     <span>-₹{quote.storeCreditAmount.toLocaleString('en-IN')}</span>
                   </div>
+                )}
+                {intlQuote && countryCode !== 'IN' && (
+                  <>
+                    <div className="flex justify-between text-indigo-600 dark:text-indigo-400">
+                      <span className="font-sans">Intl Customs Duty ({intlQuote.customsDutyPercent || 0}%) + VAT ({intlQuote.taxPercent || 0}%)</span>
+                      <span>₹{Number((intlQuote.customsDutyInr || 0) + (intlQuote.intlTaxInr || 0)).toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="flex justify-between text-indigo-700 dark:text-indigo-300 font-semibold">
+                      <span className="font-sans">Estimated Landed in {intlQuote.currencyCode}</span>
+                      <span>{intlQuote.currencySymbol}{Number(intlQuote.convertedLandedTotal || 0).toLocaleString()}</span>
+                    </div>
+                  </>
                 )}
                 <div className="flex justify-between font-bold text-xs pt-1.5 border-t border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-white">
                   <span className="font-sans">Net Gateway Payable {quoteLoading ? '(updating...)' : ''}</span>
@@ -1169,19 +1237,28 @@ export const CheckoutModal: React.FC = () => {
 
               {/* Option 3: Cash On Delivery (COD) with Anti-Fraud Verification */}
               <div
-                onClick={() => setPaymentMethod('cod')}
-                className={`p-4 rounded-2xl border cursor-pointer transition-all ${
-                  paymentMethod === 'cod'
-                    ? 'border-emerald-600 bg-emerald-50/40 dark:bg-emerald-950/20 ring-1 ring-emerald-600'
-                    : 'border-zinc-200 dark:border-zinc-800 hover:border-zinc-300'
+                onClick={() => {
+                  if (!isCodAllowedForCountry) {
+                    notify(`Cash on Delivery is unavailable for international shipments to ${selectedCountryConfig.countryName}.`);
+                    return;
+                  }
+                  setPaymentMethod('cod');
+                }}
+                className={`p-4 rounded-2xl border transition-all ${
+                  !isCodAllowedForCountry
+                    ? 'opacity-50 cursor-not-allowed border-zinc-200 dark:border-zinc-800 bg-zinc-100/60 dark:bg-zinc-900'
+                    : paymentMethod === 'cod'
+                    ? 'cursor-pointer border-emerald-600 bg-emerald-50/40 dark:bg-emerald-950/20 ring-1 ring-emerald-600'
+                    : 'cursor-pointer border-zinc-200 dark:border-zinc-800 hover:border-zinc-300'
                 }`}
               >
                 <div className="flex items-start gap-3">
                   <input
                     type="radio"
                     name="paymentMethod"
+                    disabled={!isCodAllowedForCountry}
                     checked={paymentMethod === 'cod'}
-                    onChange={() => setPaymentMethod('cod')}
+                    onChange={() => isCodAllowedForCountry && setPaymentMethod('cod')}
                     className="mt-1 accent-emerald-600 w-4 h-4 cursor-pointer"
                   />
                   <div className="flex-1 text-xs">
@@ -1190,9 +1267,16 @@ export const CheckoutModal: React.FC = () => {
                       <span className="font-bold text-sm text-zinc-900 dark:text-white">
                         Cash on Delivery (COD)
                       </span>
+                      {!isCodAllowedForCountry && (
+                        <span className="text-[10px] font-bold text-rose-600 bg-rose-50 dark:bg-rose-950/50 px-2 py-0.5 rounded">
+                          India Only
+                        </span>
+                      )}
                     </div>
                     <p className="text-zinc-500 mt-1">
-                      Pay cash or UPI at your doorstep upon package inspection.
+                      {isCodAllowedForCountry
+                        ? 'Pay cash or UPI at your doorstep upon package inspection.'
+                        : `Prepaid gateway required for cross-border shipments to ${selectedCountryConfig.countryName}.`}
                     </p>
 
                     {paymentMethod === 'cod' && (

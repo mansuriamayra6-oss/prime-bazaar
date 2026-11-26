@@ -816,6 +816,144 @@ export const api = {
         body: JSON.stringify({ reason }),
       }),
   },
+
+  // Phase 6D: Loyalty, Streaks, Spin, Scratch & Privacy Preferences
+  loyalty: {
+    getMe: async () => apiRequest('/api/loyalty/me'),
+    checkIn: async () => apiRequest('/api/loyalty/check-in', { method: 'POST' }),
+    spin: async () => apiRequest('/api/loyalty/spin', { method: 'POST' }),
+    scratch: async () => apiRequest('/api/loyalty/scratch', { method: 'POST' }),
+    applyReferral: async (referralCode: string) =>
+      apiRequest('/api/loyalty/referral/apply', {
+        method: 'POST',
+        body: JSON.stringify({ referralCode }),
+      }),
+    setPersonalization: async (personalizationOn: boolean) =>
+      apiRequest('/api/loyalty/personalization', {
+        method: 'PUT',
+        body: JSON.stringify({ personalizationOn }),
+      }),
+    adminRunExpirySweep: async (simulateFutureDays?: number) =>
+      apiRequest('/api/v1/admin/loyalty/expiry-sweep', {
+        method: 'POST',
+        body: JSON.stringify({ simulateFutureDays }),
+      }),
+    adminAdjustCoins: async (userId: string, coinsDelta: number, reason: string) =>
+      apiRequest('/api/v1/admin/loyalty/adjust', {
+        method: 'POST',
+        body: JSON.stringify({ userId, coinsDelta, reason }),
+      }),
+  },
+
+  // Phase 6E: Typo-Tolerant Search, Co-Occurrence Recommendations & Gemini Visual Search
+  discovery: {
+    searchSuggest: async (q: string) =>
+      apiRequest(`/api/discovery/search-suggest?q=${encodeURIComponent(q)}`),
+    recommendations: async (params?: { productId?: string; userId?: string; cartIds?: string[] }) => {
+      const qs = new URLSearchParams();
+      if (params?.productId) qs.set('productId', params.productId);
+      if (params?.userId) qs.set('userId', params.userId);
+      if (params?.cartIds?.length) qs.set('cartIds', params.cartIds.join(','));
+      const suffix = qs.toString() ? `?${qs.toString()}` : '';
+      return apiRequest(`/api/discovery/recommendations${suffix}`);
+    },
+    visualSearch: async (payload: {
+      imageBase64?: string;
+      mimeType?: string;
+      imageUrl?: string;
+      hintCategory?: string;
+      hintKeywords?: string[];
+    }) =>
+      apiRequest('/api/ai/visual-search', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+  },
+
+  // Phase 6F: Internationalization, FX Rates & Landed Customs/Tax Quote
+  intl: {
+    getConfig: async () => apiRequest('/api/intl/config'),
+    validateAddress: async (payload: { countryCode: string; postalCode?: string; phone?: string }) =>
+      apiRequest('/api/intl/validate-address', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    getQuote: async (payload: {
+      countryCode: string;
+      targetCurrency?: string;
+      subtotalInr: number;
+      paymentMethod?: string;
+    }) =>
+      apiRequest('/api/intl/quote', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    adminSaveCountry: async (countryCode: string, payload: any) =>
+      apiRequest(`/api/v1/admin/intl/countries/${encodeURIComponent(countryCode)}`, {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      }),
+    adminSaveFx: async (currencyCode: string, payload: { rateFromInr: number; symbol?: string; sourceLabel?: string }) =>
+      apiRequest(`/api/v1/admin/intl/fx/${encodeURIComponent(currencyCode)}`, {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      }),
+  },
+
+  // Phase 6G: Subscriptions, B2B Wholesale & Signed Digital Downloads
+  phase6G: {
+    getPlans: async (productId?: string) =>
+      apiRequest(`/api/subscriptions/plans${productId ? `?productId=${encodeURIComponent(productId)}` : ''}`),
+    getMySubscriptions: async () => apiRequest('/api/subscriptions/me'),
+    subscribe: async (planId: string) =>
+      apiRequest('/api/subscriptions', { method: 'POST', body: JSON.stringify({ planId }) }),
+    subscriptionAction: async (subId: string, action: 'PAUSE' | 'RESUME' | 'CANCEL') =>
+      apiRequest(`/api/subscriptions/${encodeURIComponent(subId)}/action`, {
+        method: 'POST',
+        body: JSON.stringify({ action }),
+      }),
+    renewSubscription: async (subId: string) =>
+      apiRequest(`/api/subscriptions/${encodeURIComponent(subId)}/renew`, { method: 'POST' }),
+    getB2BAccount: async () => apiRequest('/api/b2b/account'),
+    registerB2B: async (payload: { companyName: string; gstin: string; businessType?: string }) =>
+      apiRequest('/api/b2b/register', { method: 'POST', body: JSON.stringify(payload) }),
+    adminGetB2BAccounts: async () => apiRequest('/api/v1/admin/b2b/accounts'),
+    adminReviewB2BAccount: async (userId: string, status: 'VERIFIED' | 'REJECTED') =>
+      apiRequest(`/api/v1/admin/b2b/accounts/${encodeURIComponent(userId)}/review`, {
+        method: 'POST',
+        body: JSON.stringify({ status }),
+      }),
+    getBulkPricing: async (productId: string, qty: number = 1) =>
+      apiRequest(`/api/b2b/bulk-pricing/${encodeURIComponent(productId)}?qty=${qty}`),
+    getRfqs: async () => apiRequest('/api/b2b/rfqs'),
+    createRfq: async (payload: { productId: string; requestedQty: number; targetUnitPrice?: number; notes?: string }) =>
+      apiRequest('/api/b2b/rfqs', { method: 'POST', body: JSON.stringify(payload) }),
+    quoteRfq: async (rfqId: string, payload: { quotedUnitPrice: number; status?: 'QUOTED' | 'REJECTED'; notes?: string }) =>
+      apiRequest(`/api/b2b/rfqs/${encodeURIComponent(rfqId)}/quote`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    getDigitalAssetForProduct: async (productId: string) =>
+      apiRequest(`/api/digital-assets/product/${encodeURIComponent(productId)}`),
+    getMyDigitalDownloads: async () => apiRequest('/api/digital-downloads/me'),
+    registerDigitalAsset: async (payload: any) =>
+      apiRequest('/api/v1/seller/digital-assets', { method: 'POST', body: JSON.stringify(payload) }),
+  },
+
+  // Phase 7: Mobile Device Push Registration
+  mobile: {
+    registerDevice: async (payload: {
+      pushToken: string;
+      platform: 'android' | 'ios' | 'web';
+      appVersion?: string;
+      deviceModel?: string;
+    }) =>
+      apiRequest('/api/mobile/devices', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+  },
 };
+
 
 

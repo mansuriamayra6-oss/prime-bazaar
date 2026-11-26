@@ -1,8 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
 import { INITIAL_PRODUCTS } from '../data/mockData.ts';
-import { ALL_CATEGORY_DEFINITIONS } from '../data/categoriesMaster.ts';
-import { dbProducts } from './v1Router.ts';
-import { dbCategories, ensurePhase5Seeded } from './marketplaceOpsService.ts';
+import { MASTER_34_CATEGORIES } from '../data/categoriesMaster.ts';
+import { dbProducts, dbCategories, DBCategory } from './v1Router.ts';
 import { getPersonalizationPreference } from './loyaltyAndIntlService.ts';
 
 // =============================================================================
@@ -35,7 +34,22 @@ function levenshtein(a: string, b: string): number {
 
 function normalizeCatalogList() {
   const seen = new Set<string>();
-  const list: any[] = [];
+  const list: Array<{
+    id: string;
+    title: string;
+    brand: string;
+    category: string;
+    subcategory: string;
+    price: number;
+    originalPrice: number;
+    discountPercent: number;
+    rating: number;
+    image: string;
+    isTrending: boolean;
+    isBestSeller: boolean;
+    description: string;
+  }> = [];
+
   for (const p of INITIAL_PRODUCTS) {
     seen.add(p.id);
     list.push({
@@ -54,15 +68,16 @@ function normalizeCatalogList() {
       description: p.description || '',
     });
   }
+
   for (const p of dbProducts.values()) {
     if (seen.has(p.id)) continue;
-    if (p.moderationStatus && p.moderationStatus !== 'APPROVED') continue;
+    if (p.status && p.status !== 'APPROVED') continue;
     list.push({
       id: p.id,
-      title: p.title,
-      brand: p.brand || 'Prime Verified',
-      category: p.category,
-      subcategory: '',
+      title: p.name,
+      brand: p.brandName || 'Prime Verified',
+      category: p.categoryId,
+      subcategory: p.subCategory || '',
       price: p.variants?.[0]?.price || 999,
       originalPrice: p.variants?.[0]?.mrp || 1499,
       discountPercent: 30,
@@ -88,14 +103,13 @@ const POPULAR_TERMS = [
 ];
 
 export function getSmartSearchSuggestions(rawQuery: string) {
-  ensurePhase5Seeded();
   const q = (rawQuery || '').trim();
   const catalog = normalizeCatalogList();
 
-  const categoriesList =
-    dbCategories.size > 0
-      ? Array.from(dbCategories.values()).filter((c) => c.isActive !== false)
-      : ALL_CATEGORY_DEFINITIONS;
+  const categoriesList: Array<DBCategory | (typeof MASTER_34_CATEGORIES)[number]> =
+    dbCategories.length > 0
+      ? dbCategories.filter((c) => c.isActive !== false)
+      : MASTER_34_CATEGORIES;
 
   if (!q) {
     return {
@@ -105,7 +119,7 @@ export function getSmartSearchSuggestions(rawQuery: string) {
       matchedCategories: categoriesList.slice(0, 6).map((c) => ({
         slug: c.slug,
         name: c.name,
-        group: c.group,
+        group: c.group || 'fashion',
       })),
       suggestions: catalog.slice(0, 5),
     };
@@ -166,7 +180,7 @@ export function getSmartSearchSuggestions(rawQuery: string) {
     .map((x) => ({
       slug: x.cat.slug,
       name: x.cat.name,
-      group: x.cat.group,
+      group: x.cat.group || 'fashion',
     }));
 
   // Compute human-friendly typo correction if direct match had 0 exact substring hits
@@ -217,7 +231,7 @@ export function getProductRecommendations(params: {
   const targetId = params.productId;
   const anchor = targetId ? catalog.find((p) => p.id === targetId) : null;
 
-  let frequentlyBoughtTogether: any[] = [];
+  const frequentlyBoughtTogether: typeof catalog = [];
   if (targetId) {
     const counts = coOccurrence.get(targetId);
     const rankedCoIds = counts
@@ -228,7 +242,7 @@ export function getProductRecommendations(params: {
 
     const fromOrders = rankedCoIds
       .map((id) => catalog.find((p) => p.id === id))
-      .filter(Boolean);
+      .filter((p): p is (typeof catalog)[number] => Boolean(p));
 
     const similarAttribute = catalog.filter(
       (p) => p.id !== targetId && anchor && (p.category === anchor.category || p.brand === anchor.brand)
@@ -244,7 +258,7 @@ export function getProductRecommendations(params: {
     }
   }
 
-  let personalizedPicks: any[] = [];
+  let personalizedPicks: typeof catalog = [];
   if (personalizationOn && params.userId) {
     const userOrders = (params.orders || []).filter((o: any) => o.userId === params.userId);
     const preferredCats = new Set<string>();
@@ -307,7 +321,7 @@ export async function performVisualSearch(params: {
         httpOptions: { headers: { 'User-Agent': 'aistudio-build' } },
       });
 
-      const availableSlugs = ALL_CATEGORY_DEFINITIONS.map((c) => c.slug).join(', ');
+      const availableSlugs = MASTER_34_CATEGORIES.map((c) => c.slug).join(', ');
       const response = await ai.models.generateContent({
         model: 'gemini-4-hydrogen',
         contents: [
