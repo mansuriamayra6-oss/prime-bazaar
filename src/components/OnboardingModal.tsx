@@ -33,7 +33,7 @@ export const OnboardingModal: React.FC = () => {
   ];
 
   const categories = [
-    { id: 'ethnic', label: 'Ethnic & Festive Silks', desc: 'Handwoven kurtis, sarees & bridal wear' },
+    { id: 'ethnic', label: 'Ethnic & Heritage Silks', desc: 'Handwoven kurtis, sarees & bridal wear' },
     { id: 'streetwear', label: 'Oversized Streetwear', desc: 'Heavyweight cargo, drops & boxy tees' },
     { id: 'western', label: 'Tailored Western', desc: 'Chic trousers, dresses & work blazers' },
     { id: 'footwear', label: 'Sneakers & Footwear', desc: 'Platform wave runners & vegan leather' }

@@ -53,8 +53,8 @@ export const MASTER_34_CATEGORIES: MasterCategoryDefinition[] = [
     isActive: true,
     isFashionPriority: true,
     level: 1,
-    tagline: 'Festive silks, Chanderi sarees & tailored western silhouettes',
-    promoTitle: 'Festive Silk & Kurti Edit — Up to 55% Off',
+    tagline: 'Dresses, tops, jeans, ethnic wear & tailored silhouettes',
+    promoTitle: "Women's Fashion — Dresses, Kurtis, Sarees & Tops",
     imageUrl: ETHNIC_IMG,
     bannerUrl: HERO_IMG,
     seoTitle: "Women's Fashion — Kurtis, Sarees & Western Wear | Prime Bazaar",
@@ -62,14 +62,14 @@ export const MASTER_34_CATEGORIES: MasterCategoryDefinition[] = [
     commissionPercent: 10,
     attributes: [
       { key: 'fabric', label: 'Fabric', options: ['Raw Silk', 'Chanderi Cotton', 'Organza', 'Cotton Twill', 'Georgette'] },
-      { key: 'occasion', label: 'Occasion', options: ['Festive', 'Wedding', 'Workwear', 'Everyday'] },
+      { key: 'occasion', label: 'Occasion', options: ['Ethnic', 'Wedding', 'Workwear', 'Everyday'] },
       { key: 'fit', label: 'Fit', options: ['Regular', 'Flared', 'Wide-Leg', 'Tailored'] },
     ],
     subcategories: [
       { id: 'anarkali-kurti', label: 'Anarkali & Kurti Sets', keywords: ['anarkali', 'kurti', 'zari', 'silk'], children: ['Silk Kurtis', 'Organza Dupatta Sets', 'Daily Cotton Kurtis'] },
       { id: 'sarees', label: 'Handloom & Chanderi Sarees', keywords: ['saree', 'chanderi', 'block print', 'blouse'], children: ['Banarasi Silk', 'Chanderi Cotton', 'Block Print'] },
       { id: 'western-trousers', label: 'Western & Wide-Leg Trousers', keywords: ['trousers', 'wide-leg', 'pleated', 'western'], children: ['Pleated Trousers', 'Blazers', 'Midi Dresses'] },
-      { id: 'ethnic', label: 'Ethnic & Festive Wear', keywords: ['ethnic', 'festive', 'sangeet', 'dupatta'], children: ['Sangeet Edits', 'Festive Kurtas', 'Lehenga Sets'] },
+      { id: 'ethnic', label: 'Ethnic Wear', keywords: ['ethnic', 'sangeet', 'dupatta'], children: ['Sangeet Edits', 'Silk Kurtas', 'Lehenga Sets'] },
     ],
   },
   {
@@ -109,19 +109,19 @@ export const MASTER_34_CATEGORIES: MasterCategoryDefinition[] = [
     isActive: true,
     isFashionPriority: true,
     level: 1,
-    tagline: 'Play-ready organic cotton sets & festive ethnic ensembles for kids',
-    promoTitle: 'Junior Festive & Everyday Capsule',
+    tagline: 'Play-ready organic cotton sets, boys, girls & baby clothing',
+    promoTitle: "Kids' Fashion — Everyday & Ethnic Capsule",
     imageUrl: HERO_IMG,
     bannerUrl: HERO_IMG,
-    seoTitle: "Kids' Fashion — Boys & Girls Ethnic & Casual Wear | Prime Bazaar",
-    seoDescription: 'Soft breathable cotton sets, festive kurtas, and everyday kids clothing crafted for comfort and durability.',
+    seoTitle: "Kids' Fashion — Boys, Girls & Baby Clothing | Prime Bazaar",
+    seoDescription: 'Soft breathable cotton sets, ethnic kurtas, and everyday kids clothing crafted for comfort and durability.',
     commissionPercent: 10,
     attributes: [
       { key: 'ageGroup', label: 'Age Group', options: ['2-4 Years', '5-7 Years', '8-10 Years', '11-14 Years'] },
       { key: 'material', label: 'Material', options: ['100% Cotton', 'Silk Blend', 'Denim'] },
     ],
     subcategories: [
-      { id: 'kids-festive', label: 'Festive Kurtas & Sets', keywords: ['kids', 'junior', 'boys', 'girls'], children: ['Boys Kurta Sets', 'Girls Lehenga Choli'] },
+      { id: 'kids-festive', label: 'Boys & Girls Ethnic Sets', keywords: ['kids', 'junior', 'boys', 'girls'], children: ['Boys Kurta Sets', 'Girls Lehenga Choli'] },
       { id: 'kids-everyday', label: 'Everyday Tees & Denim', keywords: ['kids', 'cotton set', 'children'], children: ['Co-ord Play Sets', 'Kids Sneakers'] },
     ],
   },
@@ -226,7 +226,7 @@ export const MASTER_34_CATEGORIES: MasterCategoryDefinition[] = [
     ],
     subcategories: [
       { id: 'kundan-chokers', label: 'Kundan Chokers & Necklaces', keywords: ['kundan', 'choker', 'bridal', 'necklace'], children: ['Bridal Chokers', 'Layered Haars'] },
-      { id: 'jhumkas-earrings', label: 'Jhumkas & Festive Sets', keywords: ['jhumka', 'maang tikka', 'jewel', 'brass'], children: ['Chandbalis', 'Jhumkas', 'Bangles'] },
+      { id: 'jhumkas-earrings', label: 'Jhumkas & Earrings', keywords: ['jhumka', 'maang tikka', 'jewel', 'brass'], children: ['Chandbalis', 'Jhumkas', 'Bangles'] },
     ],
   },
   {
@@ -251,7 +251,7 @@ export const MASTER_34_CATEGORIES: MasterCategoryDefinition[] = [
     ],
     subcategories: [
       { id: 'everyday-carry', label: 'Laptop Totes & Carryalls', keywords: ['tote', 'bag', 'vegan leather'], children: ['Cardholders', 'RFID Wallets'] },
-      { id: 'ethnic-jewellery', label: 'Festive Jewellery & Stoles', keywords: ['kundan', 'choker', 'jhumka', 'stole'], children: ['Silk Stoles', 'Sunglasses', 'Belts'] },
+      { id: 'ethnic-jewellery', label: 'Stoles, Sunglasses & Belts', keywords: ['kundan', 'choker', 'jhumka', 'stole'], children: ['Silk Stoles', 'Sunglasses', 'Belts'] },
     ],
   },
   {
@@ -302,7 +302,7 @@ export const MASTER_34_CATEGORIES: MasterCategoryDefinition[] = [
     ],
     subcategories: [
       { id: 'banarasi-silk', label: 'Banarasi & Kanjivaram Silk', keywords: ['banarasi', 'silk', 'zari', 'saree'], children: ['Pure Katan Silk', 'Organza Silk'] },
-      { id: 'festive-kurtas', label: 'Festive Kurtas & Sherwanis', keywords: ['kurta', 'anarkali', 'festive'], children: ['Women Anarkalis', 'Men Silk Kurtas'] },
+      { id: 'festive-kurtas', label: 'Kurtas & Sherwanis', keywords: ['kurta', 'anarkali', 'ethnic'], children: ['Women Anarkalis', 'Men Silk Kurtas'] },
     ],
   },
   {
@@ -320,7 +320,7 @@ export const MASTER_34_CATEGORIES: MasterCategoryDefinition[] = [
     imageUrl: HERO_IMG,
     bannerUrl: HERO_IMG,
     seoTitle: 'Luxury & Designer Fashion Studio | Prime Bazaar',
-    seoDescription: 'Limited-run designer garments, fine accessories, and bespoke festive ensembles.',
+    seoDescription: 'Limited-run designer garments, fine accessories, and bespoke couture ensembles.',
     commissionPercent: 15,
     attributes: [
       { key: 'edition', label: 'Edition', options: ['Runway Capsule', 'Limited Batch', 'Made-to-Order'] },

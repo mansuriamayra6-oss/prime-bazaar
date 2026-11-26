@@ -2,7 +2,7 @@ import { Product } from '../types';
 
 export const CATEGORY_LABEL_MAP: Record<string, string> = {
   all: 'All Collections',
-  ethnic: 'Ethnic & Festive',
+  ethnic: 'Ethnic Wear',
   streetwear: 'Streetwear & Cargo',
   western: 'Western Wear',
   fashion: 'Fashion & Clothing',

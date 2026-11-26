@@ -142,6 +142,14 @@ export function matchesDepartmentCategory(
       return product.category === 'footwear' || corpus.includes('sneaker');
     case 'accessories':
       return product.category === 'accessories' || product.category === 'jewellery' || product.category === 'bags';
+    case 'electronics':
+      return (
+        product.category === 'electronics' ||
+        product.category === 'mobile-accessories' ||
+        corpus.includes('earbud') ||
+        corpus.includes('smartwatch') ||
+        corpus.includes('charger')
+      );
     case 'travel':
       return product.category === 'travel' || corpus.includes('tote') || corpus.includes('luggage');
     default: {

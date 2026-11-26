@@ -596,6 +596,296 @@ export const INITIAL_PRODUCTS: Product[] = [
         helpfulCount: 29
       }
     ]
+  },
+  {
+    id: 'prod-13',
+    title: 'Emerald Satin Pleated A-Line Midi Dress',
+    brand: 'Maison Minimal',
+    category: 'womens-fashion',
+    subcategory: 'Dresses',
+    price: 1399,
+    originalPrice: 2999,
+    discountPercent: 53,
+    rating: 4.8,
+    reviewCount: 740,
+    inStock: 24,
+    images: [
+      'https://images.unsplash.com/photo-1595777457583-95e059d581b8?auto=format&fit=crop&w=800&q=80',
+      '/src/assets/images/hero_fashion_campaign_1793466539913.jpg'
+    ],
+    colors: [
+      { name: 'Emerald Green', hex: '#047857' },
+      { name: 'Champagne Rose', hex: '#E11D48' }
+    ],
+    sizes: [
+      { size: 'XS', available: true, stockCount: 4 },
+      { size: 'S', available: true, stockCount: 8 },
+      { size: 'M', available: true, stockCount: 7 },
+      { size: 'L', available: true, stockCount: 5 }
+    ],
+    description: 'Fluid satin pleated midi dress with a softly cinched waist and flutter sleeves for effortless day-to-evening styling.',
+    fabric: 'Silky Viscose Satin',
+    fit: 'A-Line Flared',
+    sellerId: 'seller-1',
+    sellerName: 'Varanasi Weavers Co.',
+    sellerRating: 4.9,
+    sku: 'MM-DRESS-EMR-13',
+    gstRate: 12,
+    codAvailable: true,
+    returnPeriodDays: 7,
+    isTrending: true,
+    isNew: true,
+    reviews: []
+  },
+  {
+    id: 'prod-14',
+    title: 'Linen Blend Casual Oxford Button-Down Shirt',
+    brand: 'UrbanCraft NYC',
+    category: 'mens-fashion',
+    subcategory: 'Shirts',
+    price: 1199,
+    originalPrice: 2499,
+    discountPercent: 52,
+    rating: 4.7,
+    reviewCount: 512,
+    inStock: 32,
+    images: [
+      'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?auto=format&fit=crop&w=800&q=80',
+      '/src/assets/images/collection_streetwear_1793466541088.jpg'
+    ],
+    colors: [
+      { name: 'Olive Mist', hex: '#4D7C0F' },
+      { name: 'Crisp Ivory', hex: '#F8FAFC' }
+    ],
+    sizes: [
+      { size: 'S', available: true, stockCount: 7 },
+      { size: 'M', available: true, stockCount: 12 },
+      { size: 'L', available: true, stockCount: 8 },
+      { size: 'XL', available: true, stockCount: 5 }
+    ],
+    description: 'Breathable cotton-linen Oxford casual shirt tailored with a clean button-down collar and curved hem.',
+    fabric: '60% Cotton / 40% European Linen',
+    fit: 'Regular Tailored Fit',
+    sellerId: 'seller-2',
+    sellerName: 'Metropolis Apparel Hub',
+    sellerRating: 4.6,
+    sku: 'UC-OXF-SHIRT-14',
+    gstRate: 12,
+    codAvailable: true,
+    returnPeriodDays: 7,
+    isBestSeller: true,
+    reviews: []
+  },
+  {
+    id: 'prod-15',
+    title: 'Organic Cotton Kids Co-ord Play & Lounge Set',
+    brand: 'LittleLoom',
+    category: 'kids-fashion',
+    subcategory: 'Boys & Girls Sets',
+    price: 799,
+    originalPrice: 1699,
+    discountPercent: 53,
+    rating: 4.9,
+    reviewCount: 410,
+    inStock: 28,
+    images: [
+      'https://images.unsplash.com/photo-1519238263530-99bdd11df2ea?auto=format&fit=crop&w=800&q=80',
+      '/src/assets/images/hero_fashion_campaign_1793466539913.jpg'
+    ],
+    colors: [
+      { name: 'Sky Chambray', hex: '#0284C7' },
+      { name: 'Warm Sand', hex: '#D97706' }
+    ],
+    sizes: [
+      { size: '2-4Y', available: true, stockCount: 8 },
+      { size: '5-7Y', available: true, stockCount: 10 },
+      { size: '8-10Y', available: true, stockCount: 10 }
+    ],
+    description: 'Super-soft 100% combed organic cotton top and joggers set designed for all-day play and sensitive skin.',
+    fabric: '100% Organic Combed Cotton',
+    fit: 'Relaxed Comfort Fit',
+    sellerId: 'seller-3',
+    sellerName: 'Jaipur Crafts & Silks',
+    sellerRating: 4.9,
+    sku: 'LL-KIDS-SET-15',
+    gstRate: 5,
+    codAvailable: true,
+    returnPeriodDays: 7,
+    isNew: true,
+    reviews: []
+  },
+  {
+    id: 'prod-16',
+    title: 'Quilted Vegan Leather Crossbody Sling Bag',
+    brand: 'Monolith Studio',
+    category: 'bags',
+    subcategory: 'Crossbody & Sling Bags',
+    price: 1099,
+    originalPrice: 2399,
+    discountPercent: 54,
+    rating: 4.7,
+    reviewCount: 620,
+    inStock: 21,
+    images: [
+      'https://images.unsplash.com/photo-1548036328-c9fa89d128fa?auto=format&fit=crop&w=800&q=80',
+      '/src/assets/images/collection_footwear_1793466541533.jpg'
+    ],
+    colors: [
+      { name: 'Espresso Tan', hex: '#78350F' },
+      { name: 'Noir Black', hex: '#111827' }
+    ],
+    sizes: [
+      { size: 'Free Size', available: true, stockCount: 21 }
+    ],
+    description: 'Structured diamond-quilted vegan leather crossbody sling with brushed brass chain strap and dual zip compartments.',
+    fabric: 'Textured Vegan Leather',
+    sellerId: 'seller-3',
+    sellerName: 'AeroStep Footwear',
+    sellerRating: 4.8,
+    sku: 'MS-SLING-BAG-16',
+    gstRate: 18,
+    codAvailable: true,
+    returnPeriodDays: 7,
+    isTrending: true,
+    reviews: []
+  },
+  {
+    id: 'prod-17',
+    title: 'ChronoLux Minimalist Leather Strap Analog Watch',
+    brand: 'ChronoLux',
+    category: 'watches',
+    subcategory: 'Analog Watches',
+    price: 1599,
+    originalPrice: 3499,
+    discountPercent: 54,
+    rating: 4.8,
+    reviewCount: 830,
+    inStock: 17,
+    images: [
+      'https://images.unsplash.com/photo-1524805444758-089113d48a6d?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1522312346375-d1a52e2b99b3?auto=format&fit=crop&w=800&q=80'
+    ],
+    colors: [
+      { name: 'Cognac / Brushed Steel', hex: '#92400E' },
+      { name: 'Slate Black', hex: '#1E293B' }
+    ],
+    sizes: [
+      { size: '40mm Dial', available: true, stockCount: 17 }
+    ],
+    description: '3ATM water-resistant minimalist chronograph dial crafted with mineral crystal glass and supple Italian-finish strap.',
+    sellerId: 'seller-2',
+    sellerName: 'Bengaluru Tech Logistics',
+    sellerRating: 4.8,
+    sku: 'CL-ANALOG-40-17',
+    gstRate: 18,
+    codAvailable: true,
+    returnPeriodDays: 7,
+    isBestSeller: true,
+    reviews: []
+  },
+  {
+    id: 'prod-18',
+    title: 'UV400 Polarized Retro Square Fashion Sunglasses',
+    brand: 'Solstice Eyewear',
+    category: 'accessories',
+    subcategory: 'Sunglasses',
+    price: 699,
+    originalPrice: 1599,
+    discountPercent: 56,
+    rating: 4.6,
+    reviewCount: 495,
+    inStock: 40,
+    images: [
+      'https://images.unsplash.com/photo-1511499767150-a48a237f0083?auto=format&fit=crop&w=800&q=80',
+      '/src/assets/images/collection_streetwear_1793466541088.jpg'
+    ],
+    colors: [
+      { name: 'Tortoise Amber', hex: '#B45309' },
+      { name: 'Jet Smoke', hex: '#18181B' }
+    ],
+    sizes: [
+      { size: 'Standard Fit', available: true, stockCount: 40 }
+    ],
+    description: 'Lightweight acetate square frames with glare-blocking polarized TAC lenses and full UV400 sun protection.',
+    sellerId: 'seller-2',
+    sellerName: 'Metropolis Apparel Hub',
+    sellerRating: 4.6,
+    sku: 'SOL-SUN-UV-18',
+    gstRate: 18,
+    codAvailable: true,
+    returnPeriodDays: 7,
+    isNew: true,
+    reviews: []
+  },
+  {
+    id: 'prod-19',
+    title: 'PulseFit AMOLED Bluetooth Calling Smart Watch',
+    brand: 'PulseFit Tech',
+    category: 'electronics',
+    subcategory: 'Smart Watches',
+    price: 2199,
+    originalPrice: 5499,
+    discountPercent: 60,
+    rating: 4.8,
+    reviewCount: 1640,
+    inStock: 30,
+    images: [
+      'https://images.unsplash.com/photo-1579586337278-3befd40fd17a?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1546868871-7041f2a55e12?auto=format&fit=crop&w=800&q=80'
+    ],
+    colors: [
+      { name: 'Midnight Graphite', hex: '#0F172A' },
+      { name: 'Rose Titanium', hex: '#BE123C' }
+    ],
+    sizes: [
+      { size: '44mm AMOLED', available: true, stockCount: 30 }
+    ],
+    description: '1.43-inch always-on AMOLED display, single-chip Bluetooth calling, SpO2 & heart-rate tracking, and 7-day battery life.',
+    sellerId: 'seller-2',
+    sellerName: 'Bengaluru Tech Logistics',
+    sellerRating: 4.8,
+    sku: 'PF-AMOLED-WATCH-19',
+    gstRate: 18,
+    warrantyPolicy: '1-year manufacturer warranty',
+    codAvailable: true,
+    returnPeriodDays: 7,
+    isTrending: true,
+    isBestSeller: true,
+    reviews: []
+  },
+  {
+    id: 'prod-20',
+    title: 'VoltCharge 65W GaN Fast Charger & Braided USB-C Cable Kit',
+    brand: 'VoltCharge',
+    category: 'mobile-accessories',
+    subcategory: 'Chargers & Cables',
+    price: 949,
+    originalPrice: 2299,
+    discountPercent: 59,
+    rating: 4.7,
+    reviewCount: 1180,
+    inStock: 55,
+    images: [
+      'https://images.unsplash.com/photo-1583863788434-e58a36330cf0?auto=format&fit=crop&w=800&q=80',
+      'https://images.unsplash.com/photo-1610945415295-d9bbf067e59c?auto=format&fit=crop&w=800&q=80'
+    ],
+    colors: [
+      { name: 'Matte Slate', hex: '#334155' }
+    ],
+    sizes: [
+      { size: '65W Dual Port + 1.5m Cable', available: true, stockCount: 55 }
+    ],
+    description: 'Compact GaN PD 3.0 dual-port wall adapter with smart surge protection and 100W nylon-braided USB-C to USB-C fast charging cable.',
+    sellerId: 'seller-2',
+    sellerName: 'Bengaluru Tech Logistics',
+    sellerRating: 4.8,
+    sku: 'VC-GAN-65W-20',
+    gstRate: 18,
+    warrantyPolicy: '1-year replacement warranty',
+    codAvailable: true,
+    returnPeriodDays: 7,
+    isBestSeller: true,
+    reviews: []
   }
 ];
 

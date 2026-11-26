@@ -218,11 +218,17 @@ export const HeroBanner: React.FC = () => {
       id: b.id || `cms-hero-${i}`,
       eyebrow: b.eyebrow || 'FASHION SALE · New collections • Exclusive deals',
       headline: b.title,
-      subcopy: b.subtitle || 'Verified GST fashion labels and everyday gadgets with Cashfree checkout.',
+      subcopy:
+        (b as any).subcopy ||
+        b.subtitle ||
+        'Verified GST fashion labels and everyday gadgets with Cashfree checkout.',
       ctaLabel: b.ctaLabel || 'SHOP NOW',
       targetCategory: b.targetCategory || 'fashion',
       targetSubcategory: b.targetSubcategory ?? null,
-      image: b.imageUrl || CAMPAIGN_SLIDES[i % CAMPAIGN_SLIDES.length].image,
+      image:
+        (b as any).desktopImageUrl ||
+        b.imageUrl ||
+        CAMPAIGN_SLIDES[i % CAMPAIGN_SLIDES.length].image,
       linkUrl: isSafeLinkUrl(b.linkUrl) ? b.linkUrl : undefined,
     }));
   }, [cmsBanners]);
@@ -239,7 +245,7 @@ export const HeroBanner: React.FC = () => {
     return products
       .filter(p => isStorefrontFeaturedProduct(p, 'all', categories))
       .sort((a, b) => (b.discountPercent || 0) - (a.discountPercent || 0))
-      .slice(0, 6);
+      .slice(0, 18);
   }, [products, categories]);
 
   const safeIdx = activeSlideIdx < slides.length ? activeSlideIdx : 0;
@@ -259,10 +265,114 @@ export const HeroBanner: React.FC = () => {
 
   return (
     <section
-      aria-label="Promotional marketplace showcase and flash deals"
+      aria-label="Flash deals and promotional marketplace showcase"
       className="max-w-[1440px] mx-auto px-3 sm:px-6 pt-3 sm:pt-4 pb-2 space-y-4"
     >
-      {/* 1. Hero Promotional Slider */}
+      {/* 1. Temu-Inspired Flash Deals Grid (starts immediately after Categories tab) */}
+      {flashDealProducts.length > 0 && (
+        <div className="rounded-2xl border border-orange-200 dark:border-orange-900/50 bg-gradient-to-r from-orange-50 via-white to-rose-50 dark:from-zinc-900 dark:via-zinc-900 dark:to-zinc-900 p-3.5 sm:p-4 shadow-2xs">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <div className="flex items-center gap-1.5 text-orange-600 dark:text-orange-400 font-extrabold text-sm sm:text-base font-display">
+                <Zap className="w-4 h-4 fill-orange-500 text-orange-500 shrink-0" />
+                <span>Flash Deals</span>
+              </div>
+              <div
+                aria-label="Flash deal countdown timer"
+                className="flex items-center gap-1 text-[11px] font-mono font-bold tabular-nums"
+              >
+                <Clock className="w-3.5 h-3.5 text-slate-500 mr-0.5" />
+                <span className="px-1.5 py-0.5 rounded bg-[#0F172A] text-white">{countdown.hh}</span>
+                <span className="text-slate-500">:</span>
+                <span className="px-1.5 py-0.5 rounded bg-[#0F172A] text-white">{countdown.mm}</span>
+                <span className="text-slate-500">:</span>
+                <span className="px-1.5 py-0.5 rounded bg-orange-600 text-white">{countdown.ss}</span>
+              </div>
+              <span className="text-[11px] font-semibold text-slate-500 dark:text-zinc-400 hidden sm:inline">
+                {flashDealProducts.length} live fashion &amp; tech offers
+              </span>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setDiscoveryTab('flash');
+                document.getElementById('catalog-section')?.scrollIntoView({ behavior: 'smooth' });
+              }}
+              className="text-xs font-bold text-orange-600 dark:text-orange-400 hover:underline flex items-center gap-1 whitespace-nowrap"
+            >
+              <span>View All Flash Deals</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2.5 sm:gap-3">
+            {flashDealProducts.map(item => {
+              const firstAvailSize = item.sizes.find(s => s.available)?.size || item.sizes[0]?.size || 'Free Size';
+              const firstColor = item.colors[0]?.name || 'Standard';
+              return (
+                <div
+                  key={item.id}
+                  onClick={() => setSelectedProduct(item)}
+                  className="group bg-white dark:bg-zinc-950 rounded-xl border border-slate-200 dark:border-zinc-800 p-2 flex flex-col justify-between cursor-pointer hover:border-orange-400 transition-all"
+                >
+                  <div>
+                    <div className="relative aspect-square rounded-lg overflow-hidden bg-slate-100 dark:bg-zinc-800 mb-2">
+                      <img
+                        src={item.images[0]}
+                        alt={item.title}
+                        referrerPolicy="no-referrer"
+                        onError={e => {
+                          e.currentTarget.src = '/src/assets/images/collection_ethnic_wear_1793466539838.jpg';
+                        }}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
+                      {item.discountPercent > 0 && (
+                        <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-orange-600 text-white text-[10px] font-extrabold font-mono tabular-nums">
+                          -{item.discountPercent}%
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] font-semibold text-slate-900 dark:text-zinc-100 line-clamp-1">
+                      {item.title}
+                    </p>
+                    <p className="text-[10px] font-semibold text-orange-600 dark:text-orange-400">
+                      Special price
+                    </p>
+                  </div>
+
+                  <div className="mt-1.5 flex items-center justify-between gap-1">
+                    <div className="min-w-0">
+                      <span className="block text-xs font-extrabold text-orange-600 dark:text-orange-400 font-mono tabular-nums">
+                        {formatPrice(item.price)}
+                      </span>
+                      {item.originalPrice > item.price && (
+                        <span className="block text-[10px] text-slate-400 line-through font-mono tabular-nums">
+                          {formatPrice(item.originalPrice)}
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      aria-label={`Quick add ${item.title} to cart`}
+                      onClick={e => {
+                        e.stopPropagation();
+                        addToCart(item, firstAvailSize, firstColor, 1);
+                      }}
+                      className="w-7 h-7 rounded-lg bg-slate-900 hover:bg-orange-600 dark:bg-zinc-800 dark:hover:bg-orange-600 text-white flex items-center justify-center shrink-0 transition-colors"
+                      title="Quick Add"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 2. Hero Promotional Slider */}
       <div
         onMouseEnter={() => setIsPaused(true)}
         onMouseLeave={() => setIsPaused(false)}
@@ -372,107 +482,6 @@ export const HeroBanner: React.FC = () => {
           </div>
         </div>
       </div>
-
-      {/* 2. Temu-Inspired Flash Deals Strip with Live Countdown Timer */}
-      {flashDealProducts.length > 0 && (
-        <div className="rounded-2xl border border-orange-200 dark:border-orange-900/50 bg-gradient-to-r from-orange-50 via-white to-rose-50 dark:from-zinc-900 dark:via-zinc-900 dark:to-zinc-900 p-3.5 sm:p-4 shadow-2xs">
-          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-            <div className="flex items-center gap-2.5 flex-wrap">
-              <div className="flex items-center gap-1.5 text-orange-600 dark:text-orange-400 font-extrabold text-sm sm:text-base font-display">
-                <Zap className="w-4 h-4 fill-orange-500 text-orange-500 shrink-0" />
-                <span>Flash Deals</span>
-              </div>
-              <div
-                aria-label="Flash deal countdown timer"
-                className="flex items-center gap-1 text-[11px] font-mono font-bold tabular-nums"
-              >
-                <Clock className="w-3.5 h-3.5 text-slate-500 mr-0.5" />
-                <span className="px-1.5 py-0.5 rounded bg-[#0F172A] text-white">{countdown.hh}</span>
-                <span className="text-slate-500">:</span>
-                <span className="px-1.5 py-0.5 rounded bg-[#0F172A] text-white">{countdown.mm}</span>
-                <span className="text-slate-500">:</span>
-                <span className="px-1.5 py-0.5 rounded bg-orange-600 text-white">{countdown.ss}</span>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                setDiscoveryTab('flash');
-                document.getElementById('catalog-section')?.scrollIntoView({ behavior: 'smooth' });
-              }}
-              className="text-xs font-bold text-orange-600 dark:text-orange-400 hover:underline flex items-center gap-1 whitespace-nowrap"
-            >
-              <span>View All Flash Deals</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3">
-            {flashDealProducts.map(item => {
-              const firstAvailSize = item.sizes.find(s => s.available)?.size || item.sizes[0]?.size || 'Free Size';
-              const firstColor = item.colors[0]?.name || 'Standard';
-              return (
-                <div
-                  key={item.id}
-                  onClick={() => setSelectedProduct(item)}
-                  className="group bg-white dark:bg-zinc-950 rounded-xl border border-slate-200 dark:border-zinc-800 p-2 flex flex-col justify-between cursor-pointer hover:border-orange-400 transition-all"
-                >
-                  <div>
-                    <div className="relative aspect-square rounded-lg overflow-hidden bg-slate-100 dark:bg-zinc-800 mb-2">
-                      <img
-                        src={item.images[0]}
-                        alt={item.title}
-                        referrerPolicy="no-referrer"
-                        onError={e => {
-                          e.currentTarget.src = '/src/assets/images/collection_ethnic_wear_1793466539838.jpg';
-                        }}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      />
-                      {item.discountPercent > 0 && (
-                        <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-orange-600 text-white text-[10px] font-extrabold font-mono tabular-nums">
-                          -{item.discountPercent}%
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-[11px] font-semibold text-slate-900 dark:text-zinc-100 line-clamp-1">
-                      {item.title}
-                    </p>
-                    <p className="text-[10px] font-semibold text-orange-600 dark:text-orange-400">
-                      Special price
-                    </p>
-                  </div>
-
-                  <div className="mt-1.5 flex items-center justify-between gap-1">
-                    <div className="min-w-0">
-                      <span className="block text-xs font-extrabold text-orange-600 dark:text-orange-400 font-mono tabular-nums">
-                        {formatPrice(item.price)}
-                      </span>
-                      {item.originalPrice > item.price && (
-                        <span className="block text-[10px] text-slate-400 line-through font-mono tabular-nums">
-                          {formatPrice(item.originalPrice)}
-                        </span>
-                      )}
-                    </div>
-                    <button
-                      type="button"
-                      aria-label={`Quick add ${item.title} to cart`}
-                      onClick={e => {
-                        e.stopPropagation();
-                        addToCart(item, firstAvailSize, firstColor, 1);
-                      }}
-                      className="w-7 h-7 rounded-lg bg-slate-900 hover:bg-orange-600 dark:bg-zinc-800 dark:hover:bg-orange-600 text-white flex items-center justify-center shrink-0 transition-colors"
-                      title="Quick Add"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {/* 3. Fashion & Selected Electronics Category Shortcuts */}
       <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200 dark:border-zinc-800 px-3 sm:px-4 py-3">

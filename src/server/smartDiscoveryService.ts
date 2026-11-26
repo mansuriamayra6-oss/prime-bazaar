@@ -95,7 +95,7 @@ const POPULAR_TERMS = [
   'Banarasi Silk Kurta',
   'Cargo Pants',
   'Chunky Sneakers',
-  'Festive Ethnic',
+  'Ethnic Wear',
   'Oversized Hoodie',
   'Smartwatch & Audio',
   'Handcrafted Tote Bag',
