@@ -394,3 +394,64 @@ export async function performVisualSearch(params: {
     matches,
   };
 }
+
+export function lookupProductByBarcodeOrCode(rawCode: string) {
+  const cleaned = (rawCode || '').trim();
+  const catalog = normalizeCatalogList();
+  if (!cleaned) {
+    return { found: false, code: '', product: null, deepLinkPath: null, relatedProducts: [] as typeof catalog };
+  }
+
+  // Handle scanned QR URLs like https://primebazaarfashion.in/product/prod-1 or primebazaar://product/prod-1
+  let normalizedIdOrCode = cleaned;
+  const productUrlMatch = cleaned.match(/\/product\/([a-zA-Z0-9_-]+)/i);
+  if (productUrlMatch?.[1]) {
+    normalizedIdOrCode = productUrlMatch[1];
+  }
+  const lower = normalizedIdOrCode.toLowerCase();
+
+  let matched = catalog.find(
+    (p) =>
+      p.id.toLowerCase() === lower ||
+      INITIAL_PRODUCTS.some(
+        (ip) =>
+          ip.id === p.id &&
+          ((ip.barcode && ip.barcode.toLowerCase() === lower) ||
+            (ip.sku && ip.sku.toLowerCase() === lower))
+      )
+  );
+
+  if (!matched) {
+    // Search seller-uploaded products in dbProducts
+    for (const dbp of dbProducts.values()) {
+      const variantMatch = (dbp.variants || []).some((v) => v.sku?.toLowerCase() === lower);
+      if (dbp.id.toLowerCase() === lower || variantMatch) {
+        matched = catalog.find((p) => p.id === dbp.id);
+        break;
+      }
+    }
+  }
+
+  // Deterministic EAN-13 demo mapping for standard 890* retail Indian barcodes if not directly assigned
+  if (!matched && /^\d{8,14}$/.test(normalizedIdOrCode) && catalog.length > 0) {
+    const tailSum = normalizedIdOrCode
+      .split('')
+      .reduce((acc, ch) => acc + (parseInt(ch, 10) || 0), 0);
+    if (normalizedIdOrCode.startsWith('890')) {
+      matched = catalog[tailSum % catalog.length];
+    }
+  }
+
+  const relatedProducts = matched
+    ? catalog.filter((p) => p.id !== matched!.id && p.category === matched!.category).slice(0, 4)
+    : catalog.slice(0, 4);
+
+  return {
+    found: Boolean(matched),
+    code: cleaned,
+    product: matched || null,
+    deepLinkPath: matched ? `/product/${matched.id}` : null,
+    relatedProducts,
+  };
+}
+

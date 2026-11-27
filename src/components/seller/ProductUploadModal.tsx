@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Product, ProductVariant } from '../../types';
-import { X, Plus, Trash2, Upload, Video, Layers, Tag, ShieldCheck, Box } from 'lucide-react';
+import { api } from '../../services/api';
+import { captureOrSelectPhoto, validateUploadFile } from '../../utils/nativeBridge';
+import { X, Plus, Trash2, Upload, Video, Camera, ShieldCheck } from 'lucide-react';
 
 interface ProductUploadModalProps {
   sellerId: string;
@@ -76,10 +78,59 @@ export const ProductUploadModal: React.FC<ProductUploadModalProps> = ({
   );
   const [codAvailable, setCodAvailable] = useState(existingProduct?.codAvailable ?? true);
 
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [uploadFeedback, setUploadFeedback] = useState<string | null>(null);
+
   const handleAddImage = () => {
     if (newImageUrl.trim()) {
       setImages([...images, newImageUrl.trim()]);
       setNewImageUrl('');
+    }
+  };
+
+  const uploadProductPhotoPayload = async (dataUrl: string, mimeType: string) => {
+    setUploadingImage(true);
+    setUploadFeedback(null);
+    try {
+      const res = await api.v1.products.uploadImage({
+        mimeType,
+        dataBase64: dataUrl,
+        caption: title.trim() || 'Product photo',
+      });
+      if (res?.media?.url) {
+        setImages((prev) => [...prev, res.media.url]);
+        setUploadFeedback('Image uploaded and verified (magic-byte validated).');
+      }
+    } catch (err: any) {
+      // If unauthenticated preview mode falls back cleanly, report error clearly
+      setUploadFeedback(err?.message || 'Sign in as Seller/Admin to upload binary photos.');
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const handleSellerFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const check = validateUploadFile(file);
+    if (!check.valid) {
+      setUploadFeedback(check.error || 'Unsupported file.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      uploadProductPhotoPayload(String(reader.result || ''), file.type || 'image/jpeg');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSellerCameraUpload = async () => {
+    try {
+      const photo = await captureOrSelectPhoto();
+      if (!photo?.dataUrl) return;
+      await uploadProductPhotoPayload(photo.dataUrl, photo.mimeType);
+    } catch (err: any) {
+      setUploadFeedback(err?.message || 'Camera capture cancelled or denied.');
     }
   };
 
@@ -163,6 +214,9 @@ export const ProductUploadModal: React.FC<ProductUploadModalProps> = ({
   return (
     <div className="fixed inset-0 z-60 bg-black/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
       <form
+        role="dialog"
+        aria-modal="true"
+        aria-label={existingProduct ? 'Edit Product Listing' : 'Upload New Product to Prime Bazaar'}
         onSubmit={handleSubmit}
         className="bg-white dark:bg-zinc-900 rounded-3xl max-w-3xl w-full max-h-[92vh] shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden flex flex-col animate-fadeIn text-xs"
       >
@@ -179,7 +233,8 @@ export const ProductUploadModal: React.FC<ProductUploadModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 text-zinc-400 hover:text-zinc-900 dark:hover:text-white rounded-lg transition-colors"
+            aria-label="Close product upload modal"
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center text-zinc-400 hover:text-zinc-900 dark:hover:text-white rounded-lg transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -265,29 +320,53 @@ export const ProductUploadModal: React.FC<ProductUploadModalProps> = ({
             </span>
 
             <div>
-              <label className="block font-semibold mb-1">Image Gallery (Upload / URL)</label>
-              <div className="flex gap-2">
+              <label className="block font-semibold mb-1">Image Gallery (Upload Photo / Camera / URL)</label>
+              <div className="flex flex-wrap gap-2">
                 <input
                   type="text"
+                  aria-label="Product image URL"
                   value={newImageUrl}
                   onChange={e => setNewImageUrl(e.target.value)}
                   placeholder="Paste image URL or /src/assets/images/... path"
-                  className="flex-1 p-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white"
+                  className="flex-1 min-w-[200px] p-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white"
                 />
                 <button
                   type="button"
                   onClick={handleAddImage}
-                  className="px-4 py-2.5 rounded-xl bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 font-semibold"
+                  className="px-3.5 py-2.5 rounded-xl bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 font-semibold"
                 >
-                  Add Image
+                  Add URL
+                </button>
+                <label className="px-3.5 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 font-semibold flex items-center gap-1.5 cursor-pointer hover:border-emerald-500">
+                  <Upload className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>{uploadingImage ? 'Uploading...' : 'Upload Photo'}</span>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    disabled={uploadingImage}
+                    onChange={handleSellerFileUpload}
+                    className="hidden"
+                  />
+                </label>
+                <button
+                  type="button"
+                  disabled={uploadingImage}
+                  onClick={handleSellerCameraUpload}
+                  className="px-3.5 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 font-semibold flex items-center gap-1.5 hover:border-emerald-500"
+                >
+                  <Camera className="w-3.5 h-3.5 text-rose-600" />
+                  <span>Camera</span>
                 </button>
               </div>
+              {uploadFeedback && (
+                <p className="text-[11px] text-emerald-700 dark:text-emerald-400 mt-1.5">{uploadFeedback}</p>
+              )}
 
               {/* Image Previews */}
               <div className="flex flex-wrap gap-2 mt-2">
                 {images.map((img, idx) => (
                   <div key={idx} className="relative w-16 h-20 rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700 group">
-                    <img src={img} alt="preview" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                    <img src={img} alt={`Product preview ${idx + 1}`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                     <button
                       type="button"
                       onClick={() => handleRemoveImage(idx)}

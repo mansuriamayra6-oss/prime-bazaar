@@ -2,9 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { useMarketplace } from '../context/MarketplaceContext';
 import { api } from '../services/api';
 import {
+  checkBiometricAvailability,
+  enrollBiometricCredential,
   getBiometricLockPreference,
   setBiometricLockPreference,
   registerPushNotifications,
+  unregisterPushNotifications,
 } from '../utils/nativeBridge';
 import { INITIAL_BUYER_CHATS, INITIAL_LIVE_SESSIONS } from '../data/mockData';
 import { 
@@ -101,20 +104,52 @@ export const ProfileModal: React.FC = () => {
   const [mySubscriptions, setMySubscriptions] = useState<any[]>([]);
   const [personalizationOn, setPersonalizationOn] = useState(true);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
+  const [biometricSupportedLabel, setBiometricSupportedLabel] = useState('Face ID / Fingerprint');
+  const [biometricPinInput, setBiometricPinInput] = useState('');
+  const [hasPinFallback, setHasPinFallback] = useState(false);
+  const [biometricBusy, setBiometricBusy] = useState(false);
   const [pushRegistering, setPushRegistering] = useState(false);
+  const [notifPrefs, setNotifPrefs] = useState({
+    orderConfirmation: true,
+    paymentConfirmation: true,
+    shippingUpdates: true,
+    returnRefundUpdates: true,
+    sellerAlerts: true,
+    promotionalOffers: true,
+  });
 
   useEffect(() => {
     if (!isProfileOpen || !user?.isLoggedIn) return;
     getBiometricLockPreference().then(setBiometricEnabled).catch(() => {});
+    checkBiometricAvailability()
+      .then((info) => setBiometricSupportedLabel(info.label))
+      .catch(() => {});
     Promise.allSettled([
       api.phase6G.getB2BAccount(),
       api.phase6G.getMySubscriptions(),
       api.loyalty.getMe(),
-    ]).then(([bRes, sRes, lRes]) => {
+      api.biometric.getStatus(),
+      api.notifications.getPreferences(),
+    ]).then(([bRes, sRes, lRes, bioRes, nRes]) => {
       if (bRes.status === 'fulfilled') setB2bAccount(bRes.value?.account || null);
       if (sRes.status === 'fulfilled') setMySubscriptions(sRes.value?.subscriptions || []);
       if (lRes.status === 'fulfilled' && lRes.value?.account) {
         setPersonalizationOn(lRes.value.account.personalizationOn !== false);
+      }
+      if (bioRes.status === 'fulfilled' && bioRes.value) {
+        setBiometricEnabled(Boolean(bioRes.value.enabled));
+        setHasPinFallback(Boolean(bioRes.value.hasPinFallback));
+      }
+      if (nRes.status === 'fulfilled' && nRes.value?.preferences) {
+        const p = nRes.value.preferences;
+        setNotifPrefs({
+          orderConfirmation: p.orderConfirmation !== false,
+          paymentConfirmation: p.paymentConfirmation !== false,
+          shippingUpdates: p.shippingUpdates !== false,
+          returnRefundUpdates: p.returnRefundUpdates !== false,
+          sellerAlerts: p.sellerAlerts !== false,
+          promotionalOffers: p.promotionalOffers !== false,
+        });
       }
     });
   }, [isProfileOpen, user?.isLoggedIn]);
@@ -146,14 +181,22 @@ export const ProfileModal: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-60 bg-black/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 animate-fadeIn">
-      <div 
+    <div
+      className="fixed inset-0 z-60 bg-black/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 animate-fadeIn"
+      onClick={() => setIsProfileOpen(false)}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Account and Profile Settings"
         className="relative w-full max-w-2xl bg-white dark:bg-zinc-900 rounded-3xl overflow-hidden shadow-2xl border border-zinc-200 dark:border-zinc-800 p-6 sm:p-8 max-h-[90vh] overflow-y-auto flex flex-col"
         onClick={e => e.stopPropagation()}
       >
         <button
+          type="button"
           onClick={() => setIsProfileOpen(false)}
-          className="absolute top-4 right-4 p-2 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors"
+          aria-label="Close profile dialog"
+          className="absolute top-4 right-4 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors"
           title="Close Profile"
         >
           <X className="w-5 h-5" />
@@ -1124,49 +1167,194 @@ export const ProfileModal: React.FC = () => {
                   <p className="text-[11px] text-zinc-400">Manage 2-factor authentication, active sessions, and data rights</p>
                 </div>
 
-                {/* Native Mobile Push & App Biometric Lock */}
+                {/* Native Mobile Push, Notification Preferences & Biometric Auth */}
                 <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800 space-y-3">
-                  <div className="flex items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-3">
                       <Smartphone className="w-5 h-5 text-indigo-500 shrink-0" />
                       <div>
                         <span className="font-bold text-zinc-900 dark:text-white block">Mobile Push Notifications</span>
-                        <span className="text-[11px] text-zinc-400">Register this Android / iOS / Browser device for order updates</span>
+                        <span className="text-[11px] text-zinc-400">Register this Android / iOS / Browser device for real-time updates</span>
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      disabled={pushRegistering}
-                      onClick={async () => {
-                        setPushRegistering(true);
-                        try {
-                          await registerPushNotifications(notify);
-                        } finally {
-                          setPushRegistering(false);
-                        }
-                      }}
-                      className="px-3 py-1.5 rounded-xl bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 font-bold text-[11px] whitespace-nowrap"
-                    >
-                      {pushRegistering ? 'Registering...' : 'Enable Push'}
-                    </button>
-                  </div>
-                  <label className="flex items-center justify-between pt-2 border-t border-zinc-200 dark:border-zinc-700 cursor-pointer">
-                    <div>
-                      <span className="font-semibold text-zinc-900 dark:text-white block">App Biometric Lock Screen Preference</span>
-                      <span className="text-[10px] text-zinc-400">Stored locally in Capacitor Preferences (requires active OTP session)</span>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        disabled={pushRegistering}
+                        onClick={async () => {
+                          setPushRegistering(true);
+                          try {
+                            await registerPushNotifications(notify);
+                          } finally {
+                            setPushRegistering(false);
+                          }
+                        }}
+                        className="px-3 py-1.5 rounded-xl bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 font-bold text-[11px] whitespace-nowrap"
+                      >
+                        {pushRegistering ? 'Registering...' : 'Enable Push'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await unregisterPushNotifications().catch(() => {});
+                          notify('Device push token unregistered.');
+                        }}
+                        className="px-2.5 py-1.5 rounded-xl border border-zinc-300 dark:border-zinc-700 text-[11px] font-semibold text-zinc-600 dark:text-zinc-300"
+                      >
+                        Unregister
+                      </button>
                     </div>
-                    <input
-                      type="checkbox"
-                      checked={biometricEnabled}
-                      onChange={e => {
-                        const val = e.target.checked;
-                        setBiometricEnabled(val);
-                        setBiometricLockPreference(val);
-                        notify(val ? 'App biometric lock preference saved.' : 'App biometric lock disabled.');
-                      }}
-                      className="w-4 h-4 accent-emerald-600"
-                    />
-                  </label>
+                  </div>
+
+                  {/* Category Notification Preferences */}
+                  <div className="pt-3 border-t border-zinc-200 dark:border-zinc-700 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-zinc-900 dark:text-white">Notification Categories</span>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            const res = await api.notifications.dispatch({
+                              category: 'order_confirmation',
+                              title: 'Order Update Ready',
+                              body: 'Your Prime Bazaar shipment status is active.',
+                              deepLinkPath: '/orders',
+                            });
+                            notify(res.delivered ? 'Test order push notification logged!' : 'Suppressed by preference.');
+                          } catch (err: any) {
+                            notify(err?.message || 'Unable to send test notification.');
+                          }
+                        }}
+                        className="text-[10px] font-bold text-emerald-600 hover:underline"
+                      >
+                        Send Test Alert
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {(
+                        [
+                          ['orderConfirmation', 'Order Confirmations'],
+                          ['paymentConfirmation', 'Payment Confirmations'],
+                          ['shippingUpdates', 'Shipping & Delivery'],
+                          ['returnRefundUpdates', 'Returns & Refunds'],
+                          ['sellerAlerts', 'Seller Alerts'],
+                          ['promotionalOffers', 'Promotional Deals'],
+                        ] as const
+                      ).map(([key, label]) => (
+                        <label
+                          key={key}
+                          className="flex items-center justify-between px-2.5 py-2 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 cursor-pointer"
+                        >
+                          <span className="text-[11px] font-medium text-zinc-700 dark:text-zinc-300">{label}</span>
+                          <input
+                            type="checkbox"
+                            checked={notifPrefs[key]}
+                            onChange={async (e) => {
+                              const next = { ...notifPrefs, [key]: e.target.checked };
+                              setNotifPrefs(next);
+                              try {
+                                await api.notifications.updatePreferences({ [key]: e.target.checked });
+                                notify(`${label} notifications ${e.target.checked ? 'enabled' : 'muted'}.`);
+                              } catch (err: any) {
+                                notify(err?.message || 'Failed to save notification preference.');
+                              }
+                            }}
+                            className="w-4 h-4 accent-emerald-600"
+                          />
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Real Biometric Enrollment & PIN Fallback */}
+                  <div className="pt-3 border-t border-zinc-200 dark:border-zinc-700 space-y-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <span className="font-semibold text-zinc-900 dark:text-white block">
+                          Biometric Login ({biometricSupportedLabel})
+                        </span>
+                        <span className="text-[10px] text-zinc-400">
+                          WebAuthn / Capacitor Biometric passkey + scrypt PIN fallback {hasPinFallback ? '(PIN active)' : ''}
+                        </span>
+                      </div>
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          biometricEnabled
+                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                            : 'bg-zinc-200 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400'
+                        }`}
+                      >
+                        {biometricEnabled ? 'Enabled' : 'Off'}
+                      </span>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <input
+                        type="password"
+                        inputMode="numeric"
+                        maxLength={6}
+                        aria-label="Optional 4 to 6 digit fallback PIN"
+                        placeholder="Optional 4-6 digit fallback PIN"
+                        value={biometricPinInput}
+                        onChange={(e) => setBiometricPinInput(e.target.value.replace(/\D/g, ''))}
+                        className="flex-1 min-w-[180px] px-3 py-1.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 font-mono text-xs"
+                      />
+                      {!biometricEnabled ? (
+                        <button
+                          type="button"
+                          disabled={biometricBusy}
+                          onClick={async () => {
+                            if (biometricPinInput && (biometricPinInput.length < 4 || biometricPinInput.length > 6)) {
+                              notify('Fallback PIN must be 4 to 6 digits.');
+                              return;
+                            }
+                            setBiometricBusy(true);
+                            try {
+                              await enrollBiometricCredential({
+                                userId: user.id || user.email,
+                                userEmail: user.email,
+                                userName: user.name,
+                                fallbackPin: biometricPinInput || undefined,
+                              });
+                              setBiometricEnabled(true);
+                              if (biometricPinInput) setHasPinFallback(true);
+                              setBiometricPinInput('');
+                              notify('Biometric login enabled for this device.');
+                            } catch (err: any) {
+                              notify(err?.message || 'Unable to enable biometric login.');
+                            } finally {
+                              setBiometricBusy(false);
+                            }
+                          }}
+                          className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px]"
+                        >
+                          {biometricBusy ? 'Enrolling...' : 'Enable Biometric'}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={biometricBusy}
+                          onClick={async () => {
+                            setBiometricBusy(true);
+                            try {
+                              await api.biometric.disable();
+                              await setBiometricLockPreference(false);
+                              setBiometricEnabled(false);
+                              setHasPinFallback(false);
+                              notify('Biometric login & fallback PIN disabled.');
+                            } catch (err: any) {
+                              notify(err?.message || 'Failed to disable biometric login.');
+                            } finally {
+                              setBiometricBusy(false);
+                            }
+                          }}
+                          className="px-3.5 py-1.5 rounded-xl border border-rose-300 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-bold text-[11px]"
+                        >
+                          Disable Biometric
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
                 {/* Two Factor Authentication */}

@@ -1,23 +1,89 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useMarketplace } from '../context/MarketplaceContext';
 import { api } from '../services/api';
-import { X, Phone, Mail, Sparkles, CheckCircle2, ArrowRight, ShieldCheck, KeyRound, UserCheck, Building2 } from 'lucide-react';
+import { authenticateWithBiometric, checkBiometricAvailability } from '../utils/nativeBridge';
+import { X, CheckCircle2, ArrowRight, ShieldCheck, UserCheck, Building2, Fingerprint, KeyRound } from 'lucide-react';
 
 export const AuthModal: React.FC = () => {
   const { isAuthOpen, setIsAuthOpen, loginUser, openMerchantAuth, notify } = useMarketplace();
 
-  const [authMode, setAuthMode] = useState<'otp' | 'password'>('otp');
+  const [authMode, setAuthMode] = useState<'otp' | 'password' | 'biometric'>('otp');
   const [method, setMethod] = useState<'phone' | 'email'>('phone');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [biometricIdentifier, setBiometricIdentifier] = useState('mansuriamayra6@gmail.com');
+  const [fallbackPin, setFallbackPin] = useState('');
+  const [showPinFallback, setShowPinFallback] = useState(false);
+  const [biometricLabel, setBiometricLabel] = useState('Face ID / Fingerprint');
   const [fullName, setFullName] = useState('');
   const [otpSent, setOtpSent] = useState(false);
   const [otpCode, setOtpCode] = useState('');
   const [serverNotice, setServerNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    if (!isAuthOpen) return;
+    checkBiometricAvailability()
+      .then((info) => setBiometricLabel(info.label))
+      .catch(() => {});
+  }, [isAuthOpen]);
+
   if (!isAuthOpen) return null;
+
+  const handleBiometricLogin = async () => {
+    const id = biometricIdentifier.trim();
+    if (!id) {
+      notify('Enter your registered email or phone number for biometric unlock.');
+      return;
+    }
+    setLoading(true);
+    setServerNotice(null);
+    try {
+      const res = await authenticateWithBiometric(id);
+      if (res.user) {
+        loginUser(res.user.name, res.user.phone, res.user.email, res.token);
+        setIsAuthOpen(false);
+        notify('Signed in with Biometric Authentication.');
+      }
+    } catch (err: any) {
+      const msg = err?.message || 'Biometric verification unavailable.';
+      setServerNotice(msg);
+      setShowPinFallback(true);
+      notify(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePinFallbackLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const id = biometricIdentifier.trim();
+    if (!id || !fallbackPin.trim()) {
+      notify('Enter your registered email/phone and 4–6 digit security PIN.');
+      return;
+    }
+    setLoading(true);
+    setServerNotice(null);
+    try {
+      const res = await api.biometric.verify({
+        identifier: id,
+        pin: fallbackPin.trim(),
+        fallbackMode: 'pin',
+      });
+      if (res.user) {
+        loginUser(res.user.name, res.user.phone, res.user.email, res.token);
+        setIsAuthOpen(false);
+        setFallbackPin('');
+        notify('Signed in via Security PIN fallback.');
+      }
+    } catch (err: any) {
+      setServerNotice(err?.message || 'Incorrect PIN.');
+      notify(err?.message || 'PIN verification failed.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -121,14 +187,22 @@ export const AuthModal: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-60 bg-black/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 animate-fadeIn">
-      <div 
+    <div
+      className="fixed inset-0 z-60 bg-black/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 animate-fadeIn"
+      onClick={() => setIsAuthOpen(false)}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Sign In to Prime Bazaar"
         className="relative w-full max-w-md max-h-[90vh] overflow-y-auto bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl border border-zinc-200 dark:border-zinc-800 p-6 sm:p-8"
         onClick={e => e.stopPropagation()}
       >
         <button
+          type="button"
           onClick={() => setIsAuthOpen(false)}
-          className="absolute top-4 right-4 p-2 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
+          aria-label="Close sign in dialog"
+          className="absolute top-4 right-4 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
         >
           <X className="w-5 h-5" />
         </button>
@@ -164,6 +238,7 @@ export const AuthModal: React.FC = () => {
             </div>
           </div>
           <button
+            type="button"
             onClick={handleQuickDemoShopper}
             disabled={loading}
             className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] shadow-sm shrink-0 active:scale-95 transition-all"
@@ -172,25 +247,41 @@ export const AuthModal: React.FC = () => {
           </button>
         </div>
 
-        {/* Auth Mode Toggle: Mobile OTP vs Password */}
-        <div className="flex p-1 bg-zinc-100 dark:bg-zinc-800 rounded-xl mb-4">
+        {/* Auth Mode Toggle: Mobile OTP vs Password vs Biometric */}
+        <div className="flex p-1 bg-zinc-100 dark:bg-zinc-800 rounded-xl mb-4" role="tablist" aria-label="Authentication methods">
           <button
             type="button"
+            role="tab"
+            aria-selected={authMode === 'otp'}
             onClick={() => setAuthMode('otp')}
             className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
               authMode === 'otp' ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-xs' : 'text-zinc-500'
             }`}
           >
-            Mobile / Email OTP
+            OTP
           </button>
           <button
             type="button"
+            role="tab"
+            aria-selected={authMode === 'password'}
             onClick={() => setAuthMode('password')}
             className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
               authMode === 'password' ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-xs' : 'text-zinc-500'
             }`}
           >
-            Password Login
+            Password
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={authMode === 'biometric'}
+            onClick={() => setAuthMode('biometric')}
+            className={`flex-1 py-1.5 text-xs font-semibold rounded-lg flex items-center justify-center gap-1 transition-all ${
+              authMode === 'biometric' ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-xs' : 'text-zinc-500'
+            }`}
+          >
+            <Fingerprint className="w-3.5 h-3.5" />
+            <span>Biometric</span>
           </button>
         </div>
 
@@ -198,10 +289,11 @@ export const AuthModal: React.FC = () => {
           !otpSent ? (
             <form onSubmit={handleSendOtp} className="space-y-3.5">
               <div>
-                <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
+                <label htmlFor="auth-full-name" className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
                   Your Full Name
                 </label>
                 <input
+                  id="auth-full-name"
                   type="text"
                   placeholder="e.g. Amayra Mansuri"
                   value={fullName}
@@ -345,14 +437,15 @@ export const AuthModal: React.FC = () => {
               </button>
             </form>
           )
-        ) : (
+        ) : authMode === 'password' ? (
           /* Password Login Mode */
           <form onSubmit={handlePasswordLogin} className="space-y-3.5">
             <div>
-              <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
+              <label htmlFor="auth-pwd-id" className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
                 Email or Mobile Number
               </label>
               <input
+                id="auth-pwd-id"
                 type="text"
                 required
                 placeholder="name@example.com or 9876543210"
@@ -372,10 +465,11 @@ export const AuthModal: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
+              <label htmlFor="auth-pwd-input" className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
                 Password
               </label>
               <input
+                id="auth-pwd-input"
                 type="password"
                 required
                 placeholder="••••••••"
@@ -394,6 +488,75 @@ export const AuthModal: React.FC = () => {
               <ArrowRight className="w-4 h-4" />
             </button>
           </form>
+        ) : (
+          /* Biometric & PIN Fallback Mode */
+          <div className="space-y-3.5">
+            <div>
+              <label htmlFor="auth-bio-id" className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
+                Registered Email or Phone
+              </label>
+              <input
+                id="auth-bio-id"
+                type="text"
+                placeholder="name@example.com or 9876543210"
+                value={biometricIdentifier}
+                onChange={e => setBiometricIdentifier(e.target.value)}
+                className="w-full p-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs focus:outline-none focus:border-emerald-600"
+              />
+            </div>
+
+            {serverNotice && (
+              <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-[11px] text-amber-900 dark:text-amber-200">
+                {serverNotice}
+              </div>
+            )}
+
+            <button
+              type="button"
+              disabled={loading}
+              onClick={handleBiometricLogin}
+              className="w-full py-3 rounded-xl bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 hover:opacity-95 disabled:opacity-50 font-bold text-xs flex items-center justify-center gap-2 shadow-md transition-all active:scale-95"
+            >
+              <Fingerprint className="w-4 h-4 text-emerald-500" />
+              <span>{loading ? 'Verifying...' : `Unlock with ${biometricLabel}`}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowPinFallback(!showPinFallback)}
+              className="w-full text-[11px] font-semibold text-zinc-500 hover:text-zinc-900 dark:hover:text-white flex items-center justify-center gap-1"
+            >
+              <KeyRound className="w-3.5 h-3.5" />
+              <span>{showPinFallback ? 'Hide Security PIN Fallback' : 'Use Security PIN Fallback instead'}</span>
+            </button>
+
+            {showPinFallback && (
+              <form onSubmit={handlePinFallbackLogin} className="space-y-2.5 pt-2 border-t border-zinc-200 dark:border-zinc-800">
+                <label htmlFor="auth-bio-pin" className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                  4–6 Digit Account Security PIN
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    id="auth-bio-pin"
+                    type="password"
+                    inputMode="numeric"
+                    maxLength={6}
+                    placeholder="••••"
+                    value={fallbackPin}
+                    onChange={e => setFallbackPin(e.target.value.replace(/\D/g, ''))}
+                    className="flex-1 p-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-center font-mono tracking-widest font-bold"
+                  />
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs"
+                  >
+                    Verify PIN
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
         )}
 
         {/* Merchant Partner Gateway */}

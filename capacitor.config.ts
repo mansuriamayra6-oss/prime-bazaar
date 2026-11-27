@@ -1,5 +1,7 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
+const devServerUrl = process.env.CAPACITOR_SERVER_URL?.trim();
+
 const config: CapacitorConfig = {
   appId: 'in.primebazaarfashion.app',
   appName: 'Prime Bazaar',
@@ -7,6 +9,12 @@ const config: CapacitorConfig = {
   server: {
     androidScheme: 'https',
     iosScheme: 'https',
+    ...(devServerUrl
+      ? {
+          url: devServerUrl,
+          cleartext: devServerUrl.startsWith('http://'),
+        }
+      : {}),
   },
   plugins: {
     PushNotifications: {

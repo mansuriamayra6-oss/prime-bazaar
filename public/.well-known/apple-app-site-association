@@ -4,7 +4,16 @@
     "details": [
       {
         "appID": "APPLE_TEAM_ID.in.primebazaarfashion.app",
-        "paths": ["/product/*", "/category/*", "/orders", "/"]
+        "paths": [
+          "/product/*",
+          "/category/*",
+          "/cart",
+          "/orders",
+          "/seller/*",
+          "/promotions",
+          "/account",
+          "/"
+        ]
       }
     ]
   },

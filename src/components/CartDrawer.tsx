@@ -240,6 +240,7 @@ export const CartDrawer: React.FC = () => {
                     <div className="flex gap-2">
                       <input
                         type="text"
+                        aria-label="Promotional coupon code"
                         placeholder="Enter coupon code"
                         value={couponInput}
                         onChange={e => setCouponInput(e.target.value.toUpperCase())}

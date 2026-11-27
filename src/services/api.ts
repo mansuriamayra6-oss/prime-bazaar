@@ -276,6 +276,11 @@ export const api = {
       bulkUpload: async (sellerId: string, products: any[]) => apiRequest('/api/v1/seller/products/bulk-upload', { method: 'POST', body: JSON.stringify({ sellerId, products }) }),
       getCategories: async () => apiRequest('/api/v1/seller/categories'),
       getBrands: async () => apiRequest('/api/v1/seller/brands'),
+      uploadImage: async (payload: { mimeType: string; dataBase64: string; caption?: string }) =>
+        apiRequest('/api/v1/storefront/uploads/product-image', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        }),
     },
 
     // Inventory
@@ -868,6 +873,8 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(payload),
       }),
+    barcodeLookup: async (code: string) =>
+      apiRequest(`/api/discovery/barcode/${encodeURIComponent(code.trim())}`),
   },
 
   // Phase 6F: Internationalization, FX Rates & Landed Customs/Tax Quote
@@ -940,7 +947,7 @@ export const api = {
       apiRequest('/api/v1/seller/digital-assets', { method: 'POST', body: JSON.stringify(payload) }),
   },
 
-  // Phase 7: Mobile Device Push Registration
+  // Phase 7: Mobile Device Push Registration, Notification Preferences & Biometric Auth
   mobile: {
     registerDevice: async (payload: {
       pushToken: string;
@@ -952,8 +959,91 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(payload),
       }),
+    unregisterDevice: async (payload: { pushToken?: string; deviceId?: string }) =>
+      apiRequest('/api/mobile/devices/unregister', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+  },
+
+  notifications: {
+    getPreferences: async () => apiRequest('/api/notifications/preferences'),
+    updatePreferences: async (payload: {
+      orderConfirmation?: boolean;
+      paymentConfirmation?: boolean;
+      shippingUpdates?: boolean;
+      returnRefundUpdates?: boolean;
+      sellerAlerts?: boolean;
+      promotionalOffers?: boolean;
+    }) =>
+      apiRequest('/api/notifications/preferences', {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      }),
+    getMyNotifications: async () => apiRequest('/api/notifications/me'),
+    dispatch: async (payload: {
+      category:
+        | 'order_confirmation'
+        | 'payment_confirmation'
+        | 'shipping_update'
+        | 'return_refund'
+        | 'seller_alert'
+        | 'promotion';
+      title: string;
+      body: string;
+      deepLinkPath?: string;
+    }) =>
+      apiRequest('/api/notifications/dispatch', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+  },
+
+  biometric: {
+    getStatus: async () => apiRequest('/api/auth/biometric/status'),
+    register: async (payload: {
+      credentialId: string;
+      authenticatorType?: 'webauthn' | 'capacitor-biometric' | 'device-passkey';
+      publicKeySpkiBase64?: string;
+      deviceName?: string;
+      fallbackPin?: string;
+    }) =>
+      apiRequest('/api/auth/biometric/register', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    disable: async () =>
+      apiRequest('/api/auth/biometric', {
+        method: 'DELETE',
+      }),
+    challenge: async (identifier: string) =>
+      apiRequest('/api/auth/biometric/challenge', {
+        method: 'POST',
+        body: JSON.stringify({ identifier }),
+      }),
+    verify: async (payload: {
+      identifier?: string;
+      challengeId?: string;
+      credentialId?: string;
+      clientDataJSON?: string;
+      authenticatorData?: string;
+      signature?: string;
+      pin?: string;
+      password?: string;
+      fallbackMode?: 'biometric' | 'pin' | 'password';
+    }) => {
+      const res = await apiRequest('/api/auth/biometric/verify', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      if (res.token) {
+        setAuthToken(res.token);
+      }
+      return res;
+    },
   },
 };
+
 
 
 

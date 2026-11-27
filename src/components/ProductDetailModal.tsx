@@ -1763,6 +1763,7 @@ export const ProductDetailModal: React.FC = () => {
                 <textarea
                   rows={3}
                   maxLength={1000}
+                  aria-label="Review comment"
                   placeholder="Share fabric feel, sizing fit, color accuracy, or delivery feedback..."
                   value={newReviewComment}
                   onChange={e => setNewReviewComment(e.target.value)}

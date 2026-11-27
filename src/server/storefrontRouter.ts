@@ -287,7 +287,75 @@ export function createStorefrontRouter(deps: StorefrontDependencies) {
     }
   );
 
-  // Serve validated review media strictly with nosniff
+  // 1b. Seller Product Image Upload (strict JPG/PNG/WebP MIME + magic bytes + 5MB check)
+  router.post(
+    '/uploads/product-image',
+    express.json({ limit: '8mb' }),
+    requireAuth,
+    requireRole('SELLER', 'ADMIN', 'SUPER_ADMIN'),
+    (req, res) => {
+      const { mimeType, dataBase64, caption } = req.body || {};
+      const cleanMime = typeof mimeType === 'string' ? mimeType.trim().toLowerCase() : '';
+
+      if (!ALLOWED_IMAGE_MIME.has(cleanMime)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Unsupported image format. Only JPG, PNG, or WebP product photos are allowed.',
+        });
+      }
+
+      if (typeof dataBase64 !== 'string' || !dataBase64.trim()) {
+        return res.status(400).json({ success: false, error: 'Image payload is required.' });
+      }
+
+      const rawBase64 = dataBase64.includes(',') ? dataBase64.split(',').pop() || '' : dataBase64;
+      if (!/^[A-Za-z0-9+/=\s]+$/.test(rawBase64)) {
+        return res.status(400).json({ success: false, error: 'Invalid base64 image encoding.' });
+      }
+
+      const buffer = Buffer.from(rawBase64.replace(/\s+/g, ''), 'base64');
+      if (buffer.length === 0 || buffer.length > MAX_IMAGE_BYTES) {
+        return res.status(400).json({
+          success: false,
+          error: 'Product image file must be under 5 MB.',
+        });
+      }
+
+      if (!verifyMediaMagicBytes(buffer, cleanMime)) {
+        return res.status(400).json({
+          success: false,
+          error: 'File content does not match declared image format.',
+        });
+      }
+
+      if (mediaAssets.size >= MAX_STORED_MEDIA_ITEMS) {
+        const oldestKey = mediaAssets.keys().next().value;
+        if (oldestKey) mediaAssets.delete(oldestKey);
+      }
+
+      const mediaId = `med_${crypto.randomBytes(8).toString('hex')}`;
+      mediaAssets.set(mediaId, {
+        id: mediaId,
+        mimeType: cleanMime,
+        type: 'image',
+        buffer,
+        uploadedBy: req.auth!.userId,
+        createdAt: new Date().toISOString(),
+      });
+
+      return res.status(201).json({
+        success: true,
+        media: {
+          id: mediaId,
+          type: 'image',
+          url: `/api/storefront/media/${mediaId}`,
+          caption: sanitizePlainText(caption, 120) || undefined,
+        },
+      });
+    }
+  );
+
+  // Serve validated review & product media strictly with nosniff
   router.get('/media/:mediaId', (req, res) => {
     const mediaId = String(req.params.mediaId || '').trim();
     if (!/^med_[a-f0-9]{16}$/.test(mediaId)) {

@@ -108,6 +108,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, isSponsored =
           <img
             src={product.images[0]}
             alt={product.title}
+            loading="lazy"
+            decoding="async"
             onError={() => setImageError(true)}
             referrerPolicy="no-referrer"
             className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500 ease-out"

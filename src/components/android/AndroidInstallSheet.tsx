@@ -131,7 +131,12 @@ export const AndroidInstallSheet: React.FC<AndroidInstallSheetProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200">
-      <div className="w-full sm:max-w-md bg-white dark:bg-zinc-900 rounded-t-3xl sm:rounded-3xl border border-zinc-200 dark:border-zinc-800 shadow-2xl p-6 space-y-4 max-h-[92vh] overflow-y-auto animate-in slide-in-from-bottom duration-300">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Install Prime Bazaar App"
+        className="w-full sm:max-w-md bg-white dark:bg-zinc-900 rounded-t-3xl sm:rounded-3xl border border-zinc-200 dark:border-zinc-800 shadow-2xl p-6 space-y-4 max-h-[92vh] overflow-y-auto animate-in slide-in-from-bottom duration-300"
+      >
         {/* Header Bar */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -140,9 +145,10 @@ export const AndroidInstallSheet: React.FC<AndroidInstallSheetProps> = ({
             </span>
           </div>
           <button
+            type="button"
             onClick={onClose}
             aria-label="Close app installer"
-            className="p-1.5 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 transition-colors"
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>

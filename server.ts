@@ -79,7 +79,12 @@ const defaultJsonParser = express.json({
   },
 });
 app.use((req, res, next) => {
-  if (req.path === '/api/storefront/uploads/review-media' || req.path === '/api/v1/storefront/uploads/review-media') {
+  if (
+    req.path === '/api/storefront/uploads/review-media' ||
+    req.path === '/api/v1/storefront/uploads/review-media' ||
+    req.path === '/api/storefront/uploads/product-image' ||
+    req.path === '/api/v1/storefront/uploads/product-image'
+  ) {
     return next();
   }
   return defaultJsonParser(req, res, next);
@@ -174,9 +179,36 @@ const phase6Router = createPhase6Router({
 app.use('/api/v1', phase6Router);
 app.use('/api', phase6Router);
 
-// Mount Phase 6 Expansion & Phase 7 Mobile Router (Loyalty, Intl, Discovery/Visual Search, B2B/Subs/Digital, Mobile Devices)
+// Mount Phase 6 Expansion & Phase 7 Mobile Router (Loyalty, Intl, Discovery/Visual Search, B2B/Subs/Digital, Mobile Devices, Biometric Auth)
 const phase6ExpansionRouter = createPhase6ExpansionRouter({
   getOrdersMap: () => orders,
+  findUserByIdentifier: (identifier: string) => {
+    const clean = (identifier || '').trim();
+    if (!clean) return undefined;
+    const direct = users.get(clean);
+    if (direct) return direct;
+    const normEmail = normalizeEmail(clean);
+    const normPhone = normalizePhoneDigits(clean);
+    for (const u of users.values()) {
+      if (isValidEmail(normEmail) && normalizeEmail(u.email) === normEmail) return u;
+      if (normPhone.length >= 10 && normalizePhoneDigits(u.phone) === normPhone) return u;
+    }
+    return undefined;
+  },
+  createSessionForUser: (user: DBUser) => {
+    const session = createSession({
+      userId: user.id,
+      role: user.role,
+      sellerId: user.sellerId,
+      email: user.email,
+      name: user.name,
+    });
+    return {
+      token: session.token,
+      user: sanitizeUser(user),
+    };
+  },
+  verifyUserPassword: (user: DBUser, password: string) => verifyPassword(password, user?.passwordHash),
 });
 app.use('/api/v1', phase6ExpansionRouter);
 app.use('/api', phase6ExpansionRouter);
@@ -2527,6 +2559,28 @@ app.get('/manifest.webmanifest', (_req, res) => {
   res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
   res.setHeader('Cache-Control', 'no-cache');
   res.sendFile(path.resolve(__dirname, manifestDir, 'manifest.webmanifest'));
+});
+
+app.get('/.well-known/assetlinks.json', (_req, res) => {
+  const dir = process.env.NODE_ENV === 'production' ? 'dist' : 'public';
+  const filePath = path.resolve(__dirname, dir, '.well-known', 'assetlinks.json');
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  if (fs.existsSync(filePath)) {
+    return res.sendFile(filePath);
+  }
+  return res.status(404).json({ error: 'assetlinks.json not found' });
+});
+
+app.get('/.well-known/apple-app-site-association', (_req, res) => {
+  const dir = process.env.NODE_ENV === 'production' ? 'dist' : 'public';
+  const filePath = path.resolve(__dirname, dir, '.well-known', 'apple-app-site-association');
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  if (fs.existsSync(filePath)) {
+    return res.sendFile(filePath);
+  }
+  return res.status(404).json({ error: 'apple-app-site-association not found' });
 });
 
 function getRequestOrigin(req: express.Request): string {

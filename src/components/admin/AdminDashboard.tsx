@@ -1,9 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { useMarketplace } from '../../context/MarketplaceContext';
 import { api } from '../../services/api';
 import { RealPlatformAnalytics } from '../../types';
-import { AdminFinanceOpsPanel } from './AdminFinanceOpsPanel';
-import { AdminSupplyAndCmsPanel } from './AdminSupplyAndCmsPanel';
+const AdminFinanceOpsPanel = lazy(() =>
+  import('./AdminFinanceOpsPanel').then(m => ({ default: m.AdminFinanceOpsPanel }))
+);
+const AdminSupplyAndCmsPanel = lazy(() =>
+  import('./AdminSupplyAndCmsPanel').then(m => ({ default: m.AdminSupplyAndCmsPanel }))
+);
 import {
   ShieldCheck,
   TrendingUp,
@@ -519,11 +523,15 @@ export const AdminDashboard: React.FC = () => {
       )}
 
       {activeAdminTab === 'finance' && (
-        <AdminFinanceOpsPanel orders={orders} notify={notify} />
+        <Suspense fallback={<div className="p-4 text-xs text-zinc-500">Loading finance panel...</div>}>
+          <AdminFinanceOpsPanel orders={orders} notify={notify} />
+        </Suspense>
       )}
 
       {activeAdminTab === 'ops' && (
-        <AdminSupplyAndCmsPanel notify={notify} />
+        <Suspense fallback={<div className="p-4 text-xs text-zinc-500">Loading supply &amp; CMS panel...</div>}>
+          <AdminSupplyAndCmsPanel notify={notify} />
+        </Suspense>
       )}
 
       {/* Disputes & Returns Monitor Tab */}

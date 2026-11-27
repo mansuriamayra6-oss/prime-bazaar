@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { Suspense, lazy, useState } from 'react';
 import { useMarketplace } from '../../context/MarketplaceContext';
 import { api } from '../../services/api';
 import { Product, Order, SellerReturnRequest, SellerCoupon, SellerSupportTicket } from '../../types';
@@ -53,17 +53,33 @@ import {
   Megaphone,
   SendHorizontal
 } from 'lucide-react';
-import { ShippingLabelModal } from './ShippingLabelModal';
-import { ProductUploadModal } from './ProductUploadModal';
-import { BulkUploadModal } from './BulkUploadModal';
-import { SellerRegistrationModal } from './SellerRegistrationModal';
-import {
-  SellerWarehouseOpsPanel,
-  SellerSponsoredAdsPanel,
-  SellerGovernancePanel,
-  SellerCatalogOffersPanel,
-  SellerB2BAndDigitalPanel,
-} from './SellerOpsPanels';
+const ShippingLabelModal = lazy(() =>
+  import('./ShippingLabelModal').then(m => ({ default: m.ShippingLabelModal }))
+);
+const ProductUploadModal = lazy(() =>
+  import('./ProductUploadModal').then(m => ({ default: m.ProductUploadModal }))
+);
+const BulkUploadModal = lazy(() =>
+  import('./BulkUploadModal').then(m => ({ default: m.BulkUploadModal }))
+);
+const SellerRegistrationModal = lazy(() =>
+  import('./SellerRegistrationModal').then(m => ({ default: m.SellerRegistrationModal }))
+);
+const SellerWarehouseOpsPanel = lazy(() =>
+  import('./SellerOpsPanels').then(m => ({ default: m.SellerWarehouseOpsPanel }))
+);
+const SellerSponsoredAdsPanel = lazy(() =>
+  import('./SellerOpsPanels').then(m => ({ default: m.SellerSponsoredAdsPanel }))
+);
+const SellerGovernancePanel = lazy(() =>
+  import('./SellerOpsPanels').then(m => ({ default: m.SellerGovernancePanel }))
+);
+const SellerCatalogOffersPanel = lazy(() =>
+  import('./SellerOpsPanels').then(m => ({ default: m.SellerCatalogOffersPanel }))
+);
+const SellerB2BAndDigitalPanel = lazy(() =>
+  import('./SellerOpsPanels').then(m => ({ default: m.SellerB2BAndDigitalPanel }))
+);
 
 type SellerTab = 
   | 'dashboard'
@@ -734,7 +750,9 @@ export const SellerDashboard: React.FC = () => {
                 </div>
               </div>
 
-              <SellerGovernancePanel seller={currentSeller} notify={notify} />
+              <Suspense fallback={<div className="p-4 text-xs text-zinc-500">Loading seller module...</div>}>
+                <SellerGovernancePanel seller={currentSeller} notify={notify} />
+              </Suspense>
             </div>
           )}
 
@@ -973,11 +991,13 @@ export const SellerDashboard: React.FC = () => {
                 </table>
               </div>
 
-              <SellerWarehouseOpsPanel
-                seller={currentSeller}
-                sellerProducts={sellerProducts}
-                notify={notify}
-              />
+              <Suspense fallback={<div className="p-4 text-xs text-zinc-500">Loading warehouse ops...</div>}>
+                <SellerWarehouseOpsPanel
+                  seller={currentSeller}
+                  sellerProducts={sellerProducts}
+                  notify={notify}
+                />
+              </Suspense>
             </div>
           )}
 
@@ -1897,11 +1917,13 @@ export const SellerDashboard: React.FC = () => {
           )}
 
           {activeTab === 'ads' && (
-            <SellerSponsoredAdsPanel
-              seller={currentSeller}
-              sellerProducts={sellerProducts}
-              notify={notify}
-            />
+            <Suspense fallback={<div className="p-4 text-xs text-zinc-500">Loading sponsored ads...</div>}>
+              <SellerSponsoredAdsPanel
+                seller={currentSeller}
+                sellerProducts={sellerProducts}
+                notify={notify}
+              />
+            </Suspense>
           )}
 
           {/* ============================================================== */}
@@ -1965,17 +1987,19 @@ export const SellerDashboard: React.FC = () => {
                 ))}
               </div>
 
-              <SellerCatalogOffersPanel
-                seller={currentSeller}
-                allProducts={products}
-                notify={notify}
-              />
+              <Suspense fallback={<div className="p-4 text-xs text-zinc-500">Loading catalog &amp; B2B offers...</div>}>
+                <SellerCatalogOffersPanel
+                  seller={currentSeller}
+                  allProducts={products}
+                  notify={notify}
+                />
 
-              <SellerB2BAndDigitalPanel
-                seller={currentSeller}
-                allProducts={products}
-                notify={notify}
-              />
+                <SellerB2BAndDigitalPanel
+                  seller={currentSeller}
+                  allProducts={products}
+                  notify={notify}
+                />
+              </Suspense>
             </div>
           )}
 
@@ -2285,47 +2309,49 @@ export const SellerDashboard: React.FC = () => {
       {/* MODALS */}
       {/* ============================================================== */}
 
-      {/* Shipping Label Modal */}
-      {selectedOrderForLabel && (
-        <ShippingLabelModal
-          order={selectedOrderForLabel}
-          seller={currentSeller}
-          onClose={() => setSelectedOrderForLabel(null)}
-        />
-      )}
+      <Suspense fallback={null}>
+        {/* Shipping Label Modal */}
+        {selectedOrderForLabel && (
+          <ShippingLabelModal
+            order={selectedOrderForLabel}
+            seller={currentSeller}
+            onClose={() => setSelectedOrderForLabel(null)}
+          />
+        )}
 
-      {/* Product Upload / Edit Modal (14 Fields) */}
-      {isAddProductOpen && (
-        <ProductUploadModal
-          sellerId={currentSeller.id}
-          sellerName={currentSeller.businessName}
-          existingProduct={editingProduct}
-          onClose={() => {
-            setIsAddProductOpen(false);
-            setEditingProduct(null);
-          }}
-          onSave={handleSaveProduct}
-        />
-      )}
+        {/* Product Upload / Edit Modal (14 Fields) */}
+        {isAddProductOpen && (
+          <ProductUploadModal
+            sellerId={currentSeller.id}
+            sellerName={currentSeller.businessName}
+            existingProduct={editingProduct}
+            onClose={() => {
+              setIsAddProductOpen(false);
+              setEditingProduct(null);
+            }}
+            onSave={handleSaveProduct}
+          />
+        )}
 
-      {/* Bulk Excel Upload Modal */}
-      {isBulkUploadOpen && (
-        <BulkUploadModal
-          sellerId={currentSeller.id}
-          onClose={() => setIsBulkUploadOpen(false)}
-        />
-      )}
+        {/* Bulk Excel Upload Modal */}
+        {isBulkUploadOpen && (
+          <BulkUploadModal
+            sellerId={currentSeller.id}
+            onClose={() => setIsBulkUploadOpen(false)}
+          />
+        )}
 
-      {/* Seller Registration 5-Step Wizard Modal */}
-      {isRegisterModalOpen && (
-        <SellerRegistrationModal
-          onClose={() => setIsRegisterModalOpen(false)}
-          onSuccess={newId => {
-            setCurrentSellerId(newId);
-            setActiveTab('dashboard');
-          }}
-        />
-      )}
+        {/* Seller Registration 5-Step Wizard Modal */}
+        {isRegisterModalOpen && (
+          <SellerRegistrationModal
+            onClose={() => setIsRegisterModalOpen(false)}
+            onSuccess={newId => {
+              setCurrentSellerId(newId);
+              setActiveTab('dashboard');
+            }}
+          />
+        )}
+      </Suspense>
 
       {/* Payout Withdrawal Modal */}
       {isPayoutModalOpen && (

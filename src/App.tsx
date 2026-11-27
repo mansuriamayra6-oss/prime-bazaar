@@ -1,4 +1,4 @@
-import React, { Component, Suspense, lazy, useEffect } from 'react';
+import React, { Component, Suspense, lazy, useEffect, useRef } from 'react';
 import { MarketplaceProvider, useMarketplace } from './context/MarketplaceContext';
 import { Header } from './components/Header';
 import { CategoryBar } from './components/CategoryBar';
@@ -161,6 +161,8 @@ const AppContent: React.FC = () => {
     setInfoModalPage,
     openWishlist,
     openTryOn,
+    openSellerStore,
+    user,
     setIsProfileOpen,
     setIsAuthOpen,
     isApkModalOpen,
@@ -171,10 +173,25 @@ const AppContent: React.FC = () => {
     cart,
   } = useMarketplace();
 
+  const pendingDeepLinkRef = useRef<'orders' | 'account' | null>(null);
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   const isWishlistToast =
     notification && (notification.toLowerCase().includes('wishlist') || notification.includes('❤️'));
+
+  useEffect(() => {
+    if (user?.isLoggedIn && pendingDeepLinkRef.current) {
+      const pending = pendingDeepLinkRef.current;
+      pendingDeepLinkRef.current = null;
+      if (pending === 'orders') {
+        setActivePortal('customer');
+        setIsOrdersOpen(true);
+      } else if (pending === 'account') {
+        setActivePortal('customer');
+        setIsProfileOpen(true);
+      }
+    }
+  }, [user?.isLoggedIn]);
 
   // Phase 7B & 7D: Capacitor Deep Link listener + Global Escape-to-close keyboard navigation
   useEffect(() => {
@@ -190,8 +207,37 @@ const AppContent: React.FC = () => {
         setActivePortal('customer');
         navigateCategory(slug);
       },
+      onSellerLink: (sellerId) => {
+        setActivePortal('customer');
+        openSellerStore(sellerId);
+      },
+      onCartLink: () => {
+        setActivePortal('customer');
+        setIsCartOpen(true);
+      },
       onOrdersLink: () => {
+        setActivePortal('customer');
+        if (!user?.isLoggedIn) {
+          pendingDeepLinkRef.current = 'orders';
+          setIsAuthOpen(true);
+          notify('Sign in to view your orders.');
+          return;
+        }
         setIsOrdersOpen(true);
+      },
+      onPromotionsLink: () => {
+        setActivePortal('customer');
+        setDiscoveryTab('flash');
+      },
+      onAccountLink: () => {
+        setActivePortal('customer');
+        if (!user?.isLoggedIn) {
+          pendingDeepLinkRef.current = 'account';
+          setIsAuthOpen(true);
+          notify('Sign in to manage your account and security settings.');
+          return;
+        }
+        setIsProfileOpen(true);
       },
       onBackDismiss: () => {
         if (selectedProduct) {
@@ -227,7 +273,7 @@ const AppContent: React.FC = () => {
       cleanupDeepLinks();
       window.removeEventListener('keydown', onEscape);
     };
-  }, [products]);
+  }, [products, user?.isLoggedIn]);
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 flex flex-col font-sans transition-colors duration-200">
@@ -288,9 +334,9 @@ const AppContent: React.FC = () => {
                     </span>
                     <span className="text-xs text-zinc-400 hidden sm:inline">• 1,420 Shoppers Watching</span>
                   </div>
-                  <h3 className="text-xl sm:text-2xl font-bold font-display">
+                  <h2 className="text-xl sm:text-2xl font-bold font-display">
                     Watch Verified Stylists & Weavers Demonstrate Live Drops
-                  </h3>
+                  </h2>
                   <p className="text-xs text-zinc-300 max-w-lg">
                     Interact directly with sellers, ask real-time fit questions, and tap pinned flash deals to purchase without leaving the stream.
                   </p>
