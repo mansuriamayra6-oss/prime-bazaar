@@ -226,6 +226,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     title: 'Wide-Leg Relaxed Pleated Trousers',
     brand: 'Maison Minimal',
     category: 'western',
+    barcode: '8901030847123',
     price: 1499,
     originalPrice: 2999,
     discountPercent: 50,

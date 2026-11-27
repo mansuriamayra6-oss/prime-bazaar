@@ -147,6 +147,32 @@ export const api = {
     getCashfreeOrderStatus: async (orderId: string) => {
       return apiRequest(`/api/payments/cashfree-order/${encodeURIComponent(orderId)}`);
     },
+
+    createOrder: async (payload: {
+      orderId?: string;
+      items?: any[];
+      couponCode?: string;
+      giftCardCode?: string;
+      useStoreCredit?: boolean;
+      idempotencyKey?: string;
+      paymentMethod?: string;
+      customerName?: string;
+      customerPhone?: string;
+      customerEmail?: string;
+      returnUrl?: string;
+    }) => {
+      return apiRequest('/api/payments/create-order', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+    },
+
+    splitOrder: async (orderId: string) => {
+      return apiRequest('/api/payments/split', {
+        method: 'POST',
+        body: JSON.stringify({ orderId }),
+      });
+    },
   },
 
   // Orders
@@ -624,6 +650,29 @@ export const api = {
       apiRequest('/api/v1/seller/ads/campaigns', { method: 'POST', body: JSON.stringify(payload) }),
     pauseAdCampaign: async (id: string) =>
       apiRequest(`/api/v1/seller/ads/campaigns/${encodeURIComponent(id)}/pause`, { method: 'POST' }),
+    submitKyc: async (payload: {
+      sellerId?: string;
+      panNumber: string;
+      gstin?: string;
+      aadhaarLast4?: string;
+      businessCategory?: string;
+      panDocumentUrl?: string;
+      gstDocumentUrl?: string;
+      chequeDocumentUrl?: string;
+    }) =>
+      apiRequest('/api/sellers/kyc', { method: 'POST', body: JSON.stringify(payload) }),
+    updateBankDetails: async (payload: {
+      sellerId?: string;
+      accountHolderName: string;
+      accountNumber: string;
+      ifscCode: string;
+      bankName: string;
+      branchName?: string;
+      accountType?: 'CURRENT' | 'SAVINGS';
+    }) =>
+      apiRequest('/api/sellers/bank-details', { method: 'POST', body: JSON.stringify(payload) }),
+    getSettlements: async (sellerId?: string) =>
+      apiRequest(`/api/sellers/settlements${sellerId ? `?sellerId=${encodeURIComponent(sellerId)}` : ''}`),
   },
 
   // Phase 4 & 5 Admin Console Operations
@@ -683,6 +732,42 @@ export const api = {
       apiRequest(`/api/v1/admin/sellers/${encodeURIComponent(sellerId)}/review`, {
         method: 'POST',
         body: JSON.stringify({ toStatus, reason }),
+      }),
+    getFinanceDashboard: async () => apiRequest('/api/admin/finance/dashboard'),
+    getPaymentReconciliation: async () => apiRequest('/api/admin/payment-reconciliation'),
+    getGstTcsReport: async (params?: { sellerId?: string; filingPeriod?: string }) => {
+      const qs = new URLSearchParams();
+      if (params?.sellerId) qs.set('sellerId', params.sellerId);
+      if (params?.filingPeriod) qs.set('filingPeriod', params.filingPeriod);
+      return apiRequest(`/api/admin/gst-tcs-report${qs.toString() ? `?${qs.toString()}` : ''}`);
+    },
+    getCommissionReport: async (params?: { sellerId?: string; billingPeriod?: string }) => {
+      const qs = new URLSearchParams();
+      if (params?.sellerId) qs.set('sellerId', params.sellerId);
+      if (params?.billingPeriod) qs.set('billingPeriod', params.billingPeriod);
+      return apiRequest(`/api/admin/commission-report${qs.toString() ? `?${qs.toString()}` : ''}`);
+    },
+    getAdminRefunds: async () => apiRequest('/api/admin/refunds'),
+    createRefund: async (payload: {
+      orderId: string;
+      amount: number;
+      refundMode?: 'ORIGINAL_METHOD' | 'STORE_CREDIT';
+      reason: string;
+      idempotencyKey?: string;
+    }) =>
+      apiRequest('/api/refunds/create', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    verifySellerBank: async (sellerId: string, verified: boolean, notes?: string) =>
+      apiRequest(`/api/admin/sellers/${encodeURIComponent(sellerId)}/verify-bank`, {
+        method: 'POST',
+        body: JSON.stringify({ verified, notes }),
+      }),
+    updateCommissionRule: async (categorySlug: string, payload: { commissionPercent: number; minCommissionAmount?: number }) =>
+      apiRequest(`/api/admin/commission-rules/${encodeURIComponent(categorySlug)}`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
       }),
     getAllProducts: async () => apiRequest('/api/v1/admin/products/all'),
     moderateProduct: async (productId: string, toStatus: string, reason?: string) =>

@@ -219,6 +219,12 @@ model SellerProfile {
   adCampaigns       AdCampaign[]
   adBillingTxns     AdBillingTransaction[]
   supportTickets    SupportTicket[]
+  kycProfile        SellerKyc?
+  pickupAddresses   SellerPickupAddress[]
+  paymentSplits     PaymentSplit[]
+  sellerSettlements SellerSettlement[]
+  gstTcsRecords     GstTcsRecord[]
+  commissionInvoices CommissionInvoice[]
 
   @@index([businessName])
   @@index([approvalStatus])
@@ -850,8 +856,12 @@ model Order {
   shipments     Shipment[]
   refunds       Refund[]
   reservations  InventoryReservation[]
-  taxInvoices   TaxInvoice[]
-  deliveryOtps  DeliveryOtp[]
+  taxInvoices         TaxInvoice[]
+  deliveryOtps        DeliveryOtp[]
+  paymentTransactions PaymentTransaction[]
+  paymentSplits       PaymentSplit[]
+  gstTcsRecords       GstTcsRecord[]
+  commissionInvoices  CommissionInvoice[]
 
   @@index([orderNumber])
   @@index([customerId])
@@ -1104,6 +1114,7 @@ model Payment {
 
   refunds               Refund[]
   reconciliationMatches ReconciliationItem[]
+  paymentTransactions   PaymentTransaction[]
 
   @@index([orderId])
   @@index([gatewayReference])
@@ -2108,4 +2119,216 @@ model DigitalDownloadGrant {
   @@index([orderId])
   @@map("digital_download_grants")
 }
+
+// =========================================================================
+// PHASE 8: PAYMENTS, SPLITS, SETTLEMENTS, GST TCS, COMMISSION INVOICES & WEBHOOKS
+// =========================================================================
+
+model SellerKyc {
+  id                 String    @id @default(uuid())
+  sellerId           String    @unique
+  seller             SellerProfile @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  panNumber          String
+  gstin              String?
+  aadhaarLast4       String?
+  businessCategory   String?
+  panDocumentUrl     String?
+  gstDocumentUrl     String?
+  chequeDocumentUrl  String?
+  kycStatus          String    @default("PENDING") // PENDING, UNDER_REVIEW, VERIFIED, REJECTED, RESUBMISSION_REQUIRED
+  verifiedBy         String?
+  verifiedAt         DateTime?
+  rejectionReason    String?
+  submittedAt        DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([kycStatus])
+  @@map("seller_kyc")
+}
+
+model SellerPickupAddress {
+  id           String        @id @default(uuid())
+  sellerId     String
+  seller       SellerProfile @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  label        String        @default("Primary Warehouse")
+  contactName  String
+  phone        String
+  addressLine1 String
+  addressLine2 String?
+  city         String
+  state        String
+  pincode      String
+  isDefault    Boolean       @default(true)
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([sellerId])
+  @@map("seller_pickup_addresses")
+}
+
+model PaymentTransaction {
+  id                String    @id @default(uuid())
+  orderId           String
+  order             Order     @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  paymentId         String?
+  payment           Payment?  @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  idempotencyKey    String    @unique
+  gateway           String    @default("CASHFREE")
+  cashfreeOrderId   String?
+  cfPaymentId       String?
+  paymentSessionId  String?
+  paymentMethod     String?
+  amount            Decimal   @db.Decimal(12, 2)
+  currency          String    @default("INR")
+  status            String    @default("PENDING") // CREATED, PENDING, PAID, FAILED, CANCELLED, REFUNDED, PARTIAL_REFUND
+  signatureVerified Boolean   @default(false)
+  verifiedAt        DateTime?
+  rawGatewayPayload Json?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  paymentSplits PaymentSplit[]
+
+  @@index([orderId])
+  @@index([cashfreeOrderId])
+  @@index([cfPaymentId])
+  @@map("payment_transactions")
+}
+
+model PaymentSplit {
+  id                String              @id @default(uuid())
+  orderId           String
+  order             Order               @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  sellerId          String
+  seller            SellerProfile       @relation(fields: [sellerId], references: [id], onDelete: Restrict)
+  transactionId     String?
+  transaction       PaymentTransaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+  idempotencyKey    String              @unique
+  grossAmount       Decimal             @db.Decimal(12, 2)
+  taxableValue      Decimal             @db.Decimal(12, 2)
+  commissionRate    Decimal             @db.Decimal(5, 2)
+  commissionAmount  Decimal             @db.Decimal(12, 2)
+  gstOnCommission   Decimal             @db.Decimal(12, 2)
+  tcsRate           Decimal             @default(1.0) @db.Decimal(5, 2)
+  tcsAmount         Decimal             @db.Decimal(12, 2)
+  netSellerPayable  Decimal             @db.Decimal(12, 2)
+  refundedAmount    Decimal             @default(0.0) @db.Decimal(12, 2)
+  splitStatus       String              @default("ALLOCATED") // ALLOCATED, HOLD, READY_FOR_SETTLEMENT, SETTLED, REVERSED, PARTIAL_REFUNDED
+  settlementId      String?
+  settlement        SellerSettlement?   @relation(fields: [settlementId], references: [id], onDelete: SetNull)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  gstTcsRecords      GstTcsRecord[]
+  commissionInvoices CommissionInvoice[]
+
+  @@unique([orderId, sellerId])
+  @@index([sellerId, splitStatus])
+  @@map("payment_splits")
+}
+
+model SellerSettlement {
+  id                String         @id @default(uuid())
+  settlementNumber  String         @unique
+  sellerId          String
+  seller            SellerProfile  @relation(fields: [sellerId], references: [id], onDelete: Restrict)
+  idempotencyKey    String         @unique
+  grossAmount       Decimal        @db.Decimal(12, 2)
+  commissionAmount  Decimal        @db.Decimal(12, 2)
+  gstOnCommission   Decimal        @db.Decimal(12, 2)
+  tcsDeducted       Decimal        @default(0.0) @db.Decimal(12, 2)
+  netPayout         Decimal        @db.Decimal(12, 2)
+  bankAccountLast4  String?
+  ifscCode          String?
+  bankName          String?
+  utrNumber         String?
+  status            String         @default("PENDING") // PENDING, APPROVED, PROCESSING, TRANSFERRED, FAILED, REJECTED
+  approvedBy        String?
+  approvedAt        DateTime?
+  settledAt         DateTime?
+  notes             String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  splits PaymentSplit[]
+
+  @@index([sellerId, status])
+  @@map("seller_settlements")
+}
+
+model GstTcsRecord {
+  id                 String        @id @default(uuid())
+  orderId            String
+  order              Order         @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  sellerId           String
+  seller             SellerProfile @relation(fields: [sellerId], references: [id], onDelete: Restrict)
+  paymentSplitId     String?
+  paymentSplit       PaymentSplit? @relation(fields: [paymentSplitId], references: [id], onDelete: SetNull)
+  sellerGstin        String?
+  taxableSupplyValue Decimal       @db.Decimal(12, 2)
+  isInterState       Boolean       @default(false)
+  cgstTcsRate        Decimal       @default(0.5) @db.Decimal(5, 2)
+  sgstTcsRate        Decimal       @default(0.5) @db.Decimal(5, 2)
+  igstTcsRate        Decimal       @default(0.0) @db.Decimal(5, 2)
+  cgstTcsAmount      Decimal       @default(0.0) @db.Decimal(12, 2)
+  sgstTcsAmount      Decimal       @default(0.0) @db.Decimal(12, 2)
+  igstTcsAmount      Decimal       @default(0.0) @db.Decimal(12, 2)
+  totalTcsAmount     Decimal       @db.Decimal(12, 2)
+  filingPeriod       String
+  recordType         String        @default("SALE") // SALE | REFUND_REVERSAL
+  status             String        @default("ACCRUED") // ACCRUED, FILED, REVERSED
+  createdAt          DateTime      @default(now())
+
+  @@index([sellerId, filingPeriod])
+  @@index([orderId])
+  @@map("gst_tcs_records")
+}
+
+model CommissionInvoice {
+  id                String        @id @default(uuid())
+  invoiceNumber     String        @unique
+  sellerId          String
+  seller            SellerProfile @relation(fields: [sellerId], references: [id], onDelete: Restrict)
+  orderId           String?
+  order             Order?        @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  paymentSplitId    String?
+  paymentSplit      PaymentSplit? @relation(fields: [paymentSplitId], references: [id], onDelete: SetNull)
+  billingPeriod     String
+  taxableCommission Decimal       @db.Decimal(12, 2)
+  cgstRate          Decimal       @default(9.0) @db.Decimal(5, 2)
+  sgstRate          Decimal       @default(9.0) @db.Decimal(5, 2)
+  igstRate          Decimal       @default(0.0) @db.Decimal(5, 2)
+  cgstAmount        Decimal       @default(0.0) @db.Decimal(12, 2)
+  sgstAmount        Decimal       @default(0.0) @db.Decimal(12, 2)
+  igstAmount        Decimal       @default(0.0) @db.Decimal(12, 2)
+  totalTax          Decimal       @db.Decimal(12, 2)
+  grandTotal        Decimal       @db.Decimal(12, 2)
+  status            String        @default("ISSUED") // ISSUED, PAID, CREDIT_NOTE
+  issuedAt          DateTime      @default(now())
+
+  @@index([sellerId, billingPeriod])
+  @@map("commission_invoices")
+}
+
+model PaymentWebhookLog {
+  id               String   @id @default(uuid())
+  eventId          String?
+  eventType        String
+  cashfreeOrderId  String?
+  cfPaymentId      String?
+  idempotencyKey   String?
+  signatureValid   Boolean  @default(false)
+  processingStatus String   @default("RECEIVED") // PROCESSED, DUPLICATE, REJECTED
+  rejectionReason  String?
+  httpStatus       Int      @default(200)
+  payload          Json?
+  receivedAt       DateTime @default(now())
+
+  @@index([cashfreeOrderId])
+  @@index([idempotencyKey])
+  @@index([eventType, receivedAt])
+  @@map("payment_webhook_logs")
+}
+
 

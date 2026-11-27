@@ -60,6 +60,18 @@ import {
   initiateOrderRefund,
 } from './src/server/cashfreeAndPayments.ts';
 import { computeRealPlatformAnalytics } from './src/server/marketplaceOpsService.ts';
+import { createFinanceAndPaymentsRouter } from './src/server/financeAndPaymentsRouter.ts';
+import {
+  computeAndRecordPaymentSplitsForOrder,
+  applyRefundToSplitsAndTcs,
+  recordPaymentWebhookLog,
+  upsertPaymentTransaction,
+  upsertSellerKyc,
+  upsertSellerBankDetails,
+  upsertSellerPickupAddress,
+  sanitizeBankForApi,
+} from './src/server/paymentFinanceEngine.ts';
+import { dbSellerWallets } from './src/server/v1Router.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -101,7 +113,10 @@ const generalApiRateLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   maxRequests: Number(process.env.API_RATE_LIMIT_MAX) || 600,
   keyPrefix: 'api',
-  skip: req => req.path === '/health' || req.path === '/payments/cashfree-webhook',
+  skip: req =>
+    req.path === '/health' ||
+    req.path === '/payments/cashfree-webhook' ||
+    req.path === '/webhooks/cashfree',
 });
 
 app.use('/api/auth', authRateLimiter);
@@ -212,6 +227,15 @@ const phase6ExpansionRouter = createPhase6ExpansionRouter({
 });
 app.use('/api/v1', phase6ExpansionRouter);
 app.use('/api', phase6ExpansionRouter);
+
+// Mount Phase 8 (Payments, Splits, Seller KYC/Bank/Pickup/Settlements, GST TCS, Commission Reports & Reconciliation)
+const financeAndPaymentsRouter = createFinanceAndPaymentsRouter({
+  getOrdersMap: () => orders,
+  getPaymentIntentsMap: () => paymentIntents,
+  getServerSellersMap: () => serverSellers,
+});
+app.use('/api/v1', financeAndPaymentsRouter);
+app.use('/api', financeAndPaymentsRouter);
 
 
 // ==========================================
@@ -1359,16 +1383,18 @@ app.post('/api/payments/verify', async (req, res) => {
   const {
     intentId,
     cashfreeOrderId,
-    paymentMethod,
+    orderId,
+    paymentMethod = 'cashfree',
     upiRefNumber,
     amount,
-  } = req.body;
+  } = req.body || {};
 
   const cf = getCashfreeConfig();
   const intent = intentId && paymentIntents.has(intentId) ? paymentIntents.get(intentId)! : null;
   let cashfreeOrderState: any = null;
+  const resolvedMethod = String(paymentMethod || 'cashfree').toLowerCase();
 
-  if (paymentMethod === 'cashfree') {
+  if (resolvedMethod === 'cashfree') {
     const resolvedCfOrderId = intent?.cashfreeOrderId || (typeof cashfreeOrderId === 'string' ? cashfreeOrderId.trim() : '');
     if (!resolvedCfOrderId) {
       return res.status(400).json({
@@ -1399,12 +1425,26 @@ app.post('/api/payments/verify', async (req, res) => {
         },
       });
     }
+
+    // Never trust a mismatched frontend amount against server/gateway authoritative amount
+    const gatewayPaid = Number(cashfreeOrderState?.order_amount ?? 0);
+    if (amount !== undefined && Number.isFinite(Number(amount)) && gatewayPaid > 0 && gatewayPaid + 1 < Number(amount)) {
+      return res.status(400).json({
+        success: false,
+        error: `Payment amount mismatch: Cashfree verified ₹${gatewayPaid} is less than expected ₹${Number(amount)}.`,
+      });
+    }
   } else if (intent?.cashfreeOrderId) {
     try {
       cashfreeOrderState = await getCashfreeOrderStatus(intent.cashfreeOrderId);
     } catch (err: any) {
       console.warn('[Cashfree Status Sync]:', err.message);
     }
+  } else if (!intent && !upiRefNumber && !orderId) {
+    return res.status(400).json({
+      success: false,
+      error: 'A valid payment intentId, orderId, or gateway reference is required to verify payment.',
+    });
   }
 
   if (intent) {
@@ -1413,10 +1453,13 @@ app.post('/api/payments/verify', async (req, res) => {
 
   // Update matching PaymentRecord if one exists for this Cashfree/order reference
   const resolvedCfRef = cashfreeOrderState?.order_id || intent?.cashfreeOrderId || cashfreeOrderId;
-  if (resolvedCfRef) {
-    let matchedPayOrderId: string | undefined;
+  let matchedOrderForSplit: DBOrder | undefined = orderId ? orders.get(String(orderId)) : undefined;
+  let paymentTxnRecord: any = null;
+
+  if (resolvedCfRef || matchedOrderForSplit) {
+    let matchedPayOrderId: string | undefined = matchedOrderForSplit?.id;
     for (const p of payments.values()) {
-      if (p.gatewayReference === resolvedCfRef) {
+      if ((resolvedCfRef && p.gatewayReference === resolvedCfRef) || (matchedOrderForSplit && p.orderId === matchedOrderForSplit.id && p.status !== 'PAID')) {
         p.status = 'PAID';
         p.cfPaymentId = cashfreeOrderState?.cf_order_id ? String(cashfreeOrderState.cf_order_id) : p.cfPaymentId;
         p.rawProviderStatus = cashfreeOrderState?.order_status || 'PAID';
@@ -1424,37 +1467,68 @@ app.post('/api/payments/verify', async (req, res) => {
         p.updatedAt = p.verifiedAt;
         matchedPayOrderId = p.orderId;
         const linkedOrder = orders.get(p.orderId);
-        if (linkedOrder && linkedOrder.paymentStatus !== 'PAID') {
-          linkedOrder.paymentStatus = 'PAID';
-          linkedOrder.transactionId = p.cfPaymentId ? `CF-${p.cfPaymentId}` : p.gatewayReference;
-          await commitOrderReservations(linkedOrder.id);
+        if (linkedOrder) {
+          matchedOrderForSplit = linkedOrder;
+          if (linkedOrder.paymentStatus !== 'PAID') {
+            linkedOrder.paymentStatus = 'PAID';
+            linkedOrder.transactionId = p.cfPaymentId ? `CF-${p.cfPaymentId}` : p.gatewayReference;
+            await commitOrderReservations(linkedOrder.id);
+          }
         }
       }
     }
     if (matchedPayOrderId) {
       for (const p of payments.values()) {
-        if (p.orderId === matchedPayOrderId && p.gatewayReference !== resolvedCfRef && p.status === 'PENDING') {
+        if (p.orderId === matchedPayOrderId && resolvedCfRef && p.gatewayReference !== resolvedCfRef && p.status === 'PENDING') {
           p.status = 'CANCELLED';
           p.updatedAt = new Date().toISOString();
         }
       }
     }
+
+    if (matchedOrderForSplit) {
+      paymentTxnRecord = upsertPaymentTransaction({
+        orderId: matchedOrderForSplit.id,
+        idempotencyKey: `verify_${resolvedCfRef || matchedOrderForSplit.id}`,
+        gateway: resolvedMethod === 'cashfree' ? 'CASHFREE' : resolvedMethod.toUpperCase(),
+        cashfreeOrderId: resolvedCfRef,
+        cfPaymentId: cashfreeOrderState?.cf_order_id ? String(cashfreeOrderState.cf_order_id) : undefined,
+        paymentMethod: resolvedMethod,
+        amount: roundMoney(Number(cashfreeOrderState?.order_amount ?? matchedOrderForSplit.finalGatewayPayable ?? matchedOrderForSplit.totalAmount ?? amount ?? 0)),
+        status: 'PAID',
+        signatureVerified: resolvedMethod === 'cashfree',
+        verifiedAt: new Date().toISOString(),
+        rawGatewayPayload: cashfreeOrderState,
+      });
+      try {
+        await computeAndRecordPaymentSplitsForOrder({
+          order: matchedOrderForSplit,
+          transactionId: paymentTxnRecord.id,
+          forceVerified: true,
+          actorId: req.auth?.userId || 'payment-verify',
+        });
+      } catch {
+        // Split computation ignores zero-item placeholder orders gracefully
+      }
+    }
   }
 
   const transactionId =
-    paymentMethod === 'cashfree' && cashfreeOrderState?.cf_order_id
+    resolvedMethod === 'cashfree' && cashfreeOrderState?.cf_order_id
       ? `CF-${cashfreeOrderState.cf_order_id}`
-      : `PB-TXN-${(paymentMethod || 'PAY').toUpperCase()}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
-  const invoiceNumber = `PB-INV-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`;
+      : `PB-TXN-${resolvedMethod.toUpperCase()}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
+  const invoiceNumber = matchedOrderForSplit?.invoiceNumber || `PB-INV-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`;
 
   res.json({
     success: true,
+    verified: true,
     paymentStatus: 'PAID',
     transactionId,
     invoiceNumber,
     timestamp: new Date().toISOString(),
-    paymentMethod,
-    amountVerified: cashfreeOrderState?.order_amount || amount,
+    paymentMethod: resolvedMethod,
+    amountVerified: cashfreeOrderState?.order_amount || matchedOrderForSplit?.finalGatewayPayable || amount,
+    paymentTransaction: paymentTxnRecord || undefined,
     cashfree: cashfreeOrderState
       ? {
           orderId: cashfreeOrderState.order_id,
@@ -1464,7 +1538,7 @@ app.post('/api/payments/verify', async (req, res) => {
         }
       : undefined,
     gatewayReceipt: {
-      gateway: paymentMethod === 'cashfree' ? `Cashfree Payments (${cf.env})` : 'NPCI UPI & Payment Gateway',
+      gateway: resolvedMethod === 'cashfree' ? `Cashfree Payments (${cf.env})` : 'NPCI UPI & Payment Gateway',
       authCode: 'AUTH_' + Math.floor(100000 + Math.random() * 900000),
       rrn: upiRefNumber || Math.floor(100000000000 + Math.random() * 900000000000).toString(),
       settlementStatus: 'SUCCESS_AUTHORIZED',
@@ -1498,11 +1572,29 @@ interface WebhookEventRecord {
 export const processedWebhookEvents = new Map<string, WebhookEventRecord>();
 const webhookEventHistory: WebhookEventRecord[] = [];
 
-app.post('/api/payments/cashfree-webhook', async (req, res) => {
+async function handleCashfreeWebhook(req: express.Request, res: express.Response) {
   const cf = getCashfreeConfig();
   const verificationSecret = cf.webhookSecret || cf.clientSecret;
+  const payload = req.body || {};
+  const preliminaryEventType = String(payload.type || payload.event || 'UNKNOWN_EVENT').toUpperCase();
+  const preliminaryOrderId = String(
+    payload?.data?.order?.order_id ||
+    payload?.data?.refund?.order_id ||
+    payload?.order_id ||
+    ''
+  ).trim();
 
   if (!verificationSecret) {
+    recordPaymentWebhookLog({
+      eventType: preliminaryEventType,
+      cashfreeOrderId: preliminaryOrderId || undefined,
+      signatureValid: false,
+      processingStatus: 'REJECTED',
+      rejectionReason: 'Cashfree webhook secret not configured.',
+      httpStatus: 503,
+      rawBody: req.rawBody,
+      payload,
+    });
     return res.status(503).json({
       success: false,
       verified: false,
@@ -1523,6 +1615,16 @@ app.post('/api/payments/cashfree-webhook', async (req, res) => {
 
   if (!verification.valid) {
     console.warn('[Cashfree Webhook Rejected]:', verification.reason);
+    recordPaymentWebhookLog({
+      eventType: preliminaryEventType,
+      cashfreeOrderId: preliminaryOrderId || undefined,
+      signatureValid: false,
+      processingStatus: 'REJECTED',
+      rejectionReason: verification.reason || 'Invalid Cashfree webhook signature.',
+      httpStatus: 401,
+      rawBody,
+      payload,
+    });
     return res.status(401).json({
       success: false,
       verified: false,
@@ -1530,7 +1632,6 @@ app.post('/api/payments/cashfree-webhook', async (req, res) => {
     });
   }
 
-  const payload = req.body || {};
   const eventType = String(payload.type || payload.event || 'UNKNOWN_EVENT').toUpperCase();
   const cfOrderId = String(
     payload?.data?.order?.order_id ||
@@ -1550,15 +1651,27 @@ app.post('/api/payments/cashfree-webhook', async (req, res) => {
     .digest('hex')
     .slice(0, 16);
 
-  const idempotencyKey =
-    idempotencyHeader ||
-    (cfOrderId
-      ? `${eventType}:${cfOrderId}:${paymentId || paymentObj.payment_status || refundObj.refund_status || bodyDigest}`
-      : `digest:${bodyDigest}`);
+  const canonicalEventKey = cfOrderId
+    ? `${eventType}:${cfOrderId}:${paymentId || paymentObj.payment_status || refundObj.refund_status || bodyDigest}`
+    : `digest:${bodyDigest}`;
+  const idempotencyKey = idempotencyHeader || canonicalEventKey;
 
-  // Prevent duplicate webhook processing
-  const existingRecord = processedWebhookEvents.get(idempotencyKey);
+  // Prevent duplicate webhook processing (check both explicit idempotency key and canonical gateway event key)
+  const existingRecord =
+    processedWebhookEvents.get(idempotencyKey) || processedWebhookEvents.get(canonicalEventKey);
   if (existingRecord) {
+    recordPaymentWebhookLog({
+      eventId: String(payload.event_id || idempotencyKey),
+      eventType,
+      cashfreeOrderId: cfOrderId || undefined,
+      cfPaymentId: paymentId || undefined,
+      idempotencyKey,
+      signatureValid: true,
+      processingStatus: 'DUPLICATE',
+      httpStatus: 200,
+      rawBody,
+      payload,
+    });
     return res.status(200).json({
       status: 'OK',
       verified: true,
@@ -1685,6 +1798,29 @@ app.post('/api/payments/cashfree-webhook', async (req, res) => {
           p.updatedAt = new Date().toISOString();
         }
       }
+      const ptxn = upsertPaymentTransaction({
+        orderId: matchedOrder.id,
+        idempotencyKey: `wh_${idempotencyKey}`,
+        gateway: 'CASHFREE',
+        cashfreeOrderId: cfOrderId,
+        cfPaymentId: paymentId || undefined,
+        paymentMethod: matchedOrder.paymentMethod,
+        amount: roundMoney(reportedAmount || matchedOrder.finalGatewayPayable || matchedOrder.totalAmount),
+        status: 'PAID',
+        signatureVerified: true,
+        verifiedAt: new Date().toISOString(),
+        rawGatewayPayload: payload,
+      });
+      try {
+        await computeAndRecordPaymentSplitsForOrder({
+          order: matchedOrder,
+          transactionId: ptxn.id,
+          forceVerified: true,
+          actorId: 'cashfree-webhook',
+        });
+      } catch {
+        // ignore if order items unavailable
+      }
     }
   } else if (isFailedEvent || isDroppedOrCancelled) {
     if (matchedIntent && matchedIntent.status !== 'SUCCESS') {
@@ -1727,6 +1863,14 @@ app.post('/api/payments/cashfree-webhook', async (req, res) => {
       if (!updatedRefund) {
         matchedOrder.paymentStatus = isPartial ? 'PARTIAL_REFUND' : 'REFUNDED';
       }
+      if (reportedAmount > 0) {
+        applyRefundToSplitsAndTcs({
+          orderId: matchedOrder.id,
+          refundAmount: reportedAmount,
+          orderTotal: Number(matchedOrder.totalAmount || reportedAmount),
+          reason: 'Cashfree webhook refund confirmation',
+        });
+      }
       matchedOrder.trackingCheckpoints.push({
         title: isPartial ? 'Partial Refund Processed' : 'Refund Processed via Cashfree',
         description: `Refund confirmed (${refundObj.cf_refund_id || cfOrderId})`,
@@ -1747,10 +1891,26 @@ app.post('/api/payments/cashfree-webhook', async (req, res) => {
   };
 
   processedWebhookEvents.set(idempotencyKey, record);
+  if (canonicalEventKey !== idempotencyKey) {
+    processedWebhookEvents.set(canonicalEventKey, record);
+  }
   webhookEventHistory.push(record);
   if (webhookEventHistory.length > 500) {
     webhookEventHistory.shift();
   }
+
+  recordPaymentWebhookLog({
+    eventId: String(payload.event_id || idempotencyKey),
+    eventType: record.eventType,
+    cashfreeOrderId: cfOrderId || undefined,
+    cfPaymentId: paymentId || undefined,
+    idempotencyKey: record.idempotencyKey,
+    signatureValid: true,
+    processingStatus: 'PROCESSED',
+    httpStatus: 200,
+    rawBody,
+    payload,
+  });
 
   console.log('[Cashfree Webhook Verified]:', {
     eventType: record.eventType,
@@ -1767,7 +1927,10 @@ app.post('/api/payments/cashfree-webhook', async (req, res) => {
     eventKey: idempotencyKey,
     event: record,
   });
-});
+}
+
+app.post('/api/payments/cashfree-webhook', handleCashfreeWebhook);
+app.post('/api/webhooks/cashfree', handleCashfreeWebhook);
 
 // 4. Orders & Fulfillment APIs
 app.get('/api/orders', (req, res) => {
@@ -2112,6 +2275,33 @@ app.post('/api/orders', async (req, res) => {
       updatedAt: now.toISOString(),
     });
 
+    const txnRecord = upsertPaymentTransaction({
+      orderId,
+      paymentId: payId,
+      idempotencyKey: cleanIdemKey ? `ord_${cleanIdemKey}` : `ord_${orderId}`,
+      gateway: gatewayType,
+      cashfreeOrderId: gatewayType === 'CASHFREE' ? resolvedGatewayRef : undefined,
+      cfPaymentId: cfState?.cf_order_id ? String(cfState.cf_order_id) : undefined,
+      paymentSessionId: matchedIntent?.paymentSessionId,
+      paymentMethod: effectiveMethod,
+      amount: quote.finalGatewayPayable,
+      status: resolvedPaymentStatus === 'PAID' ? 'PAID' : 'PENDING',
+      signatureVerified: resolvedPaymentStatus === 'PAID',
+      verifiedAt: resolvedPaymentStatus === 'PAID' ? now.toISOString() : undefined,
+    });
+
+    if (resolvedPaymentStatus === 'PAID') {
+      try {
+        await computeAndRecordPaymentSplitsForOrder({
+          order: newOrder,
+          transactionId: txnRecord.id,
+          actorId: resolvedUserId,
+        });
+      } catch {
+        // non-blocking if custom order layout
+      }
+    }
+
     if (resolvedPaymentStatus === 'PAID' && quote.finalGatewayPayable > 0) {
       postBalancedLedgerGroup({
         referenceNumber: `PAY:${resolvedGatewayRef}`,
@@ -2422,6 +2612,63 @@ app.post('/api/sellers/register', (req, res) => {
     dbSellerPasswordHashes.set(newSellerId, hashPassword(data.password));
   }
 
+  // Initialize Seller Wallet, KYC, Bank Details & Pickup Address records
+  dbSellerWallets.set(newSellerId, {
+    sellerId: newSellerId,
+    balance: 0,
+    pendingSettlement: 0,
+    lifetimeEarnings: 0,
+    totalWithdrawn: 0,
+    currency: 'INR',
+  });
+
+  if (data.panNumber && /^[A-Z]{5}[0-9]{4}[A-Z]$/i.test(String(data.panNumber).trim())) {
+    try {
+      upsertSellerKyc({
+        sellerId: newSellerId,
+        panNumber: String(data.panNumber).trim().toUpperCase(),
+        gstin: data.gstNumber && data.gstNumber !== 'Unregistered' ? String(data.gstNumber).trim() : undefined,
+        actorId: `usr_${newSellerId}`,
+        actorName: newSeller.businessName,
+      });
+    } catch {
+      // keep registration non-blocking if seller supplies optional KYC later via POST /api/sellers/kyc
+    }
+  }
+
+  if (data.bankAccount?.accountNumber && data.bankAccount?.ifscCode) {
+    try {
+      const maskedBank = upsertSellerBankDetails({
+        sellerId: newSellerId,
+        accountHolderName: data.bankAccount.accountHolderName || newSeller.name,
+        accountNumber: data.bankAccount.accountNumber,
+        ifscCode: data.bankAccount.ifscCode,
+        bankName: data.bankAccount.bankName || 'Partner Bank',
+        actorId: `usr_${newSellerId}`,
+        actorName: newSeller.businessName,
+      });
+      newSeller.bankAccount = maskedBank;
+    } catch {
+      // seller can update bank details via POST /api/sellers/bank-details
+    }
+  }
+
+  if (data.pickupAddress?.street && data.pickupAddress?.city && data.pickupAddress?.state) {
+    try {
+      upsertSellerPickupAddress({
+        sellerId: newSellerId,
+        contactName: newSeller.name,
+        phone: newSeller.phone,
+        addressLine1: data.pickupAddress.street,
+        city: data.pickupAddress.city,
+        state: data.pickupAddress.state,
+        pincode: data.pickupAddress.pinCode || '400001',
+      });
+    } catch {
+      // ignore optional address
+    }
+  }
+
   const session = createSession({
     userId: `usr_${newSellerId}`,
     role: 'SELLER',
@@ -2434,7 +2681,14 @@ app.post('/api/sellers/register', (req, res) => {
     success: true,
     message: 'Seller account registered successfully! KYC documents submitted for verification.',
     token: session.token,
-    seller: newSeller,
+    seller: {
+      ...newSeller,
+      bankAccount: sanitizeBankForApi(
+        data.bankAccount?.accountNumber
+          ? ({ accountNumber: data.bankAccount.accountNumber, ifscCode: data.bankAccount.ifscCode, bankName: data.bankAccount.bankName } as any)
+          : undefined
+      ),
+    },
   });
 });
 
